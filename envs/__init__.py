@@ -47,8 +47,8 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return reward
 
-    def plan_act_and_preprocess(self, inputs):
-        obs, reward, done, info = self.venv.plan_act_and_preprocess(inputs)
+    def step_and_preprocess(self, action, inputs):
+        obs, reward, done, info = self.venv.step_and_preprocess(action, inputs)
         obs = torch.from_numpy(obs).float().to(self.device)
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
@@ -57,7 +57,7 @@ class VecPyTorch():
         return self.venv.close()
     
     def get_action_space(self):
-        return self.venv.get_action_space(0)
+        return self.venv.get_action_space()
 
     def get_obs_space(self):
-        return self.venv.get_obs_space(0)
+        return self.venv.get_obs_space()

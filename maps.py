@@ -47,7 +47,7 @@ class Maps_Env:
         self.lmb = np.zeros((num_scenes, 4)).astype(int)
 
         # allpose
-        self.pose_inputs = np.zeros((self.num_scenes, 7))
+        self.pose_inputs = np.zeros((self.num_scenes, 7))   # pose in full map, local bdry in full map
         # initialize
         self._init_map_and_pose()
 
@@ -90,13 +90,13 @@ class Maps_Env:
     def _init_map_and_pose_for_env(self, e):
         self.full_map[e].fill_(0.)
         self.full_pose[e].fill_(0.)
-        self.full_pose[e, :2] = args.map_size_cm / 100.0 / 2.0
+        self.full_pose[e, :2] = self.args.map_size_cm / 100.0 / 2.0
 
         locs = self.full_pose[e].cpu().numpy()
         self.pose_inputs[e, :3] = locs
         r, c = locs[1], locs[0]
-        loc_r, loc_c = [int(r * 100.0 / args.map_resolution),
-                        int(c * 100.0 / args.map_resolution)]
+        loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                        int(c * 100.0 / self.args.map_resolution)]
 
         self.full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
 
@@ -104,8 +104,8 @@ class Maps_Env:
                                           (self.local_w, self.local_h),
                                           (self.full_w, self.full_h))
         self.pose_inputs[e, 3:] = self.lmb[e]
-        self.origins[e] = [self.lmb[e][2] * args.map_resolution / 100.0,
-                      self.lmb[e][0] * args.map_resolution / 100.0, 0.]
+        self.origins[e] = [self.lmb[e][2] * self.args.map_resolution / 100.0,
+                      self.lmb[e][0] * self.args.map_resolution / 100.0, 0.]
 
         self.local_map[e] = self.full_map[e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]]
         self.local_pose[e] = self.full_pose[e] - \
@@ -116,6 +116,9 @@ class Maps_Env:
             self._init_map_and_pose_for_env(e)
 
     def get_local_map_boundaries(self, agent_loc, local_sizes, full_sizes):
+        '''
+        以agent为中心, local map不超出full map的范围
+        '''
         loc_r, loc_c = agent_loc
         local_w, local_h = local_sizes
         full_w, full_h = full_sizes
@@ -187,6 +190,7 @@ class Maps_Env:
             ).float().to(self.device)
         
         # update 0: obstacle 1: explored 4...: semantic
+        # agent当前观察到的自我中心的map
         _, local_map, _, local_pose = \
             self.semantic_map(obs, poses, self.local_map, self.local_pose)
         
@@ -196,8 +200,8 @@ class Maps_Env:
         local_map[:, 2, :, :].fill_(0.)
         for e in range(self.num_scenes):
             r, c = locs[e, 1], locs[e, 0]
-            loc_r, loc_c = [int(r * 100.0 / args.map_resolution),
-                            int(c * 100.0 / args.map_resolution)]
+            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                            int(c * 100.0 / self.args.map_resolution)]
             local_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.
         
         local_map, local_pose = self._update_next_view_local(local_map, local_pose)
@@ -210,10 +214,10 @@ class Maps_Env:
     
     def sum_of_semantic_map(self):
         # get semantic channels: 4:
-        semantic_maps = self.full_map[:, 4:, ...]   # num_scenes, num_semantic, size_w, size_h
+        semantic_maps = self.full_map[:, 4:10, ...]   # num_scenes, num_semantic, size_w, size_h
 
         # sum of semantic objects
-        sum_res = semantic_maps.sum(-1).sum(-1).sum(-1, keepdim=True)  # num_scenes
+        sum_res = semantic_maps.sum(-1).sum(-1).sum(-1)  # num_scenes
 
         return sum_res
     
@@ -243,6 +247,6 @@ if __name__ == "__main__":
     sum_rew  = maps.sum_of_semantic_map()
     print(f"all reward: {sum_rew}")
 
-    expl_area = torch.zeros(1)
+    expl_area = torch.zeros(2)
     expl_area = maps.get_explore_area(expl_area)
     print(f" explore area: {expl_area}")

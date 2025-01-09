@@ -68,7 +68,7 @@ class Semantic_Curiosity_Policy(NNBase):
         
         self.dropout = 0.5
 
-        resnet = models.resnet18(pretrained=False)
+        resnet = models.resnet18(pretrained=True)
         # resnet = models.resnet18(weights=ResNet18_Weights.DEFAULT)
         self.resnet_l5 = nn.Sequential(*list(resnet.children())[0:8])
 
@@ -106,22 +106,19 @@ class Semantic_Curiosity_Policy(NNBase):
         x = nn.ReLU()(self.linear1(conv_output.view(  # fnn 1
                 -1, self.conv_output_size)))
         
-        print(f"resnet output: {resnet_output.shape}")
-        print(f"conv output: {conv_output.shape}")
-        print(f"x output: {x.shape}")
+        # print(f"resnet output: {resnet_output.shape}")
+        # print(f"conv output: {conv_output.shape}")
+        # print(f"x output: {x.shape}")
         
         if self.dropout > 0:
             x = self.dropout1(x)
         
         x = nn.ReLU()(self.linear2(x))       # fnn 2
-        print(f"x output: {x.shape}")
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-        print(f"x output: {x.shape}")
 
         x = nn.ReLU()(self.policy_linear(x))        # action feature
-        print(f"policy output: {x.shape}")
         return self.critic_linear(x).squeeze(-1), x, rnn_hxs
 
 

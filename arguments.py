@@ -1,6 +1,6 @@
 import argparse
 import torch
-
+import math
 def get_args():
     parser = argparse.ArgumentParser(
         description='Semantic-Curiosity')
@@ -22,7 +22,7 @@ def get_args():
                         help='total number of training frames')
     parser.add_argument('--no_cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    parser.add_argument("--sim_gpu_id", type=int, default=0,
+    parser.add_argument("--sim_gpu_id", type=int, default=1,
                         help="gpu id on which scenes are loaded")
     parser.add_argument("--sem_gpu_id", type=int, default=-1,
                     help="""gpu id for semantic model,
@@ -208,7 +208,7 @@ def get_args():
         args.sem_gpu_id = -2
     
     if args.num_mini_batch == "auto":
-        args.num_mini_batch = max(args.num_processes // 2, 1)
+        args.num_mini_batch = max(args.num_processes // 2 , 1)
     else:
         args.num_mini_batch = int(args.num_mini_batch)
 

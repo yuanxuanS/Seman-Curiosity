@@ -145,7 +145,8 @@ class RolloutStorage(object):
                 extras = []
 
             for offset in range(num_envs_per_batch):
-
+                if start_ind + offset > num_processes - 1:
+                    break
                 ind = perm[start_ind + offset]
                 obs.append(self.obs[:-1, ind])
                 rec_states.append(self.rec_states[0:1, ind])

@@ -6,6 +6,7 @@ import agents.utils.visualization as vu
 from constants import color_palette
 import os
 import torch
+import envs.utils.pose as pu
 from envs.habitat.curio_env import Seman_Curio_Env
 from agents.utils.semantic_prediction import SemanticPredMaskRCNN
 
@@ -19,7 +20,12 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         self.args = args
         super().__init__(args, rank, config_env, dataset)
-
+        
+        #
+        self.visited_vis = None
+        self.last_loc = None
+        self.curr_loc = None
+        
         # initialize transform for RGB observations
         self.res = transforms.Compose(
             [transforms.ToPILImage(),
@@ -45,6 +51,14 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         self.obs_shape = obs.shape
 
+        # Episode initializations
+        map_shape = (args.map_size_cm // args.map_resolution,
+                     args.map_size_cm // args.map_resolution)
+        self.visited_vis = np.zeros(map_shape)
+        self.curr_loc = [args.map_size_cm / 100.0 / 2.0,
+                         args.map_size_cm / 100.0 / 2.0, 0.]
+        
+        
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
         
@@ -60,24 +74,48 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             done (bool): whether the episode has ended
             info (dict): contains timestep
         """
-        # TODO： visualize ?
+        # visualize 
+        self.last_loc = self.curr_loc
+        # Get Map prediction
+        map_pred = np.rint(inputs['map_pred'])  # 四舍五入
+        
+        # Get pose prediction and global policy planning window
+        start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
+            inputs['pose_pred']
+        gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
+        
+        # Get curr loc
+        self.curr_loc = [start_x, start_y, start_o]
+        r, c = start_y, start_x
+        start = [int(r * 100.0 / self.args.map_resolution - gx1),
+                 int(c * 100.0 / self.args.map_resolution - gy1)]
+        start = pu.threshold_poses(start, map_pred.shape)
+        
         if self.args.visualize or self.args.print_images:
+            # Get last loc
+            last_start_x, last_start_y = self.last_loc[0], self.last_loc[1]
+            r, c = last_start_y, last_start_x
+            last_start = [int(r * 100.0 / self.args.map_resolution - gx1),
+                          int(c * 100.0 / self.args.map_resolution - gy1)]
+            last_start = pu.threshold_poses(last_start, map_pred.shape)
+            self.visited_vis[gx1:gx2, gy1:gy2] = \
+                vu.draw_line(last_start, start,
+                             self.visited_vis[gx1:gx2, gy1:gy2])
             self._visualize(inputs)
 
         # act and step
-        action = action + torch.ones_like(action)   # output: 0-2, add to 1-3
+        action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         action = {'action': action}
-        obs, rew, done, info = super().step(action)
+        obs, _, done, info = super().step(action)
 
         # preprocess obs
         obs = self._preprocess_obs(obs) 
-        self.last_action = action['action']     # TODO？ 用于碰撞检测，需要吗？
+        self.last_action = action['action']     
         self.obs = obs
         self.info = info
 
-        info['g_reward'] += rew
 
-        return obs, rew, done, info
+        return obs, 0., done, info
     
     def _preprocess_obs(self, obs, use_seg=True):
         args = self.args
@@ -124,7 +162,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             self.rgb_vis = rgb[:, :, ::-1]
         return semantic_pred
     
-    def _visualize(self, inputs):
+    def _visualize(self, inputs, mode="local"):
         
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
@@ -138,13 +176,16 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         exp_pred = inputs['exp_pred']
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = inputs['pose_pred']
 
-        sem_map = inputs['sem_map_pred']
+        sem_map = inputs['sem_map_pred']        # local map
+        sem_map_full = np.rint(inputs['sem_map_pred_full'])
 
         gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
 
         sem_map += 5        # 语义id，从5开始
-
-        no_cat_mask = sem_map == 20     # 最后一个通道是什么
+        sem_map_full += 5        # 语义id，从5开始
+        
+        # lcoal map
+        no_cat_mask = sem_map == 10     # 最后一个通道是什么
         map_mask = np.rint(map_pred) == 1
         exp_mask = np.rint(exp_pred) == 1
         vis_mask = self.visited_vis[gx1:gx2, gy1:gy2] == 1
@@ -158,30 +199,56 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         sem_map[vis_mask] = 3       # 可视化区域赋值3
 
+        # full map
+        map_pred_full = inputs['map_pred_full']
+        exp_pred_full = inputs['exp_pred_full']
+        no_cat_mask_full = sem_map_full == 10     # 最后一个通道是什么
+        map_mask_full = np.rint(map_pred_full) == 1
+        exp_mask_full = np.rint(exp_pred_full) == 1
+        vis_mask_full = self.visited_vis == 1
+
+        sem_map_full[no_cat_mask_full] = 0
+        m1_full = np.logical_and(no_cat_mask_full, exp_mask_full)
+        sem_map_full[m1_full] = 2     # 将explore区域赋值2
+
+        m2_full = np.logical_and(no_cat_mask_full, map_mask_full)
+        sem_map_full[m2_full] = 1     # obstacle区域赋值1
+
+        sem_map_full[vis_mask_full] = 3       # 可视化区域赋值3
+
         # 绘制语义地图
         color_pal = [int(x * 255.) for x in color_palette]
-        sem_map_vis = Image.new("P", (sem_map.shape[1],
-                                      sem_map.shape[0]))
-        sem_map_vis.putpalette(color_pal)
-        sem_map_vis.putdata(sem_map.flatten().astype(np.uint8))
+        if mode == "local":
+            sem_map_vis = Image.new("P", (sem_map.shape[1],
+                                        sem_map.shape[0]))
+            sem_map_vis.putpalette(color_pal)
+            sem_map_vis.putdata(sem_map.flatten().astype(np.uint8))
+        else:        
+            sem_map_vis = Image.new("P", (sem_map_full.shape[1],
+                                        sem_map_full.shape[0]))
+            sem_map_vis.putpalette(color_pal)
+            sem_map_vis.putdata(sem_map_full.flatten().astype(np.uint8))
         sem_map_vis = sem_map_vis.convert("RGB")
         sem_map_vis = np.flipud(sem_map_vis)
-
         sem_map_vis = sem_map_vis[:, :, [2, 1, 0]]
         sem_map_vis = cv2.resize(sem_map_vis, (480, 480),
+                                interpolation=cv2.INTER_NEAREST)
+        
+        rgb_vis = cv2.resize(self.rgb_vis, (640, 480),
                                  interpolation=cv2.INTER_NEAREST)
-        self.vis_image[50:530, 15:655] = self.rgb_vis
+        self.vis_image[50:530, 15:655] = rgb_vis
         self.vis_image[50:530, 670:1150] = sem_map_vis
         # 绘制agent位置
         pos = (
-            (start_x * 100. / args.map_resolution - gy1)
+            (start_x * 100. / args.map_resolution - gy1)        # start_x是full pose, 所以减去local bdry得到local pose
             * 480 / map_pred.shape[0],
             (map_pred.shape[1] - start_y * 100. / args.map_resolution + gx1)
             * 480 / map_pred.shape[1],
             np.deg2rad(-start_o)
         )
-
-        agent_arrow = vu.get_contour_points(pos, origin=(670, 50))
+        
+        origin = (670, 50)  
+        agent_arrow = vu.get_contour_points(pos, origin)
         color = (int(color_palette[11] * 255),
                  int(color_palette[10] * 255),
                  int(color_palette[9] * 255))

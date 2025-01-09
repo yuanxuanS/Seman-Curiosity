@@ -2,6 +2,7 @@ import numpy as np
 import gym
 import habitat
 import quaternion
+import envs.utils.pose as pu
 
 
 class Seman_Curio_Env(habitat.RLEnv):
@@ -34,6 +35,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         # episode tracking into
         self.timestep = None
         self.info = {}
+        self.last_sim_location = None
         
         # episode id 
         self.episode_no = 0
@@ -50,7 +52,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
-
+        self.last_sim_location = self.get_sim_location()
 
         # Set info
         self.info['time'] = self.timestep
@@ -75,7 +77,7 @@ class Seman_Curio_Env(habitat.RLEnv):
                          evaluation metric info
         """
 
-        action = action["action"]
+        # action = action["action"]
 
         # step
         obs, _, done, _ = super().step(action)
@@ -94,24 +96,27 @@ class Seman_Curio_Env(habitat.RLEnv):
         self.timestep += 1
         self.info['time'] = self.timestep
 
-        return state, None, done, self.info
+        return state, 0., done, self.info
     
     def get_reward_range(self):
         """This function is not used, Habitat-RLEnv requires this function"""
         return (0., 1.0)
     
-    def get_reward(self):
+    def get_reward(self, observations):
         # not used
         return None
     
 
 
-    def get_done(self):
-        if self.info['time'] >= self.args.max_episode_length:       # 
+    def get_done(self, observations):
+        if self.info['time'] >= self.args.max_episode_length - 1:       # 
             done = True
         else:
             done = False
         return done
+    
+    def get_info(self, observations):
+        return self.info
     
     def get_pose_change(self):
         """Returns dx, dy, do pose change of the agent relative to the last

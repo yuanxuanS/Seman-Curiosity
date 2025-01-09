@@ -51,6 +51,8 @@ STEP_AND_PREPROCESS = "step_and_preprocess"
 COUNT_EPISODES_COMMAND = "count_episodes"
 EPISODE_OVER = "episode_over"
 GET_METRICS = "get_metrics"
+GET_OBS_SPACE= "get_obs_space"
+GET_ACTION_SPACE= "get_action_space"
 
 
 def _make_env_fn(
@@ -218,7 +220,7 @@ class VectorEnv:
 
                 elif command == STEP_AND_PREPROCESS:
                     observations, reward, done, info = \
-                            env.step_and_preprocess(data)
+                            env.step_and_preprocess(**data)
                     if auto_reset_done and done:
                         observations, info = env.reset()
                     connection_write_fn((observations, reward, done, info))
@@ -232,10 +234,16 @@ class VectorEnv:
                 elif command == GET_METRICS:
                     result = env.get_metrics()
                     connection_write_fn(result)
-
+                
+                elif command == GET_OBS_SPACE:
+                    result = env.get_obs_space()
+                    connection_write_fn(result)
+                elif command == GET_ACTION_SPACE:
+                    result = env.get_action_space()
+                    connection_write_fn(result)
                 else:
-                    raise NotImplementedError
-
+                    raise NotImplementedError   
+                
                 command, data = connection_read_fn()
 
             if child_pipe is not None:
@@ -317,7 +325,27 @@ class VectorEnv:
             results.append(read_fn())
         self._is_waiting = False
         return results
-
+    
+    def get_obs_space(self):
+        self._is_waiting = True
+        for write_fn in self._connection_write_fns:
+            write_fn((GET_OBS_SPACE, None))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+        self._is_waiting = False
+        return results
+    
+    def get_action_space(self):
+        self._is_waiting = True
+        for write_fn in self._connection_write_fns:
+            write_fn((GET_ACTION_SPACE, None))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+        self._is_waiting = False
+        return results
+    
     def reset(self):
         r"""Reset all the vectorized environments
 
@@ -517,11 +545,11 @@ class VectorEnv:
         else:
             raise NotImplementedError
 
-    def step_and_preprocess(self, inputs):
+    def step_and_preprocess(self, action, inputs):
         self._assert_not_closed()
         self._is_waiting = True
         for e, write_fn in enumerate(self._connection_write_fns):
-            write_fn((STEP_AND_PREPROCESS, inputs[e]))
+            write_fn((STEP_AND_PREPROCESS, ({"action":action[e], "inputs":inputs[e]})))
         results = []
         for read_fn in self._connection_read_fns:
             results.append(read_fn())

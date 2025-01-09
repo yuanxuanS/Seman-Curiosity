@@ -14,6 +14,7 @@ from detectron2.data.catalog import MetadataCatalog
 from detectron2.modeling import build_model
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.utils.visualizer import ColorMode, Visualizer
+from detectron2.structures.instances import Instances
 import detectron2.data.transforms as T
 
 from constants import coco_categories_mapping
@@ -183,11 +184,24 @@ class VisualizationDemo(object):
                     )
                 if "instances" in predictions:
                     instances = predictions["instances"].to(self.cpu_device)
+                    instances = self.get_specific_instance(instances)
                     vis_output = visualizer.draw_instance_predictions(
                         predictions=instances)
 
         return all_predictions, vis_output
 
+    def get_specific_instance(self, instances):
+        if len(instances) == 0:
+            return instances
+        instance_lst = []
+        for i, cls_id in enumerate(instances.pred_classes):
+            if cls_id.cpu().numpy() in list(coco_categories_mapping.keys()):
+                instance_lst.append(instances[i])
+        if len(instance_lst) == 0:
+            return Instances(instances[0]._image_size)
+        instance_res = instances.cat(instance_lst)
+        return instance_res
+        
 
 class BatchPredictor:
     """
