@@ -20,6 +20,8 @@ def get_args():
                         help='0: Train, 1: Evaluate (default: 0)')
     parser.add_argument('--num_training_frames', type=int, default=10000000,
                         help='total number of training frames')
+    parser.add_argument('--num_eval_episodes', type=int, default=200,
+                        help="number of test episodes per scene")
     parser.add_argument('--no_cuda', action='store_true', default=False,
                         help='disables CUDA training')
     parser.add_argument("--sim_gpu_id", type=int, default=1,
@@ -34,8 +36,8 @@ def get_args():
                                 (default: 10) """)
     parser.add_argument('--save_interval', type=int, default=1,
                         help="""save interval""")
-    parser.add_argument('-d', '--dump_location', type=str, default="./tmp/",
-                        help='path to dump models and log (default: ./tmp/)')
+    parser.add_argument('-d', '--dump_location', type=str, default="./exps/",
+                        help='path to dump models and log (default: ./exps/)')
     parser.add_argument('--exp_name', type=str, default="exp1",
                         help='experiment name (default: exp1)')
     parser.add_argument('--save_periodic', type=int, default=500000,

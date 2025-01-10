@@ -14,7 +14,7 @@ from utils.storage import GlobalRolloutStorage
 from model import RL_Policy
 import algo
 import cv2
-
+import json
 
 def main():
     args = get_args()
@@ -45,6 +45,8 @@ def main():
 
     # Logging and loss variables
     num_scenes = args.num_processes
+    num_episodes = int(args.num_eval_episodes)
+    
     device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
@@ -53,11 +55,16 @@ def main():
     best_l_reward = -np.inf
 
     if args.eval:
-        pass # TODO: 增加一些online指标
+        # TODO: 增加一些online指标
+        episode_done = []
+        for _ in range(args.num_processes):
+            episode_done.append(deque(maxlen=num_episodes))
     else:
         pass # TODO: 
+    
+    finished = np.zeros((args.num_processes))
 
-    l_episode_rewards = deque(maxlen=1000)
+    l_episode_rewards = []
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
     
@@ -186,6 +193,9 @@ def main():
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
         
+        if finished.sum() == args.num_processes:    # eval over
+            break
+        
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
@@ -230,6 +240,13 @@ def main():
 
             l_reward = torch.zeros(num_scenes).to(device)
             last_reward = l_reward
+            
+            if args.eval:
+                for e, x in enumerate(done):    # if done, maps from new obs
+                    if x:
+                        episode_done[e].append(True)
+                        if len(episode_done[e]) == num_episodes:
+                            finished[e] = 1
 
         # Sample next action
         l_value, l_action, l_action_log_prob, l_rec_states = \
@@ -364,10 +381,17 @@ def main():
                                         "periodic_{}.pth".format(total_steps)))
         # ------------------------------------------------------------------
     # Print and save model performance numbers during evaluation: TODO
+    # with open('{}/{}_episode_rewards.json'.format(
+    #         dump_dir, args.split), 'w') as f:
+    #     json.dump(l_episode_rewards, f)
     print(f"all episode rewards: {l_episode_rewards}")
+    np.savez('{}/{}_episode_rewards.npz'.format(
+            dump_dir, args.split), episode_reward=l_episode_rewards)
+    
     if args.eval:
         print("Dumping eval details...")
-        # TODO
+        
 
+        
 if __name__ == "__main__":
     main()
