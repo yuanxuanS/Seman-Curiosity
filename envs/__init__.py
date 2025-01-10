@@ -1,7 +1,7 @@
 import torch
 
 from .habitat import construct_envs
-
+from .sensors import *
 
 def make_vec_envs(args):
     envs = construct_envs(args)

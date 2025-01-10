@@ -5434,3 +5434,893 @@ Time: 00d 00h 44m 58s, num timesteps 217440, FPS 80,
 Time: 00d 00h 45m 00s, num timesteps 217680, FPS 80,
 	Rewards: per step mean/med/min/max, rew: 0.0047/0.0018/0.0000/0.0483,
 	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.007,
+Time: 00d 00h 45m 03s, num timesteps 217920, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0483,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.007,
+Time: 00d 00h 45m 06s, num timesteps 218160, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0048/0.0017/0.0000/0.0483,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.007,
+Time: 00d 00h 45m 11s, num timesteps 218400, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0048/0.0018/0.0000/0.0483,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 14s, num timesteps 218640, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0048/0.0018/0.0000/0.0483,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 17s, num timesteps 218880, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0049/0.0018/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 19s, num timesteps 219120, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0048/0.0018/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 22s, num timesteps 219360, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 25s, num timesteps 219600, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 28s, num timesteps 219840, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0018/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 30s, num timesteps 220080, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0018/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 33s, num timesteps 220320, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0048/0.0018/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 36s, num timesteps 220560, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0048/0.0018/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 41s, num timesteps 220800, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0018/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 44s, num timesteps 221040, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 47s, num timesteps 221280, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 50s, num timesteps 221520, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 52s, num timesteps 221760, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 55s, num timesteps 222000, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 45m 58s, num timesteps 222240, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 46m 01s, num timesteps 222480, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 46m 03s, num timesteps 222720, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 46m 06s, num timesteps 222960, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.006,
+Time: 00d 00h 46m 11s, num timesteps 223200, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 14s, num timesteps 223440, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0047/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 17s, num timesteps 223680, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0046/0.0017/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 20s, num timesteps 223920, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0046/0.0016/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 23s, num timesteps 224160, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0045/0.0016/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 26s, num timesteps 224400, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0045/0.0015/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 29s, num timesteps 224640, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0045/0.0015/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 31s, num timesteps 224880, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0045/0.0015/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 34s, num timesteps 225120, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0045/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 37s, num timesteps 225360, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0044/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.045/-0.016/1.005,
+Time: 00d 00h 46m 42s, num timesteps 225600, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0044/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 46m 45s, num timesteps 225840, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0044/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 46m 48s, num timesteps 226080, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0044/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 46m 51s, num timesteps 226320, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0043/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 46m 53s, num timesteps 226560, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0043/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 46m 56s, num timesteps 226800, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0043/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 46m 59s, num timesteps 227040, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0043/0.0014/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 02s, num timesteps 227280, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0043/0.0013/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 05s, num timesteps 227520, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0042/0.0013/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 08s, num timesteps 227760, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0042/0.0012/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Env 0's episode over in 9498 step, 98 local step, reset maps
+Env 1's episode over in 9498 step, 98 local step, reset maps
+Env 2's episode over in 9498 step, 98 local step, reset maps
+Env 3's episode over in 9498 step, 98 local step, reset maps
+Env 4's episode over in 9498 step, 98 local step, reset maps
+Env 5's episode over in 9498 step, 98 local step, reset maps
+Env 6's episode over in 9498 step, 98 local step, reset maps
+Env 7's episode over in 9498 step, 98 local step, reset maps
+Env 8's episode over in 9498 step, 98 local step, reset maps
+Env 9's episode over in 9498 step, 98 local step, reset maps
+Env 10's episode over in 9498 step, 98 local step, reset maps
+Env 11's episode over in 9498 step, 98 local step, reset maps
+Env 12's episode over in 9498 step, 98 local step, reset maps
+Env 13's episode over in 9498 step, 98 local step, reset maps
+Env 14's episode over in 9498 step, 98 local step, reset maps
+Env 15's episode over in 9498 step, 98 local step, reset maps
+Env 16's episode over in 9498 step, 98 local step, reset maps
+Env 17's episode over in 9498 step, 98 local step, reset maps
+Env 18's episode over in 9498 step, 98 local step, reset maps
+Env 19's episode over in 9498 step, 98 local step, reset maps
+Env 20's episode over in 9498 step, 98 local step, reset maps
+Env 21's episode over in 9498 step, 98 local step, reset maps
+Env 22's episode over in 9498 step, 98 local step, reset maps
+Env 23's episode over in 9498 step, 98 local step, reset maps
+episode over in 9499 step, 99 local step, rollouts done;
+ episode mean reward=1.6416691541671753
+Time: 00d 00h 47m 13s, num timesteps 228000, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0042/0.0012/0.0000/0.0545,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 16s, num timesteps 228240, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0042/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 19s, num timesteps 228480, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0043/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 22s, num timesteps 228720, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0042/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 24s, num timesteps 228960, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0041/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 27s, num timesteps 229200, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0042/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 30s, num timesteps 229440, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0042/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 33s, num timesteps 229680, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0041/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 36s, num timesteps 229920, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0041/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 38s, num timesteps 230160, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0041/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.005,
+Time: 00d 00h 47m 43s, num timesteps 230400, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0040/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 47m 46s, num timesteps 230640, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0040/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 47m 49s, num timesteps 230880, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 47m 52s, num timesteps 231120, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 47m 55s, num timesteps 231360, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 47m 57s, num timesteps 231600, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 00s, num timesteps 231840, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 03s, num timesteps 232080, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 06s, num timesteps 232320, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 09s, num timesteps 232560, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0040/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 14s, num timesteps 232800, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 17s, num timesteps 233040, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 20s, num timesteps 233280, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0040/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 23s, num timesteps 233520, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 25s, num timesteps 233760, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 28s, num timesteps 234000, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 31s, num timesteps 234240, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0039/0.0012/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 34s, num timesteps 234480, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 36s, num timesteps 234720, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 39s, num timesteps 234960, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 45s, num timesteps 235200, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 48s, num timesteps 235440, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 51s, num timesteps 235680, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 53s, num timesteps 235920, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 56s, num timesteps 236160, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0038/0.0011/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 48m 59s, num timesteps 236400, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0037/0.0010/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 49m 02s, num timesteps 236640, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0037/0.0010/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+Time: 00d 00h 49m 04s, num timesteps 236880, FPS 80,
+	Rewards: per step mean/med/min/max, rew: 0.0036/0.0010/0.0000/0.0654,
+	Losses: Policy Loss value/action/dist: 0.044/-0.016/1.004,
+I0109 10:07:54.184971 763507 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.184980 763503 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.184986 763505 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185014 763498 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.184991 763500 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185065 763507 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185074 763503 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185043 763497 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185072 763501 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185081 763502 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185120 763505 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185127 763498 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185132 763503 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185139 763507 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185173 763497 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185187 763501 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185107 763504 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185212 763503 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185220 763500 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185220 763507 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185194 763496 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185225 763498 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185223 763505 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185231 763502 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185256 763497 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185266 763501 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185272 763489 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185250 763495 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185258 763506 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185302 763498 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185259 763492 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185305 763500 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185309 763505 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185297 763487 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185218 763499 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185333 763497 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185339 763501 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185359 763496 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185329 763490 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185370 763489 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185379 763504 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185382 763502 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185364 763491 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185398 763500 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185390 763494 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185401 763488 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185441 763495 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185607 763492 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185473 763487 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185452 763484 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185513 763496 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185503 763506 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185550 763502 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185446 763486 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185560 763489 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185566 763490 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185586 763504 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185596 763499 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185629 763491 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185607 763485 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185645 763495 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185657 763492 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185652 763494 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185667 763496 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185668 763487 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185668 763488 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185707 763489 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185714 763484 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185720 763506 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185722 763504 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185745 763490 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185762 763499 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185771 763495 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185778 763492 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185717 763493 PhysicsManager.cpp:50] Deconstructing PhysicsManager
+I0109 10:07:54.185792 763491 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185813 763487 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185822 763494 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185837 763486 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185840 763485 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.185849 763506 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185860 763484 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185861 763490 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185868 763488 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185871 763499 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185911 763491 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185926 763494 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185957 763484 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185966 763488 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.185979 763486 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.185985 763485 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.186008 763486 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.186019 763485 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.186034 763493 SemanticScene.h:43] Deconstructing SemanticScene
+I0109 10:07:54.186122 763493 SceneManager.h:25] Deconstructing SceneManager
+I0109 10:07:54.186134 763493 SceneGraph.h:25] Deconstructing SceneGraph
+I0109 10:07:54.190944 763507 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191043 763507 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191484 763505 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191550 763501 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191641 763505 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191653 763501 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191653 763497 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191797 763497 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191898 763489 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191942 763492 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.191994 763496 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192054 763495 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192056 763489 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192097 763492 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192099 763488 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192158 763491 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192181 763494 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192224 763496 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192238 763495 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192276 763488 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192320 763491 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.192350 763494 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193039 763504 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193189 763504 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193317 763502 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193419 763502 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193506 763487 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193594 763487 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193681 763490 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.193799 763490 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.208561 763503 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.208734 763503 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.208906 763499 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.208933 763498 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.209021 763498 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.209117 763499 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.209615 763485 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.209801 763500 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.209857 763506 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.209954 763485 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.210021 763493 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.210040 763500 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.210165 763484 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.210213 763506 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.210289 763484 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.210741 763493 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.211311 763486 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.211560 763486 Sensor.cpp:69] Deconstructing Sensor
+I0109 10:07:54.445101 763496 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.445147 763496 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.450078 763496 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-13:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.451678 763487 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.451710 763487 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.460170 763487 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-4:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.463065 763505 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.463104 763505 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.468381 763505 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.468658 763492 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.468693 763492 WindowlessContext.h:17] Deconstructing WindowlessContext
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-22:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 383, in _recv
+    raise EOFError
+EOFError
+I0109 10:07:54.471522 763503 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.471552 763503 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.473654 763501 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.473681 763501 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.476562 763503 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.477360 763492 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-20:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 383, in _recv
+    raise EOFError
+EOFError
+I0109 10:07:54.481114 763501 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-18:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 383, in _recv
+    raise EOFError
+EOFError
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-9:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.487561 763499 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.487589 763499 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.488556 763485 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.488584 763485 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.488615 763493 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.488649 763493 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.493582 763486 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.493623 763486 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.495182 763499 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.496155 763493 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-10:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.500234 763485 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-16:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-2:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.506222 763486 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.507635 763500 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.507663 763500 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.513732 763500 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-3:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-17:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 421, in _recv_bytes
+    return self._recv(size)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 385, in _recv
+    raise OSError("got end of file during message")
+OSError: got end of file during message
+I0109 10:07:54.532363 763491 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.532389 763491 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.532455 763490 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.532481 763490 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.539309 763491 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.540776 763494 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.540807 763494 WindowlessContext.h:17] Deconstructing WindowlessContext
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-8:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.546579 763497 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.546610 763497 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.546732 763490 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.547151 763489 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.547184 763489 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.547353 763502 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.547382 763502 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.549223 763494 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-7:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-11:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.553478 763495 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.553514 763495 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.554049 763488 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.554086 763488 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.554466 763497 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-14:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.559603 763504 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.559691 763504 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.560072 763498 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.560101 763498 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.560741 763484 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.560770 763484 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.562354 763507 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.562390 763507 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.562785 763506 Renderer.cpp:71] Deconstructing Renderer
+I0109 10:07:54.562813 763506 WindowlessContext.h:17] Deconstructing WindowlessContext
+I0109 10:07:54.563313 763489 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-6:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+I0109 10:07:54.571163 763502 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.571180 763498 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.571345 763488 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-15:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-5:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-19:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 383, in _recv
+    raise EOFError
+EOFError
+I0109 10:07:54.577625 763506 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.577926 763495 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.578881 763507 Simulator.cpp:54] Deconstructing Simulator
+I0109 10:07:54.579548 763484 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-1:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-24:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 383, in _recv
+    raise EOFError
+EOFError
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-23:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 383, in _recv
+    raise EOFError
+EOFError
+I0109 10:07:54.584810 763504 Simulator.cpp:54] Deconstructing Simulator
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-12:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 226, in _worker_env
+    connection_write_fn((observations, reward, done, info))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 405, in _send_bytes
+    self._send(buf)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 368, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/home/users/wpp/miniconda3/envs/explore/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Process ForkServerProcess-21:
+Traceback (most recent call last):
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/envs/habitat/utils/vector_env.py", line 247, in _worker_env
+    command, data = connection_read_fn()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 414, in _recv_bytes
+    buf = self._recv(4)
+  File "/home/users/wpp/miniconda3/envs/explore/lib/python3.8/multiprocessing/connection.py", line 383, in _recv
+    raise EOFError
+EOFError

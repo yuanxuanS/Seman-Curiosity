@@ -9,7 +9,7 @@ import torch
 import envs.utils.pose as pu
 from envs.habitat.curio_env import Seman_Curio_Env
 from agents.utils.semantic_prediction import SemanticPredMaskRCNN
-
+from finetune.dataset_utils import save_obs
 
 class Sem_Cur_Env_Agent(Seman_Curio_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -106,8 +106,11 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         # act and step
         action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         action = {'action': action}
-        obs, _, done, info = super().step(action)
+        obs, _, done, info = super().step(action)       # 4,256,256
 
+        # save samples(before resize)
+        # self.save_data(obs)
+        
         # preprocess obs
         obs = self._preprocess_obs(obs) 
         self.last_action = action['action']     
@@ -117,10 +120,17 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         return obs, 0., done, info
     
+    def save_data(self, observations):
+        args = self.args
+        dump_dir = "{}/dump/{}/".format(args.dump_location,
+                                        args.exp_name)
+        data_dir = '{}/episodes_data/'.format(dump_dir)
+        save_obs(data_dir, self.episode_no, observations, self.timestep)
+    
     def _preprocess_obs(self, obs, use_seg=True):
         args = self.args
         obs = obs.transpose(1, 2, 0)
-        rgb = obs[:, :, :3]
+        rgb = obs[:, :, :3]     # 256,256,3
         depth = obs[:, :, 3:4]
 
         sem_seg_pred = self._get_sem_pred(

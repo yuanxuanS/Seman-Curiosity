@@ -100,7 +100,7 @@ def construct_envs(args):
         agent_sensors = []
         agent_sensors.append("RGB_SENSOR")
         agent_sensors.append("DEPTH_SENSOR")
-        # agent_sensors.append("SEMANTIC_SENSOR")
+        agent_sensors.append("SEMANTIC_SENSOR")
 
         config_env.SIMULATOR.AGENT_0.SENSORS = agent_sensors
 
@@ -120,11 +120,11 @@ def construct_envs(args):
         config_env.SIMULATOR.DEPTH_SENSOR.MAX_DEPTH = args.max_depth
         config_env.SIMULATOR.DEPTH_SENSOR.POSITION = [0, args.camera_height, 0]
 
-        # config_env.SIMULATOR.SEMANTIC_SENSOR.WIDTH = args.env_frame_width
-        # config_env.SIMULATOR.SEMANTIC_SENSOR.HEIGHT = args.env_frame_height
-        # config_env.SIMULATOR.SEMANTIC_SENSOR.HFOV = args.hfov
-        # config_env.SIMULATOR.SEMANTIC_SENSOR.POSITION = \
-        #     [0, args.camera_height, 0]
+        config_env.SIMULATOR.SEMANTIC_SENSOR.WIDTH = args.env_frame_width
+        config_env.SIMULATOR.SEMANTIC_SENSOR.HEIGHT = args.env_frame_height
+        config_env.SIMULATOR.SEMANTIC_SENSOR.HFOV = args.hfov
+        config_env.SIMULATOR.SEMANTIC_SENSOR.POSITION = \
+            [0, args.camera_height, 0]
 
         config_env.SIMULATOR.TURN_ANGLE = args.turn_angle
         config_env.DATASET.SPLIT = args.split

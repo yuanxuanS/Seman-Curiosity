@@ -1,5 +1,10 @@
 data/
+exps/
+third_parties/
 
 # type
 *.pyc
 *.png
+*.pth
+*.log
+*.txt
