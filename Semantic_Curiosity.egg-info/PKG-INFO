@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: Semantic-Curiosity
+Version: 0.1
+Author: wpp
+Author-email: panpanono@163.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: GPL License
+Classifier: Operating System :: Linux
+Requires-Python: >=3.8
