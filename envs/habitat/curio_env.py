@@ -24,7 +24,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         self.action_space = gym.spaces.Discrete(3)
 
         self.observation_space = gym.spaces.Box(0, 255,
-                                                (3, args.frame_height,
+                                                (4, args.frame_height,
                                                  args.frame_width),
                                                 dtype='uint8')
 
@@ -83,7 +83,6 @@ class Seman_Curio_Env(habitat.RLEnv):
         # step
         obs, _, done, _ = super().step(action)
 
-        # TODO: Get pose change?
         dx, dy, do = self.get_pose_change()
         self.info['sensor_pose'] = [dx, dy, do]
 

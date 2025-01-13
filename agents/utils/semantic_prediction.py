@@ -17,13 +17,17 @@ from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.structures.instances import Instances
 import detectron2.data.transforms as T
 
+from .detect_utils import box_iou_calc
 from constants import coco_categories_mapping
-
+import cv2
 
 class SemanticPredMaskRCNN():
 
     def __init__(self, args):
         self.segmentation_model = ImageSegmentation(args)
+        self.seg_instances = None
+        self.objectness_model = ImageSegmentation(args, mode="objectness")
+        self.obns_instances = None
         self.args = args
 
     def get_prediction(self, img):
@@ -33,7 +37,8 @@ class SemanticPredMaskRCNN():
         image_list.append(img)
         seg_predictions, vis_output = self.segmentation_model.get_predictions(
             image_list, visualize=args.visualize == 2)
-
+        self.seg_instances = seg_predictions
+        
         if args.visualize == 2:
             img = vis_output.get_image()
 
@@ -47,6 +52,79 @@ class SemanticPredMaskRCNN():
                 semantic_input[:, :, idx] += obj_mask.cpu().numpy()
 
         return semantic_input, img
+    
+    def _get_objectness_prediction(self, img):
+        args = self.args
+        image_list = []
+        img = img[:, :, ::-1]
+        image_list.append(img)
+        obns_predictions, vis_output = self.objectness_model.get_predictions(
+            image_list, visualize=args.visualize == 2)
+        
+        self.obns_instances = obns_predictions
+    
+    def get_patch_from_depth(self, depth, boxes):
+        '''
+        depth: (640, 640,1)
+        boxes: array, [x0, y0, x1, y1] 
+        '''
+        x0, y0, x1, y1 = boxes
+        return depth[int(y0):int(y1), int(x0):int(x1), :]
+    
+    def get_potential_mask(self, rgb, depth):
+        
+        self._get_objectness_prediction(rgb)
+        
+        assert self.obns_instances is not None
+        assert self.seg_instances is not None
+        
+        
+        width, height = self.obns_instances[0]['instances'].image_size
+        pot_mp = np.zeros((height, width))
+        v = Visualizer(pot_mp)
+        assert self.obns_instances[0]['instances'].has("pred_boxes"), "no boxes in predictions!"
+        objectness_boxes = self.obns_instances[0]['instances'].pred_boxes
+        if not len(objectness_boxes):  # no pred box by objectness
+            pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
+            potential_mask = pot_mp
+            return potential_mask
+            
+        # remove near boxes by depth map
+        for j in range(len(objectness_boxes)):
+            boxes_ = v._convert_boxes(objectness_boxes[j]).reshape(4,) # convert from 1*4 to 4*1
+            depth_patch = self.get_patch_from_depth(depth, boxes_)  # get patch of instance boxes
+            if depth_patch.max() < 0.5:  # 
+                continue
+                
+            print("has far object")
+            # remove this box that detected by maskrcnn as well
+            maskrcnn_boxes = self.seg_instances[0]['instances'].pred_boxes
+            if len(maskrcnn_boxes): # objectness detects box, maskrcnn as well
+                # recurse every maskrcnn's boxes to filter IoU > thes:
+                obns_ = v._convert_boxes(objectness_boxes[j])
+                msk_ = v._convert_boxes(maskrcnn_boxes)
+                iou = box_iou_calc(obns_, msk_) # 1*num_maskbox
+                if (iou > 0.5).any():   # detected by maskrcnn as well, remove it
+                    continue
+            pot_mp = v.draw_patch(box_coord=boxes_, color='white')
+        
+        
+        # resize to 128*128
+        if isinstance(pot_mp, np.ndarray):
+                # pot_mp *= depths[i]
+            pass
+                # cv2.imwrite(f"/home/users/wpp/Look_Around_And_Learn/t_potential.png", pot_mp.transpose(1,2,0))
+        else:
+            pot_mp = pot_mp.get_image()
+        # binary
+        if len(pot_mp.shape) == 2:
+            pot_mp = pot_mp[..., np.newaxis]
+        pot_mp= pot_mp.astype('float32')*depth    # 在mask上将depth绘制
+        pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]
+        # cv2.imwrite(f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/t_potential_d.png", pot_mp.transpose(1,2,0))
+        potential_mask = pot_mp
+        
+        return potential_mask
 
 
 def compress_sem_map(sem_map):
@@ -57,14 +135,23 @@ def compress_sem_map(sem_map):
 
 
 class ImageSegmentation():
-    def __init__(self, args):
-        string_args = """
-            --config-file configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml
-            --input input1.jpeg
-            --confidence-threshold {}
-            --opts MODEL.WEIGHTS
-            detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl
-            """.format(args.sem_pred_prob_thr)
+    def __init__(self, args, mode="objectness"):
+        
+        if mode == "objectness":
+            string_args = """
+                --config-file configs/quick_schedules/faster_rcnn_R_101_FPN_inference_acc_test.yaml
+                --input input1.jpeg
+                --confidence-threshold {}
+                --opts
+                """.format(args.sem_pred_prob_thr)
+        else:
+            string_args = """
+                --config-file configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml
+                --input input1.jpeg
+                --confidence-threshold {}
+                --opts MODEL.WEIGHTS
+                detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl
+                """.format(args.sem_pred_prob_thr)
 
         if args.sem_gpu_id == -2:
             string_args += """ MODEL.DEVICE cpu"""
@@ -83,10 +170,26 @@ class ImageSegmentation():
     def get_predictions(self, img, visualize=0):
         return self.demo.run_on_image(img, visualize=visualize)
 
-
+def add_new_keys(cfg):
+    # 添加新key
+    if not "NUM_REAL_CLASSES" in cfg.MODEL.ROI_HEADS.keys():
+        cfg.MODEL.ROI_HEADS.NUM_REAL_CLASSES = cfg.MODEL.ROI_HEADS.NUM_CLASSES
+    if not "AdverTrain" in cfg.keys():
+        cfg.AdverTrain = False
+    if not "VIS" in cfg.keys():
+        cfg.VIS = False
+    if not "OUTPUT_VISDIR" in cfg.keys():
+        cfg.OUTPUT_VISDIR = ""
+    if not "BBSense_CLASSES" in cfg.keys():
+        cfg.BBSense_CLASSES = ""
+    return cfg
+    
 def setup_cfg(args):
     # load config from file and command-line arguments
     cfg = get_cfg()
+    
+    cfg = add_new_keys(cfg)
+    
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     # Set score_threshold for builtin models

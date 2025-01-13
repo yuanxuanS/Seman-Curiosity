@@ -248,7 +248,8 @@ class Semantic_Mapping(nn.Module):
 
     def forward(self, obs, pose_obs, maps_last, poses_last):
         '''
-        obs: 0-2: rgb, 3:depth, 4:semantic
+        obs: 0-2: rgb, 3:depth, 4: potential_mask, 5:semantic
+        
         '''
         bs, c, h, w = obs.size()
 
@@ -277,7 +278,7 @@ class Semantic_Mapping(nn.Module):
         XYZ_cm_std[..., 2] = (XYZ_cm_std[..., 2] -
                               (max_h + min_h) // 2.) / (max_h - min_h) * 2.
         self.feat[:, 1:, :] = nn.AvgPool2d(self.du_scale)(
-            obs[:, 4:, :, :]
+            obs[:, 5:, :, :]
         ).view(bs, c - 4, h // self.du_scale * w // self.du_scale)
 
         XYZ_cm_std = XYZ_cm_std.permute(0, 3, 1, 2)

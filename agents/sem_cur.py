@@ -122,6 +122,10 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
     
     
     def _preprocess_obs(self, obs, use_seg=True):
+        '''
+            return: state (5+C) x H x W, 
+                5: RGBD + potential mask
+        '''
         args = self.args
         obs = obs.transpose(1, 2, 0)
         rgb = obs[:, :, :3]     # 256,256,3
@@ -131,6 +135,12 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             rgb.astype(np.uint8), use_seg=use_seg)
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
+        # potential mask
+        potential_mask = self._get_potential_mask(      # w,h,1
+            rgb.astype(np.uint8), 
+            depth.astype(np.uint8))
+        
+        
         ds = args.env_frame_width // args.frame_width  # Downscaling factor
         if ds != 1:
             rgb = np.asarray(self.res(rgb.astype(np.uint8)))
@@ -138,7 +148,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
 
         depth = np.expand_dims(depth, axis=2)
-        state = np.concatenate((rgb, depth, sem_seg_pred),
+        state = np.concatenate((rgb, depth, potential_mask, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)
 
         return state
@@ -165,6 +175,13 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             semantic_pred = np.zeros((rgb.shape[0], rgb.shape[1], 6))
             self.rgb_vis = rgb[:, :, ::-1]
         return semantic_pred
+    
+    def _get_potential_mask(self, rgb, depth):
+        poten_mask = self.sem_pred.get_potential_mask(rgb, depth)
+        return poten_mask
+    
+    
+    
     
     def _visualize(self, inputs, mode="full"):
         
