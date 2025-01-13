@@ -89,71 +89,74 @@ def main():
     maps = Maps_Env(args)
     local_map, local_pose = maps.update_semantic_map(obs, infos)
 
-    # Local policy observation space
-    es = 1      # extra size: orientation
-    l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
-    l_action_space = envs.get_action_space()[0]
+    if args.agent == "rl":
+        # Local policy observation space
+        es = 1      # extra size: orientation
+        l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
+        l_action_space = envs.get_action_space()[0]
 
-    # local policy recurrent layer size
-    l_hidden_size = args.local_hidden_size
+        # local policy recurrent layer size
+        l_hidden_size = args.local_hidden_size
 
-    # Local policy: TODO
-    l_policy = RL_Policy(l_observation_space.shape, l_action_space,
-                         model_type=1,
-                         base_kwargs={'recurrent': args.use_recurrent_local,
-                                      'hidden_size': l_hidden_size,
-                                      'num_sem_categories': args.num_sem_categories
-                                      }).to(device)
+        # Local policy: TODO
+        l_policy = RL_Policy(l_observation_space.shape, l_action_space,
+                            model_type=1,
+                            base_kwargs={'recurrent': args.use_recurrent_local,
+                                        'hidden_size': l_hidden_size,
+                                        'num_sem_categories': args.num_sem_categories
+                                        }).to(device)
+        
+        l_agent = algo.PPO(l_policy, args.clip_param, args.ppo_epoch,
+                        args.num_mini_batch, args.value_loss_coef,
+                        args.entropy_coef, lr=args.lr, eps=args.eps,
+                        max_grad_norm=args.max_grad_norm)
+
+        
+
+        # Storage: 
+        l_rollouts = GlobalRolloutStorage(args.num_local_steps,
+                                        num_scenes, l_observation_space.shape,
+                                        l_action_space, l_policy.rec_state_size,
+                                        es).to(device)
+        
+        # load weights
+        if args.load != "0":
+            print("Loading model {}".format(args.load))
+            logging.info("Loading model {}".format(args.load))
+            state_dict = torch.load(args.load,
+                                    map_location=lambda storage, loc: storage)
+            l_policy.load_state_dict(state_dict)
+
+        if args.eval:
+            l_policy.eval()
     
-    l_agent = algo.PPO(l_policy, args.clip_param, args.ppo_epoch,
-                       args.num_mini_batch, args.value_loss_coef,
-                       args.entropy_coef, lr=args.lr, eps=args.eps,
-                       max_grad_norm=args.max_grad_norm)
+        # Get local policy input
+        local_input = obs[:, :3, ...]
+        local_orientation = torch.zeros(num_scenes, 1).long()
 
+        locs = local_pose.cpu().numpy()
+        for e in range(num_scenes):
+            local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
+
+        extras = torch.zeros(num_scenes, es)
+        extras[:, 0] = local_orientation[:, 0]
+
+        l_rollouts.obs[0].copy_(local_input)   # 
+        l_rollouts.extras[0].copy_(extras)
+
+        # Run Local policy
+        l_value, l_action, l_action_log_prob, l_rec_states = \
+            l_policy.act(
+                l_rollouts.obs[0],
+                l_rollouts.rec_states[0],
+                l_rollouts.masks[0],
+                extras=l_rollouts.extras[0],
+                deterministic=False
+            )
+        l_action = l_action.cpu().numpy()
     
-
-    # Storage: 
-    l_rollouts = GlobalRolloutStorage(args.num_local_steps,
-                                      num_scenes, l_observation_space.shape,
-                                      l_action_space, l_policy.rec_state_size,
-                                      es).to(device)
-    
-    # load weights
-    if args.load != "0":
-        print("Loading model {}".format(args.load))
-        state_dict = torch.load(args.load,
-                                map_location=lambda storage, loc: storage)
-        l_policy.load_state_dict(state_dict)
-
-    if args.eval:
-        l_policy.eval()
-
-
-    # Get local policy input
-    local_input = obs[:, :3, ...]
-    local_orientation = torch.zeros(num_scenes, 1).long()
-
-    locs = local_pose.cpu().numpy()
-    for e in range(num_scenes):
-        local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
-
-    extras = torch.zeros(num_scenes, es)
-    extras[:, 0] = local_orientation[:, 0]
-
-    l_rollouts.obs[0].copy_(local_input)   # 
-    l_rollouts.extras[0].copy_(extras)
-
-    # Run Local policy
-    l_value, l_action, l_action_log_prob, l_rec_states = \
-        l_policy.act(
-            l_rollouts.obs[0],
-            l_rollouts.rec_states[0],
-            l_rollouts.masks[0],
-            extras=l_rollouts.extras[0],
-            deterministic=False
-        )
-    l_action = l_action.cpu().numpy()
-    
+    elif args.agent == "random":
+        l_action = np.random.randint(0, 4, num_scenes)
     
     # for visualize
     full_map = maps.full_map
@@ -208,20 +211,23 @@ def main():
         # ------------------------------------------------------------------ 
         # update local input, next state
         locs = local_pose.cpu().numpy()
-        for e in range(num_scenes):
-            local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
+        
+        if args.agent == "rl":
+            for e in range(num_scenes):
+                local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
 
-        local_input = obs[:, :3, ...]       # rgb
-        extras[:, 0] = local_orientation[:, 0]
+            local_input = obs[:, :3, ...]       # rgb
+            extras[:, 0] = local_orientation[:, 0]
 
         # Add samples to local policy storage
         reward = l_reward - last_reward
         
-        l_rollouts.insert(
-                local_input, l_rec_states,      # state_t+1
-                l_action, l_action_log_prob, l_value,   # action, reward_t
-                reward, l_masks, extras
-            )
+        if args.agent == "rl":
+            l_rollouts.insert(
+                    local_input, l_rec_states,      # state_t+1
+                    l_action, l_action_log_prob, l_value,   # action, reward_t
+                    reward, l_masks, extras
+                )
         last_reward = l_reward
 
         # 
@@ -236,6 +242,7 @@ def main():
         if done[0]:
             r_ = np.mean(l_reward.cpu().numpy())
             print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
+            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
             l_episode_rewards.append(r_)
 
             l_reward = torch.zeros(num_scenes).to(device)
@@ -249,15 +256,18 @@ def main():
                             finished[e] = 1
 
         # Sample next action
-        l_value, l_action, l_action_log_prob, l_rec_states = \
-            l_policy.act(
-                l_rollouts.obs[l_step + 1],
-                l_rollouts.rec_states[l_step + 1],
-                l_rollouts.masks[l_step + 1],
-                extras=l_rollouts.extras[l_step + 1],
-                deterministic=False
-            )
-        l_action = l_action.cpu().numpy()
+        if args.agent == "rl":
+            l_value, l_action, l_action_log_prob, l_rec_states = \
+                l_policy.act(
+                    l_rollouts.obs[l_step + 1],
+                    l_rollouts.rec_states[l_step + 1],
+                    l_rollouts.masks[l_step + 1],
+                    extras=l_rollouts.extras[l_step + 1],
+                    deterministic=False
+                )
+            l_action = l_action.cpu().numpy()
+        elif args.agent == "random":
+            l_action = np.random.randint(0, 4, num_scenes)
 
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
@@ -384,7 +394,8 @@ def main():
     # with open('{}/{}_episode_rewards.json'.format(
     #         dump_dir, args.split), 'w') as f:
     #     json.dump(l_episode_rewards, f)
-    print(f"all episode rewards: {l_episode_rewards}")
+    m = np.array(l_episode_rewards).mean()
+    print(f"all episode rewards: {l_episode_rewards}, mean is {m}")
     np.savez('{}/{}_episode_rewards.npz'.format(
             dump_dir, args.split), episode_reward=l_episode_rewards)
     

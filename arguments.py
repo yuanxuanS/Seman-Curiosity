@@ -88,7 +88,9 @@ def get_args():
                         help="dataset version")
     
     # Model Hyperparameters
-    parser.add_argument('--agent', type=str, default="sem_cur_exp")
+    parser.add_argument('--env', type=str, default="sem_cur_exp")
+    parser.add_argument('--agent', type=str, default="rl",
+                        help="agent type (rl | random)")
     parser.add_argument('--lr', type=float, default=2.5e-5,
                         help='learning rate (default: 2.5e-5)')
     parser.add_argument('--local_hidden_size', type=int, default=256,
@@ -137,6 +139,10 @@ def get_args():
     parser.add_argument('--exp_pred_threshold', type=float, default=1.0)
     parser.add_argument('--collision_threshold', type=float, default=0.20)
 
+    # samples
+    parser.add_argument('--save_samples', default=False,
+                        help='save observations')
+    
     # parse arguments
     args = parser.parse_args()
 
@@ -158,8 +164,10 @@ def get_args():
 
             # GPU Memory required for the SemExp model:         # TODO
             #       0.8 + 0.4 * args.total_num_scenes (GB)
-            # GPU Memory required per thread: 2.6 (GB)
-            min_memory_required = max(0.8 + 0.4 * args.total_num_scenes, 2.6)   # TODO
+            # GPU Memory required per thread: 2.6 (GB) _ > 2.4
+            m_per_thread = 2.4
+            min_memory_required =max(0.4 + 0.3 * args.total_num_scenes, m_per_thread)
+            # max(0.8 + 0.4 * args.total_num_scenes, m_per_thread)   # TODO
             # Automatically configure number of training threads based on
             # number of GPUs available and GPU memory size
             gpu_memory = 1000
@@ -173,15 +181,15 @@ def get_args():
                     needs to be greater than {}GB""".format(
                         i, gpu_memory, min_memory_required)
 
-            num_processes_per_gpu = int(gpu_memory / 2.6)
+            num_processes_per_gpu = int(gpu_memory / m_per_thread)
             num_processes_on_first_gpu = \
-                int((gpu_memory - min_memory_required) / 2.6)
+                int((gpu_memory - min_memory_required) / m_per_thread)
 
             if args.eval:
                 max_threads = num_processes_per_gpu * (num_gpus - 1) \
                     + num_processes_on_first_gpu
                 assert max_threads >= args.total_num_scenes, \
-                    """Insufficient GPU memory for evaluation"""
+                    f"""Insufficient GPU memory for evaluation, max threads is {max_threads}"""
 
             if num_gpus == 1:
                 args.num_processes_on_first_gpu = num_processes_on_first_gpu

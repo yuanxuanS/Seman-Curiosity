@@ -19,7 +19,7 @@ def make_env_fn(args, config_env, rank):
     config_env.SIMULATOR.SCENE = dataset.episodes[0].scene_id
     config_env.freeze()
 
-    if args.agent == "sem_cur_exp":      # TODO
+    if args.env == "sem_cur_exp":      # TODO
         env = Sem_Cur_Env_Agent(args=args, rank=rank,
                                 config_env=config_env,
                                 dataset=dataset
