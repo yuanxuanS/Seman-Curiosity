@@ -318,8 +318,10 @@ def main():
                 l_value_losses.append(l_value_loss)
                 l_action_losses.append(l_action_loss)
                 l_dist_entropies.append(l_dist_entropy)
-            l_rollouts.after_update()       # rollout的最后一个state是下一次initial state
-
+            if args.agent == "rl":
+                l_rollouts.after_update()       # rollout的最后一个state是下一次initial state
+            elif args.agent == "random":
+                pass
         torch.set_grad_enabled(False)
 
         # ------------------------------------------------------------------

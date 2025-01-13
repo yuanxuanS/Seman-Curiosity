@@ -10,6 +10,7 @@ import envs.utils.pose as pu
 from envs.habitat.curio_env import Seman_Curio_Env
 from agents.utils.semantic_prediction import SemanticPredMaskRCNN
 from finetune.dataset_utils import save_obs
+import quaternion
 
 class Sem_Cur_Env_Agent(Seman_Curio_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -45,7 +46,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             self.goal_name = "No"
     def reset(self):
         args = self.args
-
+        
         obs, info = super().reset()
         obs = self._preprocess_obs(obs)
 
@@ -58,7 +59,23 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         self.curr_loc = [args.map_size_cm / 100.0 / 2.0,
                          args.map_size_cm / 100.0 / 2.0, 0.]
         
+        # reset initial location
+        pos = self._env.sim.sample_navigable_point()
+        x = -pos[2]
+        y = -pos[0]
         
+        agent_state = self._env.sim.get_agent_state(0)
+        rotation = agent_state.rotation
+        rvec = quaternion.as_rotation_vector(rotation)
+        rvec[1] = np.random.rand() * 2 * np.pi
+        rot = quaternion.from_rotation_vector(rvec)
+        
+        self._env.sim.set_agent_state(pos, rot)
+        
+        self.last_sim_location = self.get_sim_location()
+        # print(f"initial pose: {self.last_sim_location[0]}, {self.last_sim_location[1]}, {self.last_sim_location[2]}")
+
+        # visualize
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
         

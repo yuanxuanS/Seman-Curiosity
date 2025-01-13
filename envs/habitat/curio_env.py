@@ -53,8 +53,6 @@ class Seman_Curio_Env(habitat.RLEnv):
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
-        self.last_sim_location = self.get_sim_location()
-
         # Set info
         self.info['time'] = self.timestep
         self.info['sensor_pose'] = [0., 0., 0.]
@@ -153,6 +151,7 @@ class Seman_Curio_Env(habitat.RLEnv):
             o = 2 * np.pi - quaternion.as_euler_angles(agent_state.rotation)[1]
         if o > np.pi:
             o -= 2 * np.pi
+        
         return x, y, o
     
     def get_action_space(self):
