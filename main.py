@@ -131,7 +131,7 @@ def main():
             l_policy.eval()
     
         # Get local policy input
-        local_input = obs[:, :3, ...]
+        local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
         local_orientation = torch.zeros(num_scenes, 1).long()
 
         locs = local_pose.cpu().numpy()
@@ -216,7 +216,7 @@ def main():
             for e in range(num_scenes):
                 local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
 
-            local_input = obs[:, :3, ...]       # rgb
+            local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)       # rgb, potential mask
             extras[:, 0] = local_orientation[:, 0]
 
         # Add samples to local policy storage
