@@ -46,8 +46,45 @@ DATASET:
   DATA_PATH: "data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
   EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
   SCENES_DIR: "data/scene_datasets/"
-  CONTENT_SCENES: ["Allensville.glb", "Beechwood.glb", "Coffeen.glb", "Cosmos.glb", "Forkland.glb",
-    "Hanson.glb", "Hiteman.glb", "Klickitat.glb", "Lakeville.glb", "Leonardo.glb", 
-    "Lindenwood.glb", "Marstons.glb", "Merom.glb", "Mifflinburg.glb", "Newfields.glb",
-    "Onaga.glb", "Pinesdale.glb", "Pomaria.glb", "Ranchester.glb", "Shelbyville.glb",
-    "Stockman.glb", "Tolstoy.glb", "Wainscott.glb", "Woodbine.glb" ]
+  CONTENT_SCENES: [
+  # ["Klickitat.glb", "Marstons.glb", "Hanson.glb", "Lakeville.glb", "Merom.glb",
+  # "Lindenwood.glb", "Pinesdale.glb", "Forkland.glb", "Wainscott.glb", "Newfields.glb",
+  # "Ranchester.glb", "Hiteman.glb", "Leonardo.glb", "Onaga.glb", "Pomaria.glb", 
+  # "Stockman.glb", "Tolstoy.glb", "Cosmos.glb", "Benevolence.glb", "Woodbine.glb",
+  # "Beechwood.glb", "Shelbyville.glb", "Mifflinburg.glb", "Coffeen.glb", "Allensville.glb",
+              
+  #         "Touhy.glb",   
+         
+   # from tiny
+   "Allensville.glb", "Beechwood.glb", "Coffeen.glb", "Cosmos.glb", "Forkland.glb", #,
+    # "Hanson.glb", "Hiteman.glb", "Klickitat.glb", "Lakeville.glb", "Leonardo.glb", 
+    # "Lindenwood.glb", "Marstons.glb", "Merom.glb", "Mifflinburg.glb", "Newfields.glb",
+    # "Onaga.glb", "Pinesdale.glb", "Pomaria.glb", "Ranchester.glb", "Shelbyville.glb",
+    # "Stockman.glb", "Tolstoy.glb", "Wainscott.glb", "Woodbine.glb" ]
+  ]
+  # no data:
+    # "Airport.glb", "Tilghmanton.glb", "Goodyear.glb", "Maida.glb", "Winooski.glb",
+    # "Pamelia.glb", "Stilwell.glb", "Thrall.glb", "Hillsdale.glb", "Globe.glb",
+    # "Readsboro.glb", "Brown.glb", "Micanopy.glb", "Marland.glb", "Ancor.glb",
+    # "Arkansaw.glb", "Sugarville.glb",  "Irvine.glb", "Annona.glb", "Goodfield.glb",
+    # "Bohemia.glb", "Martinville.glb", "Sussex.glb", "Soldier.glb", "Goffs.glb",
+    # "Timberon.glb", "Newcomb.glb", "Neibert.glb", "Nuevo.glb", "Bonesteel.glb", 
+    # "Castor.glb", "Kemblesville.glb", "Eagan.glb", "Tyler.glb",  "Oyens.glb",
+    # "Adairsville.glb", "Sunshine.glb", "Bautista.glb", "Sweatman.glb", "Athens.glb",
+    # "Highspire.glb", "Browntown.glb", "Cottonport.glb", "Frankfort.glb", "Hominy.glb",
+    # "Goodwine.glb", "Shelbiana.glb", "Potterville.glb", "Wilseyville.glb", "Springerville.glb",
+    # "Albertville.glb", "Victorville.glb", "Willow.glb", "Musicks.glb", "Parole.glb",
+    #  "Tokeland.glb", "Andover.glb", "Chilhowie.glb", "Rosser.glb", "Anaheim.glb",
+    # "Silas.glb", "Duarte.glb", "Hainesburg.glb", "Churchton.glb", "Byers.glb",
+    # "Clairton.glb", "Broseley.glb", "Maugansville.glb", "Bonnie.glb", "Hildebran.glb",
+    # "Emmaus.glb", "Lynchburg.glb",  "Rogue.glb",  "Neshkoro.glb", 
+  # ]
+
+
+
+  # tiny
+  # ["Allensville.glb", "Beechwood.glb", "Coffeen.glb", "Cosmos.glb", "Forkland.glb"] #,
+    # "Hanson.glb", "Hiteman.glb", "Klickitat.glb", "Lakeville.glb", "Leonardo.glb", 
+    # "Lindenwood.glb", "Marstons.glb", "Merom.glb", "Mifflinburg.glb", "Newfields.glb",
+    # "Onaga.glb", "Pinesdale.glb", "Pomaria.glb", "Ranchester.glb", "Shelbyville.glb",
+    # "Stockman.glb", "Tolstoy.glb", "Wainscott.glb", "Woodbine.glb" ]

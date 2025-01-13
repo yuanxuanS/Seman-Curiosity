@@ -23,13 +23,13 @@ class SenseInfo:
     base_path: str
     mod: str
     episode: int = 0
-    camera_id: int = 0
+    env_id: int = 0
     step: int = 0
 
     def get_path(self) -> str:
         return os.path.join(
             self.base_path,
-            f"episode_{self.episode:06d}_step_{self.step:05d}_modality_{self.mod}_id_{self.camera_id}.npy",
+            f"env_{self.env_id:02d}_episode_{self.episode:06d}_step_{self.step:05d}_modality_{self.mod}.npy",
         )
         
 def get_sense_info(path) -> str:
@@ -37,7 +37,7 @@ def get_sense_info(path) -> str:
     base_path = os.path.dirname(path)
 
     episode = int(_get_info_from_string(path, "episode"))
-    mod = _get_info_from_string_withend(path, "modality", next_str="id")
-    idx = int(_get_info_from_string(path, "id"))
+    env = int(_get_info_from_string(path, "env"))
+    mod = _get_info_from_string(path, "modality")
     step = int(_get_info_from_string(path, "step"))
-    return SenseInfo(base_path, mod, episode, idx, step)
+    return SenseInfo(base_path, mod, episode, env, step)

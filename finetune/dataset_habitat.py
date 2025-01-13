@@ -333,4 +333,9 @@ class PseudoFullDataset(BbsgtDataset):
 if __name__ == "__main__":
     exp_p = '/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test'+ "/episodes_data"
     dataset = BbsgtDataset(data_path=exp_p)
-    print(len(dataset))
+    print(dataset[4])
+    dataset.get_coco_item_dict(4)
+    
+    dataset_full = FullDataset(data_path=exp_p)
+    print(len(dataset_full))
+    print(dataset_full[1])
