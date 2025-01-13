@@ -1,26 +1,38 @@
-from .sensors_utils import _get_info_from_string, \
+from finetune.sensors_utils import _get_info_from_string, \
                         _get_info_from_string_withend
                         # get_sense_info
-from .sensors_data import MODALITY_SENSE      
+from finetune.sensors_data import MODALITY_SENSE      
 import multiprocessing
 
 import numpy as np
+import glob
+import torch
 
-def save_obs(exp_path, episode_id, observations, timestamp):
+def save_obs(exp_path, env_id, episode_id, observations, timestamp):
 
     paths = []
-    for camera_id, camera_obs in enumerate(observations):
-        for modality, data in camera_obs.items():
-            saved_path = _save_data(
-                exp_path,
-                int(episode_id),
-                modality,
-                int(camera_id),
-                int(timestamp),
-                data,
-            )
-            paths.append(saved_path)
+    # for camera_id, camera_obs in enumerate(observations):
+    for modality, data in observations.items():
+        saved_path = _save_data(
+            exp_path,
+            int(env_id),
+            int(episode_id),
+            modality,
+            int(timestamp),
+            data,
+        )
+        paths.append(saved_path)
     return paths
+
+def _save_data(exp_path, env_id, episode_id, modality, timestamp, data):
+
+    path = f"{exp_path}/env_{env_id:02d}_episode_{episode_id:06d}_step_{timestamp:05d}_modality_{modality}.npy"
+
+    np.save(
+        path,
+        data,
+    )
+    return path
 
 def _mask_more_n(arr, n):
     '''
@@ -38,38 +50,43 @@ def _mask_more_n(arr, n):
             count = 1
         mask[idx] = count <= n
     return mask
- 
+
+
+
 class SampleLoader:
     '''
         data name type: episode_modality_id_step
         modality = MODALITY_SENSE
     '''
     def __init__(self, exp_path, samples_path=None):
-        self._load_paths(exp_path, samples_path)
+        self._load_paths(exp_path)
         
     def _load_paths(self, load_path):
         samples_paths = sorted(glob.glob(load_path + '/*.npy'))
 
         paths = {}
         # 所有数据的episode等，相同episode、step包括了多个模态，所以一定会有重复的 TODO： 改成set？
+        env_list = [int(_get_info_from_string(s, "env")) for s in samples_paths]
         episode_list = [int(_get_info_from_string(s, "episode")) for s in samples_paths]
-        mod_list = [_get_info_from_string_withend(s, "modality", next_str="id") for s in samples_paths]
-        idx_list = [int(_get_info_from_string(s, "id")) for s in samples_paths]
         steps_list = [int(_get_info_from_string(s, "step")) for s in samples_paths]
-        
-        for sample_path, episode_id, input_id, mod, step in zip(
-            samples_paths, episode_list, idx_list, mod_list, steps_list
-        ):
-            if episode_id not in paths:
-                paths[episode_id] = {}
-            if input_id not in paths[episode_id]:
-                paths[episode_id][input_id] = {}
-            if mod not in paths[episode_id][input_id]:
-                paths[episode_id][input_id][mod] = {}
+        mod_list = [_get_info_from_string_withend(s, "modality", next_str="id") for s in samples_paths]
 
-            paths[episode_id][input_id][mod][step] = sample_path
+        for sample_path, env_id, episode_id, step, mod in zip(
+            samples_paths, env_list, episode_list, steps_list, mod_list
+        ):  
+            if env_id not in paths:
+                paths[env_id] = {}
+            if episode_id not in paths[env_id]:
+                paths[env_id][episode_id] = {}
+            if step not in paths[env_id][episode_id]:
+                paths[env_id][episode_id][step] = {}
+            if mod not in paths[env_id][episode_id][step]:
+                paths[env_id][episode_id][step][mod] = {}
+
+            paths[env_id][episode_id][step][mod]= sample_path
 
         self.paths = paths
+        self.env_list = np.array(env_list)
         self.episode_list = np.array(episode_list)
         self.steps_list = np.array(steps_list)
         
@@ -81,28 +98,34 @@ class SampleLoader:
         mod = _get_info_from_string_withend(path, "modality", next_str="id")
         return MODALITY_SENSE[mod].load(path)
     
-    def get_sample(self, episode, input, mod, step):
+    def get_sample(self, env, episode, step, mod):
         try:
-            data_path = self.paths[epsiode][input][mod][step]
+            data_path = self.paths[env][episode][step][mod]
             return SampleLoader._load_data(data_path)
         except Exception as ex:
-            raise Exception(f"{episode}, {input}, {mod}, {step}")
+            raise Exception(f"{env}, {episode}, {step}, {mod}")
 
-    def get_episode_and_steps_dense_list(self, filter_episodes=None):
+    def get_env_episode_and_steps_dense_list(self, filter_envs=None, filter_episodes=None):
         mask = _mask_more_n(self.steps_list, 1) # 连续step相同的mask掉，去重复
 
+        if filter_envs is not None:
+            mask_envs = np.array(
+                [li in filter_envs for li in self.env_list]
+            )
+            mask *= mask_envs
+            
         if filter_episodes is not None:
             mask_episodes = np.array(
                 [li in filter_episodes for li in self.episode_list]
             )
             mask *= mask_episodes
 
-        return self.episode_list[mask], self.steps_list[mask]
+        return self.env_list[mask], self.episode_list[mask], self.steps_list[mask]
     
-    def get_sample_multimodality(self, episode_id, id_camera, modalities, step):
+    def get_sample_multimodality(self, env_id, episode_id, step, modalities):
         results = {}
         for mod in modalities:
-            data = self.get_sample(episode_id, id_camera, mod, step)
+            data = self.get_sample(env_id, episode_id, step, mod)
             results[mod] = data
         return results
 

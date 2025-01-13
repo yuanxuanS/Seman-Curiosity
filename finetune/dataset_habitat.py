@@ -4,7 +4,7 @@ from albumentations.pytorch import ToTensorV2
 from detectron2.structures.boxes import Boxes, BoxMode
 from detectron2.structures.instances import Instances
 from detectron2.structures.masks import BitMasks
-
+from dataset_utils import SampleLoader
 
 import numpy as np
 
@@ -16,7 +16,7 @@ class BbsgtDataset(Dataset):
     def __init__(
         self,
         modalities=None,
-        data_path,
+        data_path=None,
         sampler=None,
         index_mask=None,
         inputs= None,
@@ -30,12 +30,13 @@ class BbsgtDataset(Dataset):
         self.sampler = SampleLoader(data_path) if sampler is None else sampler
         
         if input is not None:
-            episode_list, steps_list = self.sampler.get_episode_and_steps_dense_list()
+            env_list, episode_list, steps_list = self.sampler.get_env_episode_and_steps_dense_list()
             if index_mask:
+                env_list = env_list[index_mask]
                 episode_list = episode_list[index_mask]
                 steps_list = steps_list[index_mask]
                 
-            self.inputs = np.array([x for x in zip(episode_list, steps_list)])
+            self.inputs = np.array([x for x in zip(env_list, episode_list, steps_list)])
         else:
             self.inputs = inputs
             
@@ -82,11 +83,11 @@ class BbsgtDataset(Dataset):
         return x, y
     
     def __getitem__(self, idx):
-        episode, step = self.inputs[self.index[idx]]
+        env, episode, step = self.inputs[self.index[idx]]
         
         camera_id = 0
         data = self.sampler.get_sample_multimodality(
-            episode, camera_id, self.modalities, step
+            env, episode, step, self.modalities
         )
         
         x = data['rgb'].data
@@ -95,7 +96,9 @@ class BbsgtDataset(Dataset):
         
         size = x.shape[1:]
         return {        # TODO; 需要这么多吗
+            'env': env,
             'episode': episode,
+            'step': step,
             'image': x,
             'image_id': idx,
             'instances': y,
@@ -105,11 +108,11 @@ class BbsgtDataset(Dataset):
 
     def get_coco_item_dict(self, idx):
         ind = self.index[idx].item()
-        episode, step = self.inputs[ind]
+        env, episode, step = self.inputs[ind]
 
         camera_id = 0
         data = self.sampler.get_sample_multimodality(
-            episode, camera_id, ['bbsgt'], step
+            env, episode, step, ['bbsgt']
         )
         
         gt = data['bbsgt']
@@ -134,7 +137,9 @@ class BbsgtDataset(Dataset):
             'height': y.image_size[0],
             'width': y.image_size[1],
             'annotations': annotations,
+            'env':env,
             'episode': episode,
+            'step': step
         }
 
         return instance_dict
@@ -145,15 +150,14 @@ class FullDataset(BbsgtDataset):
     '''
     def __init__(self, data_path, *args, **kwargs):
         super().__init__(
-            modalities=["rgb", "depth", "position", "bbsgt"], data_path, *args, **kwargs
+            modalities=["rgb", "depth", "position", "bbsgt"], data_path=data_path, *args, **kwargs
         )
         
     def __getitem__(self, idx):
-        episode, step = self.inputs[self.index[idx]]
+        env, episode, step = self.inputs[self.index[idx]]
 
-        camera_id = 0
         data = self.sampler.get_sample_multimodality(
-            episode, camera_id, self.modalities, step
+            env, episode, step, self.modalities
         )
 
         x = data['rgb'].data
@@ -168,14 +172,16 @@ class FullDataset(BbsgtDataset):
         size = x.shape[1:]
 
         return {
+            'env': env,
             'episode': episode,
+            'step': step,
             'image': x,
             "depth": depth,
             "location": torch.tensor(location),
             "instances": y,
             'width': size[1],
             'height': size[0],
-            'info': f"episode_{episode}_step_{step}",
+            'info': f"env_{env}_episode_{episode}_step_{step}",
         }
         
         
@@ -194,9 +200,10 @@ class PseudoFullDataset(BbsgtDataset):
         if sampler is None:
             sampler = SampleLoader(data_path)
         (
+            env_list,
             episode_list,
             steps_list,
-        ) = sampler.get_episode_and_steps_dense_list(*args, **kwargs)
+        ) = sampler.get_env_episode_and_steps_dense_list(*args, **kwargs)
         
         # remove empty labels
         self.pseudo_labels = []
@@ -208,7 +215,7 @@ class PseudoFullDataset(BbsgtDataset):
             else:
                 mask.append(False)
 
-        if len(episode_list) > len(pseudo_labels):
+        if len(episode_list) > len(pseudo_labels):      # TODO? 这里应该怎么改？
             mask += [False] * (len(episode_list) - len(pseudo_labels))
 
         steps_list = steps_list[mask]
@@ -271,7 +278,7 @@ class PseudoFullDataset(BbsgtDataset):
         '''
 
         if isinstance(self.transform, ToTensorV2):
-            out = transform(image=x)
+            out = self.transform(image=x)
             x = out['image']
 
         else:
@@ -323,4 +330,7 @@ class PseudoFullDataset(BbsgtDataset):
 
         return x, y
 
-        
+if __name__ == "__main__":
+    exp_p = '/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test'+ "/episodes_data"
+    dataset = BbsgtDataset(data_path=exp_p)
+    print(len(dataset))

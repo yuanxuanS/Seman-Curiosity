@@ -1,6 +1,6 @@
 import abc
 import cv2
-from .sensors_utils import SenseInfo, get_sense_info
+from finetune.sensors_utils import SenseInfo, get_sense_info
 from dataclasses import dataclass
 import numpy as np
 

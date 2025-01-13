@@ -3,7 +3,8 @@ import gym
 import habitat
 import quaternion
 import envs.utils.pose as pu
-
+from finetune.dataset_utils import save_obs
+import os
 
 class Seman_Curio_Env(habitat.RLEnv):
     """The Semantic Curiosity environment class. The class is responsible
@@ -86,8 +87,9 @@ class Seman_Curio_Env(habitat.RLEnv):
         dx, dy, do = self.get_pose_change()
         self.info['sensor_pose'] = [dx, dy, do]
 
-
-        # self.update_semantic_map(obs, poses, local_map, local_pose)
+        # save samples(before resize)
+        if self.args.save_samples:
+            paths = self.save_data(obs)
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
@@ -97,6 +99,16 @@ class Seman_Curio_Env(habitat.RLEnv):
         self.info['time'] = self.timestep
 
         return state, 0., done, self.info
+    
+    def save_data(self, observations):
+        args = self.args
+        dump_dir = "{}/dump/{}/".format(args.dump_location,
+                                        args.exp_name)
+        data_dir = '{}/episodes_data/'.format(dump_dir)
+        if not os.path.exists(data_dir):
+            os.mkdir(data_dir)
+        paths = save_obs(data_dir, self.rank, self.episode_no, observations, self.timestep)
+        return paths
     
     def get_reward_range(self):
         """This function is not used, Habitat-RLEnv requires this function"""

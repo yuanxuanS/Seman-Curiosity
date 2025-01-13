@@ -177,4 +177,4 @@ class HabitatDataModule(pl.LightningDataModule):
         
         
 if __name__ == "__main__":
-    
+    p = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test" + "/episodes_data"

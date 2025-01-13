@@ -108,8 +108,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         action = {'action': action}
         obs, _, done, info = super().step(action)       # 4,256,256
 
-        # save samples(before resize)
-        # self.save_data(obs)
+        
         
         # preprocess obs
         obs = self._preprocess_obs(obs) 
@@ -120,12 +119,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         return obs, 0., done, info
     
-    def save_data(self, observations):
-        args = self.args
-        dump_dir = "{}/dump/{}/".format(args.dump_location,
-                                        args.exp_name)
-        data_dir = '{}/episodes_data/'.format(dump_dir)
-        save_obs(data_dir, self.episode_no, observations, self.timestep)
+    
     
     def _preprocess_obs(self, obs, use_seg=True):
         args = self.args
@@ -172,7 +166,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             self.rgb_vis = rgb[:, :, ::-1]
         return semantic_pred
     
-    def _visualize(self, inputs, mode="local"):
+    def _visualize(self, inputs, mode="full"):
         
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
@@ -233,7 +227,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                                         sem_map.shape[0]))
             sem_map_vis.putpalette(color_pal)
             sem_map_vis.putdata(sem_map.flatten().astype(np.uint8))
-        else:        
+        elif mode == "full":        
             sem_map_vis = Image.new("P", (sem_map_full.shape[1],
                                         sem_map_full.shape[0]))
             sem_map_vis.putpalette(color_pal)
@@ -248,15 +242,25 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                                  interpolation=cv2.INTER_NEAREST)
         self.vis_image[50:530, 15:655] = rgb_vis
         self.vis_image[50:530, 670:1150] = sem_map_vis
-        # 绘制agent位置
-        pos = (
-            (start_x * 100. / args.map_resolution - gy1)        # start_x是full pose, 所以减去local bdry得到local pose
-            * 480 / map_pred.shape[0],
-            (map_pred.shape[1] - start_y * 100. / args.map_resolution + gx1)
-            * 480 / map_pred.shape[1],
-            np.deg2rad(-start_o)
-        )
         
+        # 绘制agent位置
+        if mode == "local":
+            pos = (
+                (start_x * 100. / args.map_resolution - gy1)        # start_x是full pose, 所以减去local bdry得到local pose
+                * 480 / map_pred.shape[0],
+                (map_pred.shape[1] - start_y * 100. / args.map_resolution + gx1)
+                * 480 / map_pred.shape[1],
+                np.deg2rad(-start_o)
+            )
+        elif mode == "full":
+            pos = (
+                (start_x * 100. / args.map_resolution)
+                * 480 / map_pred_full.shape[0],
+                (map_pred_full.shape[1] - start_y * 100. / args.map_resolution)
+                * 480 / map_pred_full.shape[1],
+                np.deg2rad(-start_o)
+            )
+            
         origin = (670, 50)  
         agent_arrow = vu.get_contour_points(pos, origin)
         color = (int(color_palette[11] * 255),
