@@ -58,7 +58,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         self.curr_loc = [args.map_size_cm / 100.0 / 2.0,
                          args.map_size_cm / 100.0 / 2.0, 0.]
         
-        
+        # visualize
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
         
