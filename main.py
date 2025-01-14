@@ -7,7 +7,7 @@ import logging
 from collections import deque, defaultdict
 import gym
 import time
-
+from datetime import datetime
 from envs import make_vec_envs
 from maps import Maps_Env
 from utils.storage import GlobalRolloutStorage
@@ -170,9 +170,10 @@ def main():
         p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
         p_input['pose_pred'] = maps.get_all_pose()[e]
         if args.visualize or args.print_images:
-            local_map[e, -1, :, :] = 1e-5
+            local_map[e, -1, :, :] = 1e-5       # 有物体时，为了argmax时不选最后通道
             p_input['sem_map_pred'] = local_map[e, 4:, :, :
-                                                ].argmax(0).cpu().numpy()
+                                                ].argmax(0).cpu().numpy()   # 如果无object，选最后一个通道
+            full_map[e, -1, :, :] = 1e-5
             p_input['sem_map_pred_full'] = full_map[e, 4:, :, :].argmax(0).cpu().numpy()
     # transition:
     # pred instance, get semantic masks and step env: 
@@ -182,10 +183,12 @@ def main():
     local_map, local_pose = maps.update_semantic_map(obs, infos)
 
     start = time.time()
+    start_datetime = datetime.fromtimestamp(start)
+    logging.info("Start date and time: %s", start_datetime)
+    
     l_reward = torch.zeros(num_scenes).to(device)
     last_reward = torch.zeros(num_scenes).to(device)
 
-    
     
     torch.set_grad_enabled(False)
 
@@ -398,6 +401,7 @@ def main():
     #     json.dump(l_episode_rewards, f)
     m = np.array(l_episode_rewards).mean()
     print(f"all episode rewards: {l_episode_rewards}, mean is {m}")
+    logging.info(f"all episode rewards: {l_episode_rewards}, mean is {m}")
     np.savez('{}/{}_episode_rewards.npz'.format(
             dump_dir, args.split), episode_reward=l_episode_rewards)
     
