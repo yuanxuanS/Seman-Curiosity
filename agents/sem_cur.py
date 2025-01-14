@@ -198,7 +198,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = inputs['pose_pred']
 
         sem_map = inputs['sem_map_pred']        # local map
-        sem_map_full = np.rint(inputs['sem_map_pred_full'])
+        sem_map_full = inputs['sem_map_pred_full']
 
         gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
 
@@ -206,7 +206,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         sem_map_full += 5        # 语义id，从5开始
         
         # lcoal map
-        no_cat_mask = sem_map == 10     # 最后一个通道是什么
+        no_cat_mask = sem_map == 10     # =最后一个通道，代表没有object
         map_mask = np.rint(map_pred) == 1
         exp_mask = np.rint(exp_pred) == 1
         vis_mask = self.visited_vis[gx1:gx2, gy1:gy2] == 1
