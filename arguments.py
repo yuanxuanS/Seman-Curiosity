@@ -86,6 +86,14 @@ def get_args():
                         help="max distance to goal during training in meters")
     parser.add_argument('--version', type=str, default="v1.1",
                         help="dataset version")
+    # for initialize location
+    parser.add_argument('--success_dist', type=float, default=1.0,
+                    help="success distance threshold in meters")
+    parser.add_argument('--num_train_episodes', type=int, default=10000,        # 貌似仅用于判断一开始加载时，是不是场景
+                        help="""number of train episodes per scene
+                                before loading the next scene""")
+    parser.add_argument('--floor_thr', type=int, default=50,
+                        help="floor threshold in cm")
     
     # Model Hyperparameters
     parser.add_argument('--env', type=str, default="sem_cur_exp")

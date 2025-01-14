@@ -59,22 +59,6 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         self.curr_loc = [args.map_size_cm / 100.0 / 2.0,
                          args.map_size_cm / 100.0 / 2.0, 0.]
         
-        # reset initial location
-        pos = self._env.sim.sample_navigable_point()
-        x = -pos[2]
-        y = -pos[0]
-        
-        agent_state = self._env.sim.get_agent_state(0)
-        rotation = agent_state.rotation
-        rvec = quaternion.as_rotation_vector(rotation)
-        rvec[1] = np.random.rand() * 2 * np.pi
-        rot = quaternion.from_rotation_vector(rvec)
-        
-        self._env.sim.set_agent_state(pos, rot)
-        
-        self.last_sim_location = self.get_sim_location()
-        # print(f"initial pose: {self.last_sim_location[0]}, {self.last_sim_location[1]}, {self.last_sim_location[2]}")
-
         # visualize
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
