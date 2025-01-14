@@ -214,7 +214,7 @@ class Maps_Env:
     
     def sum_of_semantic_map(self):
         # get semantic channels: 4:
-        semantic_maps = self.full_map[:, 4:10, ...]   # num_scenes, num_semantic, size_w, size_h
+        semantic_maps = self.full_map[:, 4:9, ...]   # num_scenes, num_semantic, size_w, size_h
 
         # sum of semantic objects
         sum_res = semantic_maps.sum(-1).sum(-1).sum(-1)  # num_scenes

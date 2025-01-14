@@ -248,7 +248,7 @@ class Semantic_Mapping(nn.Module):
 
     def forward(self, obs, pose_obs, maps_last, poses_last):
         '''
-        obs: 0-2: rgb, 3:depth, 4:semantic
+        obs: 0-2: rgb, 3:depth, 4...: semantic
         '''
         bs, c, h, w = obs.size()
 
