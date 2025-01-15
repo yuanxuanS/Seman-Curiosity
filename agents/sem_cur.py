@@ -141,10 +141,11 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             depth.astype(np.uint8))
         
         
-        ds = args.env_frame_width // args.frame_width  # Downscaling factor
+        ds = args.env_frame_width // args.frame_width  # Downscaling factor: 放缩到policy输入大小
         if ds != 1:
             rgb = np.asarray(self.res(rgb.astype(np.uint8)))
             depth = depth[ds // 2::ds, ds // 2::ds]
+            potential_mask = potential_mask[ds // 2::ds, ds // 2::ds]
             sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
 
         depth = np.expand_dims(depth, axis=2)
@@ -177,7 +178,8 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         return semantic_pred
     
     def _get_potential_mask(self, rgb, depth):
-        poten_mask = self.sem_pred.get_potential_mask(rgb, depth)
+        self.obns_vis = self.sem_pred._get_objectness_prediction(rgb)
+        poten_mask = self.sem_pred.get_potential_mask(depth)
         return poten_mask
     
     
@@ -255,7 +257,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         sem_map_vis = cv2.resize(sem_map_vis, (480, 480),
                                 interpolation=cv2.INTER_NEAREST)
         
-        rgb_vis = cv2.resize(self.rgb_vis, (640, 480),
+        rgb_vis = cv2.resize(self.obns_vis, (640, 480),
                                  interpolation=cv2.INTER_NEAREST)
         self.vis_image[50:530, 15:655] = rgb_vis
         self.vis_image[50:530, 670:1150] = sem_map_vis

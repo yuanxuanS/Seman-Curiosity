@@ -131,7 +131,7 @@ def main():
             l_policy.eval()
     
         # Get local policy input
-        local_input = obs[:, :3, ...]
+        local_input = torch.concat([obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]], dim=1)
         local_orientation = torch.zeros(num_scenes, 1).long()
 
         locs = local_pose.cpu().numpy()
@@ -179,9 +179,11 @@ def main():
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
+    
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
-
+        
+    
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
     logging.info("Start date and time: %s", start_datetime)
@@ -207,6 +209,10 @@ def main():
             l_reward = last_reward
         else:
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+            poten_reward = args.poten_reward_coeff *obs[:, 4, ...].sum(-1).sum(-1)   # obs size: 128*128
+            if poten_reward.sum() > 0:
+                print(f"potential reward: {poten_reward}")
+            l_reward +=  poten_reward
 
         # per step reward? TODO
         # add explore metric: TODO
@@ -219,7 +225,7 @@ def main():
             for e in range(num_scenes):
                 local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
 
-            local_input = obs[:, :3, ...]       # rgb
+            local_input = torch.concat([obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]], dim=1)       # rgb
             extras[:, 0] = local_orientation[:, 0]
 
         # Add samples to local policy storage

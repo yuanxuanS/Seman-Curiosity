@@ -71,7 +71,14 @@ class Semantic_Curiosity_Policy(NNBase):
         resnet = models.resnet18(pretrained=True)
         # resnet = models.resnet18(weights=ResNet18_Weights.DEFAULT)
         self.resnet_l5 = nn.Sequential(*list(resnet.children())[0:8])
-
+        
+        # for 4 channel
+        pretrained_weight= self.resnet_l5[0].weight.clone()
+        self.resnet_l5[0] = nn.Conv2d(4, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        with torch.no_grad():
+            self.resnet_l5[0].weight[:, :3] = pretrained_weight
+            self.resnet_l5[0].weight[:, 3] = self.resnet_l5[0].weight[:, 0]
+        
         # Extra convolution layer
         self.conv = nn.Sequential(*filter(bool, [
             nn.Conv2d(512, 64, (1, 1), stride=(1, 1)),
@@ -79,7 +86,8 @@ class Semantic_Curiosity_Policy(NNBase):
         ]))
 
         # convolution output size
-        input_test = torch.randn(1, 3, input_shape[1], input_shape[2])
+        input_c = input_shape[0]
+        input_test = torch.randn(1, input_c, input_shape[1], input_shape[2])
         conv_output = self.conv(self.resnet_l5(input_test))
         self.conv_output_size = conv_output.view(-1).size(0)
 
@@ -101,7 +109,7 @@ class Semantic_Curiosity_Policy(NNBase):
         return self._hidden_size // 2
 
     def forward(self, rgb, rnn_hxs, masks, extras=None):
-        resnet_output = self.resnet_l5(rgb[:, :3, :, :])
+        resnet_output = self.resnet_l5(rgb[:, :4, :, :])
         conv_output = self.conv(resnet_output)
         x = nn.ReLU()(self.linear1(conv_output.view(  # fnn 1
                 -1, self.conv_output_size)))
@@ -279,7 +287,7 @@ class Semantic_Mapping(nn.Module):
                               (max_h + min_h) // 2.) / (max_h - min_h) * 2.
         self.feat[:, 1:, :] = nn.AvgPool2d(self.du_scale)(
             obs[:, 5:, :, :]
-        ).view(bs, c - 4, h // self.du_scale * w // self.du_scale)
+        ).view(bs, c - 5, h // self.du_scale * w // self.du_scale)
 
         XYZ_cm_std = XYZ_cm_std.permute(0, 3, 1, 2)
         XYZ_cm_std = XYZ_cm_std.view(XYZ_cm_std.shape[0],
@@ -306,7 +314,7 @@ class Semantic_Mapping(nn.Module):
         pose_pred = poses_last
 
         # all map: obstacle, explore, semantics
-        agent_view = torch.zeros(bs, c,
+        agent_view = torch.zeros(bs, c-1,
                                  self.map_size_cm // self.resolution,
                                  self.map_size_cm // self.resolution
                                  ).to(self.device)
@@ -367,7 +375,7 @@ if __name__ == "__main__":
     import gym
 
     observation_space = gym.spaces.Box(0, 255,
-                                                (3, 128,
+                                                (4, 128,
                                                  128),
                                                 dtype='uint8')
     action_space = gym.spaces.Discrete(3)
@@ -385,7 +393,7 @@ if __name__ == "__main__":
     rnn_hxs = torch.rand(bs, 512)
     l_masks = torch.ones(bs)
     extras = None
-    input = torch.rand(bs, 3, 128, 128)
+    input = torch.rand(bs, 4, 128, 128)
     # value, action_feature, rnn_hxs = policy(input, rnn_hxs, l_masks, extras)
     # print(f"shape: \nvalue:{value.shape}\naction feature:{action_feature.shape}\n")
 

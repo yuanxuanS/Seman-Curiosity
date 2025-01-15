@@ -62,30 +62,38 @@ class SemanticPredMaskRCNN():
             image_list, visualize=args.visualize == 2)
         
         self.obns_instances = obns_predictions
+        
+        if args.visualize == 2:
+            img = vis_output.get_image()
+            
+        return img
     
     def get_patch_from_depth(self, depth, boxes):
         '''
-        depth: (640, 640,1)
+        depth: (w, h)
         boxes: array, [x0, y0, x1, y1] 
         '''
         x0, y0, x1, y1 = boxes
-        return depth[int(y0):int(y1), int(x0):int(x1), :]
+        return depth[int(y0):int(y1), int(x0):int(x1)]
     
-    def get_potential_mask(self, rgb, depth):
+    def get_potential_mask(self, depth):
         
-        self._get_objectness_prediction(rgb)
-        
-        assert self.obns_instances is not None
+        assert self.obns_instances is not None, "call _get_objectness_prediction() first"
         assert self.seg_instances is not None
+        
+        device = None
+        
+        self.obns_instances[0]['instances'] = self.obns_instances[0]['instances'].to("cpu")
+        
         
         
         width, height = self.obns_instances[0]['instances'].image_size
-        pot_mp = np.zeros((height, width))
+        pot_mp = np.zeros((height, width, 1))
         v = Visualizer(pot_mp)
         assert self.obns_instances[0]['instances'].has("pred_boxes"), "no boxes in predictions!"
         objectness_boxes = self.obns_instances[0]['instances'].pred_boxes
         if not len(objectness_boxes):  # no pred box by objectness
-            pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
+            # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
             potential_mask = pot_mp
             return potential_mask
             
@@ -96,16 +104,22 @@ class SemanticPredMaskRCNN():
             if depth_patch.max() < 0.5:  # 
                 continue
                 
-            print("has far object")
+            
             # remove this box that detected by maskrcnn as well
             maskrcnn_boxes = self.seg_instances[0]['instances'].pred_boxes
             if len(maskrcnn_boxes): # objectness detects box, maskrcnn as well
                 # recurse every maskrcnn's boxes to filter IoU > thes:
+                device = self.seg_instances[0]['instances'].pred_boxes.device
+                self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to("cpu")
+                maskrcnn_boxes = self.seg_instances[0]['instances'].pred_boxes
+                
                 obns_ = v._convert_boxes(objectness_boxes[j])
                 msk_ = v._convert_boxes(maskrcnn_boxes)
                 iou = box_iou_calc(obns_, msk_) # 1*num_maskbox
                 if (iou > 0.5).any():   # detected by maskrcnn as well, remove it
                     continue
+                else:
+                    print("has far object")
             pot_mp = v.draw_patch(box_coord=boxes_, color='white')
         
         
@@ -116,14 +130,18 @@ class SemanticPredMaskRCNN():
                 # cv2.imwrite(f"/home/users/wpp/Look_Around_And_Learn/t_potential.png", pot_mp.transpose(1,2,0))
         else:
             pot_mp = pot_mp.get_image()
-        # binary
-        if len(pot_mp.shape) == 2:
-            pot_mp = pot_mp[..., np.newaxis]
-        pot_mp= pot_mp.astype('float32')*depth    # 在mask上将depth绘制
-        pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]
+            
+        pot_mp= pot_mp.astype('float32')*depth[..., np.newaxis]    # 在mask上将depth绘制
+        
+        # if len(pot_mp.shape) == 2:
+        #     pot_mp = pot_mp[..., np.newaxis]
+        
+        # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]
         # cv2.imwrite(f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/t_potential_d.png", pot_mp.transpose(1,2,0))
         potential_mask = pot_mp
         
+        if device is not None:
+            self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to(device)
         return potential_mask
 
 

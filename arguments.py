@@ -131,6 +131,8 @@ def get_args():
                         help='use a recurrent local policy')
     parser.add_argument('--reward_coeff', type=float, default=2.5e-3,
                         help="Semantic curiosity reward coefficient")
+    parser.add_argument('--poten_reward_coeff', type=float, default=1e-4,
+                        help="Semantic curiosity potential reward coefficient")
     parser.add_argument('--num_sem_categories', type=float, default=6,
                         help="number of semantic plus 1")
     parser.add_argument('--sem_pred_prob_thr', type=float, default=0.9,
