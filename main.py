@@ -67,6 +67,9 @@ def main():
     l_episode_rewards = []
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
+    per_step_poten_rewards = deque(maxlen=1000)
+    per_step_poten_rewards_cnt = 0
+    per_step_l_rewards_all = deque(maxlen=1000)
     
     l_value_losses = deque(maxlen=1000)
     l_action_losses = deque(maxlen=1000)
@@ -209,12 +212,8 @@ def main():
             l_reward = last_reward
         else:
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
-            poten_reward = args.poten_reward_coeff *obs[:, 4, ...].sum(-1).sum(-1)   # obs size: 128*128
-            if poten_reward.sum() > 0:
-                print(f"potential reward: {poten_reward}")
-            l_reward +=  poten_reward
+            poten_reward = args.poten_reward_coeff *obs[:, 4, ...].sum(-1).sum(-1) / (args.frame_height * args.frame_width)  # obs size: 128*128
 
-        # per step reward? TODO
         # add explore metric: TODO
 
         # ------------------------------------------------------------------ 
@@ -228,9 +227,26 @@ def main():
             local_input = torch.concat([obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]], dim=1)       # rgb
             extras[:, 0] = local_orientation[:, 0]
 
-        # Add samples to local policy storage
-        reward = l_reward - last_reward
         
+        reward = l_reward - last_reward     # semantic map reward: per step increase, >0
+        
+        # Compute reward
+        # semantic reward
+        reward_mean = np.mean(reward.cpu().numpy())
+        l_reward_mean = np.mean(l_reward.cpu().numpy())
+        per_step_rewards.append(reward_mean)    # semantic map increase reward
+        per_step_l_rewards.append(l_reward_mean)    # semantic map accumulate reward
+        
+        # potential reward
+        reward += poten_reward
+        poten_reward_mean = np.mean(poten_reward.cpu().numpy())
+        per_step_poten_rewards.append(poten_reward_mean)        # potential reward per step
+        if poten_reward_mean > 0:
+            per_step_poten_rewards_cnt+= (poten_reward.cpu().numpy() > 0.).sum() / len(poten_reward)
+        
+        all_reward_mean = np.mean(reward.cpu().numpy())
+        per_step_l_rewards_all.append(all_reward_mean)
+        # Add samples to local policy storage
         if args.agent == "rl":
             l_rollouts.insert(
                     local_input, l_rec_states,      # state_t+1
@@ -239,11 +255,7 @@ def main():
                 )
         last_reward = l_reward
 
-        # 
-        reward_mean = np.mean(reward.cpu().numpy())
-        l_reward_mean = np.mean(l_reward.cpu().numpy())
-        per_step_rewards.append(reward_mean)
-        per_step_l_rewards.append(l_reward_mean)
+        
 
         # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
@@ -347,13 +359,37 @@ def main():
 
             if len(per_step_rewards) > 0:
                 log += " ".join([
-                    " per step mean/med/min/max, rew:",
+                    " per step Semantic reward, mean/med/min/max:",
                     "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
                         np.mean(per_step_rewards),
                         np.median(per_step_rewards),
                         np.min(per_step_rewards),
                         np.max(per_step_rewards))
                 ])
+                
+            if len(per_step_poten_rewards) > 0:
+                log += " ".join([
+                    "\n\t per step Potential reward, mean/med/min/max:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(per_step_poten_rewards),
+                        np.median(per_step_poten_rewards),
+                        np.min(per_step_poten_rewards),
+                        np.max(per_step_poten_rewards))
+                ])
+                log += " ".join([
+                    "\n\t          Potential reward num: {:.4f},".format(per_step_poten_rewards_cnt)
+                ])
+                
+            if len(per_step_l_rewards_all) > 0:
+                log += " ".join([
+                    "\n\t per step All reward, mean/med/min/max:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(per_step_l_rewards_all),
+                        np.median(per_step_l_rewards_all),
+                        np.min(per_step_l_rewards_all),
+                        np.max(per_step_l_rewards_all))
+                ])
+            
 
             log += "\n\tLosses:"
             if len(l_value_losses) > 0 and not args.eval:
