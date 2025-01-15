@@ -138,7 +138,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         # potential mask
         potential_mask = self._get_potential_mask(      # w,h,1
             rgb.astype(np.uint8), 
-            depth.astype(np.uint8))
+            depth)
         
         
         ds = args.env_frame_width // args.frame_width  # Downscaling factor: 放缩到policy输入大小
@@ -257,9 +257,12 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         sem_map_vis = cv2.resize(sem_map_vis, (480, 480),
                                 interpolation=cv2.INTER_NEAREST)
         
-        rgb_vis = cv2.resize(self.obns_vis, (640, 480),
+        obns_vis = cv2.resize(self.obns_vis, (320, 480),
                                  interpolation=cv2.INTER_NEAREST)
-        self.vis_image[50:530, 15:655] = rgb_vis
+        rgb_vis = cv2.resize(self.rgb_vis, (320, 480),
+                                 interpolation=cv2.INTER_NEAREST)
+        self.vis_image[50:530, 10:330] = obns_vis
+        self.vis_image[50:530, 335:655] = rgb_vis
         self.vis_image[50:530, 670:1150] = sem_map_vis
         
         # 绘制agent位置
