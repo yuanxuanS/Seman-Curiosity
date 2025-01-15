@@ -92,31 +92,30 @@ class SemanticPredMaskRCNN():
         v = Visualizer(pot_mp)
         assert self.obns_instances[0]['instances'].has("pred_boxes"), "no boxes in predictions!"
         objectness_boxes = self.obns_instances[0]['instances'].pred_boxes
-        if not len(objectness_boxes):  # no pred box by objectness
-            # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
-            potential_mask = pot_mp
-            return potential_mask
-            
         
+        # no objectness prediction
+        if not len(objectness_boxes):  
+            # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
+            return pot_mp
+            
         for j in range(len(objectness_boxes)):
             boxes_ = v._convert_boxes(objectness_boxes[j]).reshape(4,) # convert from 1*4 to 4*1
             
-            # remove near boxes by depth map
-            depth_patch = self.get_patch_from_depth(depth, boxes_)  # get patch of instance boxes
+            # remove close boxes
+            depth_patch = self.get_patch_from_depth(depth, boxes_)
             if depth_patch.max() < 0.5:  # 
                 continue
                 
-            
-            # remove this box that detected by maskrcnn as well
+            # remove box that detected by maskrcnn as well
             maskrcnn_boxes = self.seg_instances[0]['instances'].pred_boxes
-            if len(maskrcnn_boxes): # objectness detects box, maskrcnn as well
+            if len(maskrcnn_boxes):
                 # recurse every maskrcnn's boxes to filter IoU > thes:
                 device = self.seg_instances[0]['instances'].pred_boxes.device
                 self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to("cpu")
                 maskrcnn_boxes = self.seg_instances[0]['instances'].pred_boxes
                 
                 obns_ = v._convert_boxes(objectness_boxes[j])
-                msk_ = v._convert_boxes(maskrcnn_boxes)
+                msk_ = v._convert_boxes(maskrcnn_boxes)     # all maskrcnn box 
                 iou = box_iou_calc(obns_, msk_) # 1*num_maskbox
                 if (iou > 0.5).any():   # detected by maskrcnn as well, remove it
                     continue
@@ -126,24 +125,18 @@ class SemanticPredMaskRCNN():
         
         # resize to 128*128
         if isinstance(pot_mp, np.ndarray):
-            if len(pot_mp.shape) == 3:
-                pot_mp = pot_mp.squeeze(-1)
-                # cv2.imwrite(f"/home/users/wpp/Look_Around_And_Learn/t_potential.png", pot_mp.transpose(1,2,0))
+            pot_mp = pot_mp.squeeze(-1) if len(pot_mp.shape) == 3 else pot_mp
         else:
             pot_mp = pot_mp.get_image()
         
         pot_mp[pot_mp > 0] = 1.
-        pot_mp= (pot_mp.astype('float32')*depth)[..., np.newaxis]    # 乘depth
+        pot_mp= (pot_mp.astype('float32')*depth)[..., np.newaxis]    # multiply depth
         
-        
-        
-        # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]
         # cv2.imwrite(f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/t_potential_d.png", pot_mp.transpose(1,2,0))
-        potential_mask = pot_mp
-        
+                
         if device is not None:
             self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to(device)
-        return potential_mask
+        return pot_mp
 
 
 def compress_sem_map(sem_map):
