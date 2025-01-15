@@ -36,7 +36,7 @@ class SemanticPredMaskRCNN():
         img = img[:, :, ::-1]
         image_list.append(img)
         seg_predictions, vis_output = self.segmentation_model.get_predictions(
-            image_list, visualize=args.visualize == 2)
+            image_list, visualize=args.visualize == 2, specify_cls=True)
         self.seg_instances = seg_predictions
         
         if args.visualize == 2:
@@ -97,9 +97,11 @@ class SemanticPredMaskRCNN():
             potential_mask = pot_mp
             return potential_mask
             
-        # remove near boxes by depth map
+        
         for j in range(len(objectness_boxes)):
             boxes_ = v._convert_boxes(objectness_boxes[j]).reshape(4,) # convert from 1*4 to 4*1
+            
+            # remove near boxes by depth map
             depth_patch = self.get_patch_from_depth(depth, boxes_)  # get patch of instance boxes
             if depth_patch.max() < 0.5:  # 
                 continue
@@ -118,23 +120,22 @@ class SemanticPredMaskRCNN():
                 iou = box_iou_calc(obns_, msk_) # 1*num_maskbox
                 if (iou > 0.5).any():   # detected by maskrcnn as well, remove it
                     continue
-                else:
-                    print("has far object")
+            print("has far object")
             pot_mp = v.draw_patch(box_coord=boxes_, color='white')
         
         
         # resize to 128*128
         if isinstance(pot_mp, np.ndarray):
-                # pot_mp *= depths[i]
-            pass
+            if len(pot_mp.shape) == 3:
+                pot_mp = pot_mp.squeeze(-1)
                 # cv2.imwrite(f"/home/users/wpp/Look_Around_And_Learn/t_potential.png", pot_mp.transpose(1,2,0))
         else:
             pot_mp = pot_mp.get_image()
-            
-        pot_mp= pot_mp.astype('float32')*depth[..., np.newaxis]    # 在mask上将depth绘制
         
-        # if len(pot_mp.shape) == 2:
-        #     pot_mp = pot_mp[..., np.newaxis]
+        pot_mp[pot_mp > 0] = 1.
+        pot_mp= (pot_mp.astype('float32')*depth)[..., np.newaxis]    # 乘depth
+        
+        
         
         # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]
         # cv2.imwrite(f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/t_potential_d.png", pot_mp.transpose(1,2,0))
@@ -153,7 +154,7 @@ def compress_sem_map(sem_map):
 
 
 class ImageSegmentation():
-    def __init__(self, args, mode="objectness"):
+    def __init__(self, args, mode="maskrcnn"):
         
         if mode == "objectness":
             string_args = """
@@ -181,12 +182,12 @@ class ImageSegmentation():
         args = get_seg_parser().parse_args(string_args)
         logger = setup_logger()
         logger.info("Arguments: " + str(args))
-
-        cfg = setup_cfg(args)
+        
+        cfg = setup_cfg(args, mode)
         self.demo = VisualizationDemo(cfg)
 
-    def get_predictions(self, img, visualize=0):
-        return self.demo.run_on_image(img, visualize=visualize)
+    def get_predictions(self, img, visualize=0, specify_cls=False):
+        return self.demo.run_on_image(img, visualize=visualize, specify_cls=specify_cls)
 
 def add_new_keys(cfg):
     # 添加新key
@@ -202,11 +203,12 @@ def add_new_keys(cfg):
         cfg.BBSense_CLASSES = ""
     return cfg
     
-def setup_cfg(args):
+def setup_cfg(args, mode):
     # load config from file and command-line arguments
     cfg = get_cfg()
     
-    cfg = add_new_keys(cfg)
+    if mode == "objectness":
+        cfg = add_new_keys(cfg)
     
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
@@ -273,7 +275,7 @@ class VisualizationDemo(object):
 
         self.predictor = BatchPredictor(cfg)
 
-    def run_on_image(self, image_list, visualize=0):
+    def run_on_image(self, image_list, visualize=0, specify_cls=False):
         """
         Args:
             image (np.ndarray): an image of shape (H, W, C) (in BGR order).
@@ -305,7 +307,8 @@ class VisualizationDemo(object):
                     )
                 if "instances" in predictions:
                     instances = predictions["instances"].to(self.cpu_device)
-                    instances = self.get_specific_instance(instances)
+                    if specify_cls:
+                        instances = self.get_specific_instance(instances)
                     vis_output = visualizer.draw_instance_predictions(
                         predictions=instances)
 
