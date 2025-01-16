@@ -20,21 +20,24 @@ def main(cfg):
     
     trainer = pl.Trainer(**pipeline.trainer_config)
     
-    # dataset
-    dataset_path = cfg.sample_path
-    if cfg.training == "use_gt":    # TODO?
-        dm = GTDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, 
-                          **cfg, **cfg.training)    # TODO
-    else:
-        dm = HabitatDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, 
-                               **cfg, **cfg.training)   # # TODO
+    for id_iteration in range(cfg.n_iterations):
+        # dataset
+        dataset_path = cfg.sample_path
+        if cfg.training == "use_gt":    # TODO?
+            dm = GTDataModule(pipeline.pseudo_labeler, dataset_path, 
+                            **cfg, **cfg.training)    # TODO
+        else:
+            dm = HabitatDataModule(pipeline.pseudo_labeler, dataset_path, 
+                                **cfg, **cfg.training)   # # TODO
 
-    # training
-    pipeline.fit_student_and_update_teacher(dm, trainer)
-    id_iteration = 0
-    checkpoint_path = f"iteration-{id_iteration}.ckpt"
-    trainer.save_checkpoint(checkpoint_path)        # TODO 绝对路径还是i相对路径
+        # training
     
+        pipeline.fit_student_and_update_teacher(dm, trainer)
+    
+        checkpoint_path = f"iteration-{id_iteration}.ckpt"
+        trainer.save_checkpoint(checkpoint_path)        # TODO 绝对路径还是i相对路径
+        pipeline.save_teacher_and_update_configs()
+        
     # testing
     transform = A.Compose(
         [
