@@ -18,10 +18,7 @@ class HabitatDataModule(pl.LightningDataModule):
     '''
     def __init__(self, 
                  pseudo_labeler=None, 
-                #  policy, 
                  dataset_path="", 
-                 data_base_dir="", 
-                 test_set="", 
                  transform_type='none', 
                  batch_size=8, 
                  val_batch_size=4,
@@ -31,8 +28,7 @@ class HabitatDataModule(pl.LightningDataModule):
         self.pseudo_labeler = pseudo_labeler
         
         self.dataset_path = dataset_path
-        self.data_base_dir = data_base_dir
-        self.test_set = test_set
+        self.testset_path = kwargs['testset_path']
         
         self.transform_type  = transform_type
         self.batch_size = batch_size
@@ -175,7 +171,7 @@ class HabitatDataModule(pl.LightningDataModule):
         )
 
         dataset = BbsgtDataset(
-            os.path.join(self.data_base_dir, self.test_set),
+            self.testset_path,
             transform=transform,
         )
         return dataset

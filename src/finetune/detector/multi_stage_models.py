@@ -10,7 +10,7 @@ class MultiStageModel(Predictor):
     def __init__(
         self,
         cfg=None,
-        lr=0.01,
+        lr=0.0001,
         loss_weights={},
         use_gt_matching=True,
         optimizer="SGD",

@@ -38,7 +38,7 @@ def get_training_params(cfg):
     logger = [
         _get_wandb_logger(
             project_name=src.project_name,
-            exp_name=cfg.training.exp_base_name + "/" + cfg.exp_name,
+            exp_name=cfg.exp_name + "/" + cfg.training.exp_name_training,
         ),
     ]
     exp_path = os.getcwd()          # TODO
@@ -66,7 +66,7 @@ def get_training_params(cfg):
         "multiple_trainloader_mode": "min_size",
         "default_root_dir": checkpoint_dir,
         "gpus": gpus,
-        "max_epochs": cfg["epochs"],
+        "max_epochs": cfg["training"]["epochs"],
         "callbacks": [ckpt_cb],
         "enable_checkpointing": True,
         "weights_summary": "top",
@@ -84,18 +84,18 @@ def get_training_params(cfg):
     #     trainer_configuration["log_gpu_memory"] = True
 
     
-    if "early_stopping" in cfg and cfg['early_stopping'] > 0:
+    if cfg['training']['early_stopping'] > 0:
         early_stop_callback = EarlyStopping(
             monitor="train_loss_cls_epoch",
             min_delta=0.001,
-            patience=cfg["early_stopping"],
+            patience=cfg['training']["early_stopping"],
             verbose=False,
             mode="min",
         )
         trainer_configuration["callbacks"].append(early_stop_callback)
     
-    if "ema" in cfg and cfg['ema']:
-        ema_callback = BYOLMAWeightUpdate(cfg.teacher_momentum)
+    if cfg['training']['ema']:
+        ema_callback = BYOLMAWeightUpdate(cfg['training'].teacher_momentum)
         trainer_configuration["callbacks"].append(ema_callback)
         
     return trainer_configuration

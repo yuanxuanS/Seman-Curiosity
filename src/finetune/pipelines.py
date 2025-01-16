@@ -16,6 +16,9 @@ class Pipeline:
         )
         
         self.cfg = cfg
+        
+        # for iterations
+        self.epochs_per_iteration = cfg.training.epochs
     
     def set_trainer_params(self, cfg):
         self.trainer_config = get_training_params(cfg)
@@ -34,5 +37,14 @@ class Pipeline:
                 trainer.fit(self.teacher_student, dataloader)
                 
     def save_teacher_and_update_configs(self):
-        
-        pass
+        """
+        Trained object-detector becomes new pseudo-labeler. It's attached to
+        the policy and the process can start again with a new iteration
+
+        """
+        self.pseudo_labeler.to("cpu")
+        self.trainer_config['max_epochs'] += self.epochs_per_iteration
+        # TODO
+        if self.cfg.training['update_target']: 
+            if  not self.cfg.training.ema:
+                self.pseudo_labeler.reinit(self.teacher_student.student_model)
