@@ -1,5 +1,6 @@
 from src.finetune.detector.predictor_utils import Predictor
 from src.finetune.detector.roi_head_wrappers import BoxPredictorWrapper, SoftHeadWrapper
+from ..sensors_data import BBSense
 import torch
 
 
@@ -12,7 +13,7 @@ class MultiStageModel(Predictor):
         use_gt_matching=True,
         optimizer="SGD",
         optimizer_params={},
-        # prune=True,
+        prune=True,
         compute_loss=True,
         loss_margin=0.3,
         head_cls=BoxPredictorWrapper,
@@ -25,6 +26,10 @@ class MultiStageModel(Predictor):
         # TODO: box reg loss: 'giou'
         super().__init__(cfg, load_checkpoint=load_checkpoint)
         
+        assert prune == True, "must prune detection model"
+        if prune:  # Prune classifier instead of initializing a new one
+            self.reinit_head(BBSense.CLASSES)
+                
         self.lr = lr
         self.optimizer = optimizer
 
