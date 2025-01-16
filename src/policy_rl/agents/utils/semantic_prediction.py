@@ -17,7 +17,7 @@ from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.structures.instances import Instances
 import detectron2.data.transforms as T
 
-from constants import coco_categories_mapping
+from src.constants import coco_categories_mapping
 
 
 class SemanticPredMaskRCNN():
