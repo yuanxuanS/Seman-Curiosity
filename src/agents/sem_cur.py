@@ -2,14 +2,14 @@ from torchvision import transforms
 import cv2
 import numpy as np
 from PIL import Image
-import agents.utils.visualization as vu
+import src.agents.utils.visualization as vu
 from constants import color_palette
 import os
 import torch
-import envs.utils.pose as pu
-from envs.habitat.curio_env import Seman_Curio_Env
-from agents.utils.semantic_prediction import SemanticPredMaskRCNN
-from finetune.dataset_utils import save_obs
+import src.envs.utils.pose as pu
+from src.envs.habitat.curio_env import Seman_Curio_Env
+from src.agents.utils.semantic_prediction import SemanticPredMaskRCNN
+from src.finetune.dataset_utils import save_obs
 
 class Sem_Cur_Env_Agent(Seman_Curio_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class

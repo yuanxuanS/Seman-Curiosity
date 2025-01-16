@@ -1,5 +1,5 @@
-from finetune.detector.predictor_utils import Predictor
-from finetune.detector.roi_head_wrappers import BoxPredictorWrapper, SoftHeadWrapper
+from src.finetune.detector.predictor_utils import Predictor
+from src.finetune.detector.roi_head_wrappers import BoxPredictorWrapper, SoftHeadWrapper
 import torch
 
 

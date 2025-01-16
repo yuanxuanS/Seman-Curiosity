@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-from finetune.detector import multi_stage_models as models
+from src.finetune.detector import multi_stage_models as models
 
 class TeacherStudent(pl.LightningModule):
     def __init__(

@@ -1,13 +1,13 @@
-from finetune.sensors_utils import _get_info_from_string, \
+from src.finetune.sensors_utils import _get_info_from_string, \
                         _get_info_from_string_withend
                         # get_sense_info
-from finetune.sensors_data import MODALITY_SENSE      
+from src.finetune.sensors_data import MODALITY_SENSE      
 import multiprocessing
 
 import numpy as np
 import glob
 import torch
-from finetune.utils.train_helpers import dict_helper_collate
+from src.finetune.utils.train_helpers import dict_helper_collate
 from detectron2.structures.boxes import BoxMode
 import pycocotools.mask as mask_util
 

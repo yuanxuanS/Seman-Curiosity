@@ -1,6 +1,6 @@
 import abc
 import cv2
-from finetune.sensors_utils import SenseInfo, get_sense_info
+from src.finetune.sensors_utils import SenseInfo, get_sense_info
 from dataclasses import dataclass
 import numpy as np
 from detectron2.structures.instances import Instances

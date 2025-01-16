@@ -2,8 +2,8 @@ import numpy as np
 import gym
 import habitat
 import quaternion
-import envs.utils.pose as pu
-from finetune.dataset_utils import save_obs
+import src.envs.utils.pose as pu
+from src.finetune.dataset_utils import save_obs
 import os
 
 class Seman_Curio_Env(habitat.RLEnv):

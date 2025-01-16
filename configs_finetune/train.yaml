@@ -1,3 +1,18 @@
 defaults:
   - training: pipeline_gt #
+  - habitat_cfg: 
 sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test/episodes_data
+
+# training params
+epochs: 20
+
+
+# TODO
+# device
+gpus: 1   # [1,2,3] 多gpu训练？
+
+# tricks
+early_stopping: 0
+
+ema: False
+teacher_momentum: 0.

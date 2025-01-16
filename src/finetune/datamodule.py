@@ -3,10 +3,10 @@ import albumentations as A
 import pickle
 import os
 import logging
-from finetune.dataset import BbsgtDataset, FullDataset, PseudoFullDataset
-from finetune.detector.augmentations import get_transform
-from finetune.utils.train_helpers import dict_helper_collate, list_helper_collate
-from finetune.dataset_utils import get_loader, get_coco_item_dict, SampleLoader
+from src.finetune.dataset import BbsgtDataset, FullDataset, PseudoFullDataset
+from src.finetune.detector.augmentations import get_transform
+from src.finetune.utils.train_helpers import dict_helper_collate, list_helper_collate
+from src.finetune.dataset_utils import get_loader, get_coco_item_dict, SampleLoader
 
 log = logging.getLogger(__name__)
 

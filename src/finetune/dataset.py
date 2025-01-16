@@ -4,7 +4,7 @@ from albumentations.pytorch import ToTensorV2
 from detectron2.structures.boxes import Boxes, BoxMode
 from detectron2.structures.instances import Instances
 from detectron2.structures.masks import BitMasks
-from dataset_utils import SampleLoader
+from .dataset_utils import SampleLoader
 from .sensors_data import BBSense
 import numpy as np
 

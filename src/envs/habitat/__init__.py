@@ -7,7 +7,7 @@ from habitat.config.default import get_config as cfg_env
 from habitat.datasets.pointnav.pointnav_dataset import PointNavDatasetV1
 from habitat import Config, Env, RLEnv, VectorEnv, make_dataset
 
-from agents.sem_cur import Sem_Cur_Env_Agent
+from src.agents.sem_cur import Sem_Cur_Env_Agent
 from .curio_env import Seman_Curio_Env
 
 from .utils.vector_env import VectorEnv, ThreadedVectorEnv

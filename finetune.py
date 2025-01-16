@@ -1,10 +1,10 @@
 import pytorch_lightning as pl
 from arguments import get_args
-from finetune.datamodule import GTDataModule, HabitatDataModule
-from finetune.dataset import BbsgtDataset
-from finetune.pipelines import Pipeline
-from finetune.dataset_utils import get_loader
-from finetune.utils.train_helpers import dict_helper_collate
+from src.finetune.datamodule import GTDataModule, HabitatDataModule
+from src.finetune.dataset import BbsgtDataset
+from src.finetune.pipelines import Pipeline
+from src.finetune.dataset_utils import get_loader
+from src.finetune.utils.train_helpers import dict_helper_collate
 
 from detectron2.utils.events import EventStorage
 
