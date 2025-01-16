@@ -7,6 +7,7 @@ from src.finetune.detector.pseudolabeler import (
     VanillaConsensusLabeler
 )
 from .sensors_data import BBSense
+from torchmetrics.detection.map import MAP
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.utils.visualizer import ColorMode, Visualizer
@@ -178,10 +179,38 @@ class TeacherStudent(pl.LightningModule):
         # self.online_val_map_metric.to(self.device)
     
     def test_step(self, batch, batch_idx):
-        pass
-    
+        self.student_model.eval()
+        _, predictions = self.student_model.validation_step(batch, batch_idx)
+
+        gt = [
+            {
+                'boxes': b['instances'].gt_boxes.tensor,
+                'labels': b['instances'].gt_classes.int(),
+            }
+            for b in batch
+        ]
+        pred = [
+            {
+                'boxes': b['instances'].pred_boxes.tensor,
+                'labels': b['instances'].pred_classes,
+                'scores': b['instances'].scores,
+            }
+            for b in predictions
+        ]
+
+        self.test_map_metric.update(pred, gt)
+        
     def on_test_epoch_end(self):
-        pass
+        results = self.test_map_metric.compute()
+        for k in results.keys():
+            self.log(
+                f"test_{k}",
+                results[k],
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                batch_size=self.batch_size,
+            )
     
     def configure_optimizers(self):
         optimizer = self.student_model.configure_optimizers(max_steps=self.max_steps)   # TODO
