@@ -1,5 +1,5 @@
 
-from arguments import get_args
+from src.policy_rl.arguments import get_args
 import torch
 import numpy as np
 import os

@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-from arguments import get_args
+from src.policy_rl.arguments import get_args
 from src.finetune.datamodule import GTDataModule, HabitatDataModule
 from src.finetune.dataset import BbsgtDataset
 from src.finetune.pipelines import Pipeline
