@@ -22,3 +22,8 @@ update_target: True
 early_stopping: 0   # TODO
 ema: False    # TODO
 teacher_momentum: 0.    # TODO
+
+
+pipeline: Pipeline  # TODO 不同pipeline
+student_model: MultiStageModel  # TODO
+consensus: vanilla
