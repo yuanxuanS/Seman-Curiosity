@@ -1,6 +1,7 @@
 import abc
 import cv2
 from src.finetune.sensors_utils import SenseInfo, get_sense_info
+from src.constants import coco_categories_mapping
 from dataclasses import dataclass
 import numpy as np
 from detectron2.structures.instances import Instances
@@ -152,7 +153,8 @@ class BBSense(VisualSense):
         # 62: "tv",
         # 60: "table",
     }
-        
+    
+    assert  CLASSES.keys() == coco_categories_mapping.keys()
     CLASSES_CLSAG = {
         0: "object",
     }
