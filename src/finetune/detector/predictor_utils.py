@@ -2,6 +2,10 @@ import pytorch_lightning as pl
 from detectron2.config import get_cfg
 from detectron2.modeling import build_model
 from detectron2.checkpoint import DetectionCheckpointer
+from detectron2.modeling.postprocessing import detector_postprocess
+from detectron2.structures import ImageList, Instances
+from typing import Dict, List, Optional, Tuple
+
 from torchmetrics.detection.map import MAP
 
 from .roi_head_wrappers import MinimalPredictorWrapper
@@ -110,5 +114,45 @@ class Predictor(pl.LightningModule):
     def infer(self):
         pass
     
+    @torch.no_grad()
+    def head_forward(self, images, features, proposals):
+        '''
+         head 推理
+        '''
+        box_features = [features[f] for f in self.model.roi_heads.in_features]
+
+        predictions_boxes = [x.proposal_boxes for x in proposals]
+
+        pooled_features = self.model.roi_heads.box_pooler(
+            box_features, predictions_boxes
+        )
+        box_features = self.model.roi_heads.box_head(pooled_features)
+
+        predictions = self.model.roi_heads.box_predictor(box_features)
+        pred_instances, _ = self.model.roi_heads.box_predictor.inference(
+            predictions, proposals
+        )
+
+        outputs = self.model.roi_heads.forward_with_given_boxes(
+            features, pred_instances
+        )
+
+        return outputs
+    
+    def preprocess_image(self, batched_inputs: Tuple[Dict[str, torch.Tensor]]):
+        """
+        Normalize, pad and batch the input images.
+        """
+        images = [x["image"].to(self.device_id) for x in batched_inputs]
+        images = [(x - self.model.pixel_mean) / self.model.pixel_std for x in images]
+        images = ImageList.from_tensors(images, self.model.backbone.size_divisibility)
+        return images
+    
+    def postprocess(self, height, width, results):
+        processed_results = []
+        for results_per_image in results:
+            r = detector_postprocess(results_per_image, height, width)
+            processed_results.append({"instances": r})
+        return processed_results
     
         

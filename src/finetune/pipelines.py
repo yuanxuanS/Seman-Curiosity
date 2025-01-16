@@ -11,7 +11,6 @@ class Pipeline:
         
         
         self.teacher_student = Pipeline.teacher_student_model_cls(
-            habitat=cfg.habitat_cfg,        # TODO
             **cfg,
             **cfg.training,
         )
@@ -22,7 +21,10 @@ class Pipeline:
         self.trainer_config = get_training_params(cfg)
         
     def fit_student_and_update_teacher(
-        self, dataloader: DataLoader, checkpoint_path: str = None, trainer = None
+        self, 
+        dataloader: DataLoader,  
+        trainer = None, 
+        checkpoint_path: str = None,
     ):
         
         with EventStorage():
