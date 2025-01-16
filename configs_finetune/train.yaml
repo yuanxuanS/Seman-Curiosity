@@ -1,21 +1,23 @@
-defaults:
-  - training: pipeline_gt #
+training: pipeline_gt
 
+exp_name: Xxx
 
 # data
 sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test/episodes_data
-test_path: 
+testset_path: 
 
 # training params
-epochs: 20
+update_target: True   # TODO
+n_iterations: 1
 
 
-# TODO
+
+
+
+
+
 # device
-gpus: 1   # [1,2,3] 多gpu训练？ v2.0以后使用accelerator
+gpus: 1   # TODO [1,2,3] 多gpu训练？ v2.0以后使用accelerator
 
-# tricks
-early_stopping: 0
 
-ema: False
-teacher_momentum: 0.
+

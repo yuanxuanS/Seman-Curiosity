@@ -1,0 +1,24 @@
+# default mdetector training params setting
+
+batch_size: 8   # train, pseudo labeler predict
+val_batch_size: 4
+
+epochs: 20
+
+lr: 0.0001
+optimizer: SGD
+optimizer_params:
+  momentum: 0.9
+  nesterov: True
+  # weight_decay: 5e-4  # TODO
+
+student_test_thr: 0.5
+
+# iterations
+update_target: True
+
+
+# trick
+early_stopping: 0   # TODO
+ema: False    # TODO
+teacher_momentum: 0.    # TODO
