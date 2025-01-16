@@ -100,6 +100,9 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
         self.global_pcds = {}
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        '''
+            构建pcd
+        '''
         self.model.eval()
         instances, infos = self(batch)
 
@@ -221,7 +224,7 @@ class LogitsConsensusLabeler(ConsensusLabeler):
         self.temperature = temperature
         print(f"temperature is {self.temperature} in pseudolaber")
         
-    def get_pseudo_labels(self, model_outs, *args, **kwargs):
+    def get_pseudo_labels(self, model_outs, *args, **kwargs):   # TODO
         """
         Returns predictions as pseudo ground-truth
         """

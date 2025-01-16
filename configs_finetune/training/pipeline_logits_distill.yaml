@@ -2,6 +2,9 @@ consensus: logits
 
 temperature: 2.
 alpha: 0.5
+
+exp_name_training: logits_distill
+
 loss_weights:   # 没有参数，默认为1.0
   loss_cls: 1.0
   loss_soft: 1.0    

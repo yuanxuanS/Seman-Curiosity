@@ -3,7 +3,6 @@
 use_gt: True
 exp_name_training: gt
 
-transform_type: strong_image
 
 loss_weights:   # 没有参数，默认为1.0
   loss_cls: 1.0

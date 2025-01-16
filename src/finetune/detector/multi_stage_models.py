@@ -2,7 +2,7 @@ from src.finetune.detector.predictor_utils import Predictor
 from src.finetune.detector.roi_head_wrappers import BoxPredictorWrapper, SoftHeadWrapper
 from ..sensors_data import BBSense
 import torch
-
+from ..utils import triplet
 from typing import Dict, List, Optional, Tuple
 
 
@@ -37,6 +37,8 @@ class MultiStageModel(Predictor):
         
         self.loss_weights = loss_weights    # TODO
 
+        self.feature_projector = triplet.tinyprojection_MLP(1024, out_dim=128)
+
         # Stages losses
         self.compute_head_loss = True
         self.compute_projector_loss = True
@@ -70,10 +72,20 @@ class MultiStageModel(Predictor):
             y_matching,
         ) = self._compute(batch)
         
-        # TODO： contrastive loss
-        
+        # contrastive loss
+        contrastive_loss = None
+        if self.loss_weights.get('contrastive_loss', 1.0) > 0:
+            # 在所有输入中，所有instances找到最难正样本和负样本，构建triple，计算loss
+            contrastive_loss = self._compute_contrastive_loss(box_features, y_matching)
+            
+            
         result = {}
-        
+        if contrastive_loss is not None:
+            contrastive_loss = contrastive_loss * self.loss_weights.get(
+                'contrastive_loss', 1.0
+            )
+            result['loss_contrastive'] = contrastive_loss
+            
         if pred_loss is not None:
 
             for key, _ in pred_loss.items():
@@ -81,6 +93,63 @@ class MultiStageModel(Predictor):
             result = {**result, **pred_loss}
             
         return result, predictions
+    
+    def _compute_contrastive_loss(self, features, y):
+        if self.compute_projector_loss:
+
+            y_mask = y != -1
+            y = y[y_mask]
+
+            if len(y) > 1:
+                
+                features = self.feature_projector(features[y_mask])
+                return triplet.online_mine_hard(
+                    y.to(self.device_id), features, self.loss_margin, device=self.device_id
+                )[0]
+            else:
+                return features.sum() * 0.0  # connect the gradient
+        else:
+            return None
+    
+    @torch.no_grad()
+    def __call__(self, inputs):
+        '''
+        called by predict_step() of pseudolabelers
+        '''
+        self.eval()
+        height = inputs[0]['height']
+        width = inputs[0]['width']
+
+        images = self.preprocess_image(inputs)
+
+        if "instances" in inputs[0]:
+            gt_instances = [x["instances"].to(self.device_id) for x in inputs]
+        else:
+            gt_instances = None
+
+        features = self.model.backbone(images.tensor)
+        proposals, _ = self.model.proposal_generator(images, features, gt_instances)
+
+        instances, _ = self.model.roi_heads(images, features, proposals, gt_instances)
+        mask_features = [features[f] for f in self.model.roi_heads.in_features]
+        predictions_images = []
+
+        for i in range(len(instances)):
+            predictions_images += [i] * len(instances[i])
+
+        if gt_instances is not None:
+            boxes = [gt_instances[i].gt_boxes for i in range(len(gt_instances))]
+        else:
+            boxes = [instances[i].pred_boxes for i in range(len(instances))]
+
+        pooled_features = self.model.roi_heads.box_pooler(mask_features, boxes)
+        box_features = self.feature_projector(
+            self.model.roi_heads.box_head(pooled_features)
+        )
+
+        predictions = self.postprocess(height, width, instances)
+
+        return predictions, box_features  # , predictions_images
     
     
     def _compute(self, batched_inputs):
@@ -169,7 +238,6 @@ class MultiStageModel(Predictor):
             box_features,
             prop_ids,
         )
-    
     
 class SoftMultiStageModel(MultiStageModel):
     def __init__(self, *args, **kwargs):
