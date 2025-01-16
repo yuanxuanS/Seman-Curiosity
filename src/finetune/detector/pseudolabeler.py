@@ -176,7 +176,7 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
                         continue
                     if cls >= len(BBSense.CLASSES):
                         continue  # Background or overflowd class
-                    logits.append(l)
+                    logits.append(l)        # TODO : l/ temperature
 
                     resolved_class = cls
 
@@ -215,7 +215,7 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
         return labels
 
 
-class SoftConsensusLabeler(ConsensusLabeler):
+class LogitsConsensusLabeler(ConsensusLabeler):
     def __init__(self, temperature=1, model=None,*args, **kwargs):
         super().__init__(model,*args, **kwargs)
         self.temperature = temperature

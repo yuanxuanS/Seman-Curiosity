@@ -38,7 +38,7 @@ class TeacherStudent(pl.LightningModule):
         super().__init__()
         
         # TODO: mixup
-        self.student_model_cls = models.FocalSoftMultiStageModel
+        self.student_model_cls = models.SoftMultiStageModel
         self.student_test_thr = student_test_thr
         self.max_steps = None   # TODO
         # student training params
@@ -67,9 +67,11 @@ class TeacherStudent(pl.LightningModule):
         self.init_student()
         
         self.save_hyperparameters()
+        
+        self.kwargs = kwargs
     
     def init_student(self):
-        self.student_model = self.student_model_cls(self.detectron_args)
+        self.student_model = self.student_model_cls(self.detectron_args, **self.kwargs)
         self.student_model.model.roi_heads.box_predictor.box_predictor.test_score_thresh = (
             self.student_test_thr
         )

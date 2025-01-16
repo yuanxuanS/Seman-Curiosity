@@ -171,12 +171,12 @@ class MultiStageModel(Predictor):
         )
     
     
-class FocalSoftMultiStageModel(MultiStageModel):
+class SoftMultiStageModel(MultiStageModel):
     def __init__(self, *args, **kwargs):
         if "head_cls" not in kwargs:
             kwargs['head_cls'] = lambda x: SoftHeadWrapper(
                 prediction_head=x,
-                cls_loss="focal",
+                cls_loss=kwargs.get('cls_loss', 'cross_entropy'),
                 temperature=kwargs.get('temperature', 1.0),
                 alpha=kwargs.get('alpha', 0.5),
             )
