@@ -1,0 +1,3 @@
+defaults:
+  - training: pipeline_gt #
+sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test/episodes_data

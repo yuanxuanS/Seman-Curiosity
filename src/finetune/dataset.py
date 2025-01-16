@@ -5,7 +5,7 @@ from detectron2.structures.boxes import Boxes, BoxMode
 from detectron2.structures.instances import Instances
 from detectron2.structures.masks import BitMasks
 from dataset_utils import SampleLoader
-
+from .sensors_data import BBSense
 import numpy as np
 
 
@@ -21,6 +21,7 @@ class BbsgtDataset(Dataset):
         index_mask=None,
         inputs= None,
         transform=None,
+        remap_classes=True,
     ):
         super().__init__()
         
@@ -43,6 +44,8 @@ class BbsgtDataset(Dataset):
         self.index = np.arange(len(self.inputs))
         
         self.transform = ToTensorV2() if transform is None else transform
+        
+        self.remap_classes = remap_classes
         
     def __len__(self):
         return len(self.index)
@@ -80,6 +83,11 @@ class BbsgtDataset(Dataset):
                     gt_classes=torch.Tensor(),
                     infos=[],
                 )
+                
+        if self.remap_classes:
+            y.gt_classes = torch.tensor(
+                [BBSense.CLASSES_TO_IDX[x.item()] for x in y.gt_classes]
+            )
         return x, y
     
     def __getitem__(self, idx):
@@ -92,7 +100,7 @@ class BbsgtDataset(Dataset):
         
         x = data['rgb'].data
         y = data['bbsgt'].get_bbs_as_gt()       # instance，gt前缀
-        x, y = self._transform_batch(x, y)
+        x, y = self._transform_batch(x, y)      # TODO: 不需要remap class吗
         
         size = x.shape[1:]
         return {        # TODO; 需要这么多吗
@@ -120,6 +128,11 @@ class BbsgtDataset(Dataset):
         y = data['bbsgt'].get_bbs_as_gt()
         class_labels = y.gt_classes
         
+        if self.remap_classes:
+            class_labels = torch.tensor(
+                [BBSense.CLASSES_TO_IDX[x.item()] for x in class_labels]
+            )
+            
         annotations = [
             {
                 'bbox': y[id_instance].gt_boxes.tensor[0].tolist(),

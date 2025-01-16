@@ -144,12 +144,13 @@ class SemanticSense(VisualSense):
 class BBSense(VisualSense):
     CODE = "bbs"
     CLASSES = {
+        56: "chair",
         57: "couch",
         58: "plant",
         59: "bed",
         61: "toilet",
-        62: "tv",
-        60: "table",
+        # 62: "tv",
+        # 60: "table",
     }
         
     CLASSES_CLSAG = {

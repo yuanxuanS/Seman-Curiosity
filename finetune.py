@@ -1,19 +1,33 @@
 import pytorch_lightning as pl
 from arguments import get_args
-from pipelines import GTDataModule, HabitatDataModule
+from finetune.datamodule import GTDataModule, HabitatDataModule
+from finetune.dataset import BbsgtDataset
+from finetune.pipelines import Pipeline
+from finetune.dataset_utils import get_loader
+from finetune.utils.train_helpers import dict_helper_collate
 
-def main():
-    args = get_args()
+from detectron2.utils.events import EventStorage
+
+import albumentations as A
+import hydra
+import torch
+import os
+
+@hydra.main(config_path='./configs_finetune/', config_name='train.yaml')
+def main(cfg):
     
-    pipeline = pipelines.Pipeline(args)
+    pipeline = Pipeline(cfg)
     
     trainer = pl.Trainer(**pipeline.trainer_config)
     
     # dataset
-    if args.training == "use_gt":
-        dm = GTDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, **args, **args.training)
+    dataset_path = cfg.sample_path
+    if cfg.training == "use_gt":    # TODO?
+        dm = GTDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, 
+                          **cfg, **cfg.training)    # TODO
     else:
-        dm = HabitatDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, **args, **cfg.training)
+        dm = HabitatDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, 
+                               **cfg, **cfg.training)   # # TODO
 
     # training
     pipeline.fit_student_and_update_teacher(dm, trainer)
@@ -31,8 +45,8 @@ def main():
             label_fields=['class_labels', 'infos'],
         ),
     )
-    dataset = SinglecamEpisodeDetectionHabitatObjectsDataset(
-            os.path.join(cfg.data_base_dir, "fix_test"),
+    dataset = BbsgtDataset(
+            data_path=os.path.join(cfg.data_base_dir, "fix_test"),
             transform=transform,
             remap_classes=True,
         )
