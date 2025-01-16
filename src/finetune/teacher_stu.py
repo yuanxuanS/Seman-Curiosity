@@ -6,7 +6,16 @@ from src.finetune.detector.pseudolabeler import (
     SoftConsensusLabeler,
     VanillaConsensusLabeler
 )
+from .sensors_data import BBSense
+
+from detectron2.data import DatasetCatalog, MetadataCatalog
+from detectron2.utils.visualizer import ColorMode, Visualizer
+
+from copy import deepcopy
 from typing import List
+import torch
+from torch import Tensor
+import wandb
 
 class TeacherStudent(pl.LightningModule):
     def __init__(

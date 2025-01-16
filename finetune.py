@@ -33,7 +33,7 @@ def main(cfg):
     pipeline.fit_student_and_update_teacher(dm, trainer)
     id_iteration = 0
     checkpoint_path = f"iteration-{id_iteration}.ckpt"
-    trainer.save_checkpoint(checkpoint_path)
+    trainer.save_checkpoint(checkpoint_path)        # TODO 绝对路径还是i相对路径
     
     # testing
     transform = A.Compose(
@@ -46,7 +46,7 @@ def main(cfg):
         ),
     )
     dataset = BbsgtDataset(
-            data_path=os.path.join(cfg.data_base_dir, "fix_test"),
+            data_path=os.path.join(cfg.test_path),
             transform=transform,
             remap_classes=True,
         )
