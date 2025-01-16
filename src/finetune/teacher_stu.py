@@ -20,16 +20,13 @@ import wandb
 class TeacherStudent(pl.LightningModule):
     def __init__(
         self,
+    # student model params
         detectron_args,
-        
-        # student_model=None,
-        
+        batch_size=1,
+        student_test_thr=0.5,
+    # teacher model params
         freeze_teacher=True,
         use_teacher=False,
-        batch_size=1,
-        # student model params
-        student_thr=0.5,
-        # teacher model params
         consensus="vanilla",
         temperature=1,
         thr=0.7,
@@ -41,7 +38,7 @@ class TeacherStudent(pl.LightningModule):
         
         # TODO: mixup
         self.student_model_cls = models.FocalSoftMultiStageModel
-        self.student_thr = student_thr
+        self.student_test_thr = student_test_thr
         self.max_steps = None   # TODO
         # student training params
         self.batch_size = batch_size  #TODO
@@ -59,15 +56,21 @@ class TeacherStudent(pl.LightningModule):
             solution=solution,
             # device=self.device_id
         )
+        self.use_teacher = use_teacher
         
         self.detectron_args = detectron_args
-        # self.reinit_online()
+        
+        self.online_val_map_metric = MAP(class_metrics=True)
+        self.test_map_metric = MAP(class_metrics=True)
+        
+        self.init_student()
+        
         self.save_hyperparameters()
     
     def init_student(self):
         self.student_model = self.student_model_cls(self.detectron_args)
         self.student_model.model.roi_heads.box_predictor.box_predictor.test_score_thresh = (
-            self.student_thr
+            self.student_test_thr
         )
         
     def training_step(self, batched_inputs, batch_idx):
@@ -107,10 +110,72 @@ class TeacherStudent(pl.LightningModule):
         return loss
         
     def validation_step(self, batch, batch_idx):
+        if self.use_teacher:
+            self.target_validation_step(batch, batch_idx)
+        self.online_validation_step(batch, batch_idx)
+        
+    def target_validation_step(self):
         pass
     
+    def online_validation_step(self, batch, batch_idx):
+        self.student_model.eval()
+        losses, predictions = self.student_model.validation_step(batch, batch_idx)
+        
+        loss = sum(losses.values())
+        for k in losses.keys():
+            self.log(
+                f"val_{k}_online",
+                losses[k],
+                on_step=True,
+                on_epoch=True,
+                sync_dist=True,
+                batch_size=self.batch_size,
+            )
+
+        self.log(
+            'val_loss_online',
+            loss,
+            on_step=True,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=self.batch_size,
+        )
+
+        self._val_map(batch, predictions)
+        
+    def _val_map(self, batch, predictions):
+
+        gt = [
+            {
+                'boxes': b['instances'].gt_boxes.tensor,
+                'labels': b['instances'].gt_classes.int(),
+            }
+            for b in batch
+        ]
+        pred = [
+            {
+                'boxes': b['instances'].pred_boxes.tensor,
+                'labels': b['instances'].pred_classes,
+                'scores': b['instances'].scores,
+            }
+            for b in predictions
+        ]
+        self.online_val_map_metric.update(pred, gt)
+        
     def validation_epoch_end(self):
-        pass
+        # self.online_val_map_metric = self.online_val_map_metric.to(self.device_id)
+        results = self.online_val_map_metric.compute()
+        for k in results.keys():
+            self.log(
+                f"val_{k}_epoch",
+                results[k],
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                batch_size=self.batch_size,
+            )
+        self.online_val_map_metric = MAP(class_metrics=True)
+        # self.online_val_map_metric.to(self.device)
     
     def test_step(self, batch, batch_idx):
         pass
