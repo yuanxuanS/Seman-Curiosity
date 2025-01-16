@@ -7,6 +7,10 @@ import multiprocessing
 import numpy as np
 import glob
 import torch
+from finetune.utils.train_helpers import dict_helper_collate
+from detectron2.structures.boxes import BoxMode
+import pycocotools.mask as mask_util
+
 
 def save_obs(exp_path, env_id, episode_id, observations, timestamp):
 
@@ -129,9 +133,7 @@ class SampleLoader:
             results[mod] = data
         return results
 
-def dict_helper_collate(batch):
-    elem = batch[0]
-    return [{key: d[key] for key in elem} for d in batch]
+
 
 def get_loader(
     dataset,
@@ -151,3 +153,30 @@ def get_loader(
         pin_memory=False,
         persistent_workers=False,
     )
+    
+
+def get_coco_item_dict(labels):
+    instances = []
+
+    for index, y in enumerate(labels):
+        class_labels = y.gt_classes
+
+        annotations = [
+            {
+                'bbox': y[id_instance].gt_boxes.tensor[0].tolist(),
+                'bbox_mode': BoxMode.XYXY_ABS,
+                'category_id': class_labels[id_instance],
+                'segmentation': mask_util.encode(
+                    np.asfortranarray(y.gt_masks[id_instance])
+                ),
+                # TODO introduce 'uncertainties': y[id_instance].gt_uncertainty_masks[0],
+                'iscrowd': 0,
+                'infos': y[id_instance].infos[0],
+                'gt_logits': y[id_instance].gt_logits[0],
+            }
+            for id_instance in range(len(y))
+        ]
+
+        instances.append(annotations)
+
+    return instances

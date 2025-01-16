@@ -191,7 +191,7 @@ class PseudoFullDataset(BbsgtDataset):
         data_path,
         pseudo_labels,
         sampler=None,
-        consecutive_obs=1,
+        # consecutive_obs=1,
         subsample_factor=1,
         *args,
         **kwargs,
