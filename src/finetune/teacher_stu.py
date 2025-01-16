@@ -1,5 +1,11 @@
 import pytorch_lightning as pl
 from src.finetune.detector import multi_stage_models as models
+from src.finetune.detector.pseudolabeler import (
+    ConsensusLabeler,
+    SemanticMapConsensusLabeler,
+    SoftConsensusLabeler,
+    VanillaConsensusLabeler
+)
 
 class TeacherStudent(pl.LightningModule):
     def __init__(
@@ -7,25 +13,33 @@ class TeacherStudent(pl.LightningModule):
         detectron_args,
         consensus="vanilla",
         # student_model=None,
-        thr=0.7,
+        
         freeze_teacher=True,
         use_teacher=False,
         batch_size=1,
+        temperature=1,
+        thr=0.7,
+        solution="ours",
         *args,
         **kwargs,
     ):
         super().__init__()
         # TODO: labeler
         
-        self.student_model_class = models.FocalSoftMultiStageModel
+        self.student_model_cls = models.FocalSoftMultiStageModel
         
-        # self.target_network: ConsensusLabeler = switch[consensus](
-        #     model=models.MultiStageModel(detectron_args, prune=True),
-        #     temperature=temperature,
-        #     thr=thr,
-        #     solution=solution,
-        #     device=self.device_id
-        # )
+        switch = {
+            "logits": SoftConsensusLabeler,
+            "vanilla": VanillaConsensusLabeler,
+            "semantic_map": SemanticMapConsensusLabeler,
+        }
+        self.target_model: ConsensusLabeler = switch[consensus](
+            model=models.MultiStageModel(detectron_args, prune=True),
+            temperature=temperature,
+            thr=thr,
+            solution=solution,
+            device=self.device_id
+        )
         
         # self.reinit_online()
         self.save_hyperparameters()
