@@ -30,7 +30,7 @@ class TeacherStudent(pl.LightningModule):
         use_teacher=False,
         consensus="vanilla",
         temperature=1,
-        thr=0.7,
+        teacher_pred_thr=0.7,
         solution="ours",
         *args,
         **kwargs,
@@ -53,9 +53,8 @@ class TeacherStudent(pl.LightningModule):
         self.teacher_model: ConsensusLabeler = switch[consensus](
             model=models.MultiStageModel(detectron_args, prune=True),
             temperature=temperature,
-            thr=thr,
+            thr=teacher_pred_thr,
             solution=solution,
-            # device=self.device_id
         )
         self.use_teacher = use_teacher
         

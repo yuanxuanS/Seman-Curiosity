@@ -16,6 +16,7 @@ optimizer_params:
   # weight_decay: 5e-4  # TODO
 
 student_test_thr: 0.5
+teacher_pred_thr: 0.7
 
 # iterations
 update_target: True

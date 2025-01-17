@@ -1,5 +1,7 @@
-
+default:
+  - detectron_args: maskrcnn
 training: pipeline_gt
+
 notes: 
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_batchsize_notes_${notes}
 
