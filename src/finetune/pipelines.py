@@ -14,12 +14,15 @@ class Pipeline:
             **cfg,
             **cfg.training,
         )
+        self.pseudo_labeler = self.teacher_student.teacher_model
         
         self.cfg = cfg
         
         # for iterations
         self.epochs_per_iteration = cfg.training.epochs
-    
+
+        self.set_trainer_params(cfg)
+        
     def set_trainer_params(self, cfg):
         self.trainer_config = get_training_params(cfg)
         

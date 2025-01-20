@@ -21,7 +21,7 @@ import itertools
 import numpy as np
 import torch
 
-import envs.utils.rotation_utils as ru
+import src.policy_rl.envs.utils.rotation_utils as ru
 
 
 def get_camera_matrix(width, height, fov):

@@ -31,7 +31,8 @@ class MultiStageModel(Predictor):
         assert prune == True, "must prune detection model"
         if prune:  # Prune classifier instead of initializing a new one
             self.reinit_head(BBSense.CLASSES)
-                
+        self.set_head_wrapper(head_cls)
+        
         self.lr = lr
         self.optimizer = optimizer
         
@@ -104,7 +105,7 @@ class MultiStageModel(Predictor):
                 
                 features = self.feature_projector(features[y_mask])
                 return triplet.online_mine_hard(
-                    y.to(self.device_id), features, self.loss_margin, device=self.device_id
+                    y, features, self.loss_margin, device=self.device
                 )[0]
             else:
                 return features.sum() * 0.0  # connect the gradient
@@ -123,7 +124,7 @@ class MultiStageModel(Predictor):
         images = self.preprocess_image(inputs)
 
         if "instances" in inputs[0]:
-            gt_instances = [x["instances"].to(self.device_id) for x in inputs]
+            gt_instances = [x["instances"] for x in inputs]
         else:
             gt_instances = None
 

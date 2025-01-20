@@ -8,11 +8,11 @@ from collections import deque, defaultdict
 import gym
 import time
 
-from envs import make_vec_envs
-from maps import Maps_Env
-from utils.storage import GlobalRolloutStorage
-from model import RL_Policy
-import algo
+from src.policy_rl.envs import make_vec_envs
+from src.policy_rl.maps import Maps_Env
+from src.policy_rl.utils.storage import GlobalRolloutStorage
+from src.policy_rl.model import RL_Policy
+from src.policy_rl import algo 
 import cv2
 import json
 
@@ -131,7 +131,8 @@ def main():
             l_policy.eval()
     
         # Get local policy input
-        local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
+        # local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
+        local_input = obs[:, :3, ...]
         local_orientation = torch.zeros(num_scenes, 1).long()
 
         locs = local_pose.cpu().numpy()
@@ -216,7 +217,8 @@ def main():
             for e in range(num_scenes):
                 local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
 
-            local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)       # rgb, potential mask
+            # local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)       # rgb, potential mask
+            local_input = obs[:, :3, ...]
             extras[:, 0] = local_orientation[:, 0]
 
         # Add samples to local policy storage

@@ -18,8 +18,6 @@ optimizer_params:
 student_test_thr: 0.5
 teacher_pred_thr: 0.7
 
-# iterations
-update_target: True
 
 
 # trick

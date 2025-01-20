@@ -23,7 +23,7 @@ def main(cfg):
     for id_iteration in range(cfg.n_iterations):
         # dataset
         dataset_path = cfg.sample_path
-        if cfg.training == "use_gt":    # TODO?
+        if "use_gt" in cfg.training and cfg.training.use_gt:    # TODO?
             dm = GTDataModule(pipeline.pseudo_labeler, dataset_path, 
                             **cfg, **cfg.training)    # TODO
         else:

@@ -171,7 +171,7 @@ class HabitatDataModule(pl.LightningDataModule):
         )
 
         dataset = BbsgtDataset(
-            self.testset_path,
+            data_path=self.testset_path,
             transform=transform,
         )
         return dataset

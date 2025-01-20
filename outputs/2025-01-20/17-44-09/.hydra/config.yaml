@@ -1,0 +1,22 @@
+detectron_args:
+  config_file: ${base_dir}/third_parties/detectron2/configs/quick_schedules/mask_rcnn_R_50_FPN_inference_acc_test.yaml
+  confidence_threshold: 0.5
+  MODEL:
+    ROI_HEADS:
+      NMS_THRESH_TEST: 0.5
+training:
+  _BASE_: .default.yaml
+  use_gt: true
+  exp_name_training: gt
+  loss_weights:
+    loss_cls: 1.0
+    loss_soft: 0.0
+    contrastive_loss: 0.0
+    loss_mask: 1.0
+notes: null
+exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_batchsize_notes_${notes}
+sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test/episodes_data
+testset_path: null
+update_target: true
+n_iterations: 1
+gpus: 1

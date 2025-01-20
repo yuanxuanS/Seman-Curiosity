@@ -2,7 +2,7 @@ import numpy as np
 import gym
 import habitat
 import quaternion
-import src.envs.utils.pose as pu
+import src.policy_rl.envs.utils.pose as pu
 from src.finetune.dataset_utils import save_obs
 import os
 

@@ -18,7 +18,7 @@ def setup_cfg(args):
     # load config from file and command-line arguments
     cfg = get_cfg()
     cfg.merge_from_file(args.config_file)
-    cfg.merge_from_list(args.opts)
+    # cfg.merge_from_list(args.opts)
     # Set score_threshold for builtin models
     cfg.MODEL.RETINANET.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
@@ -101,7 +101,16 @@ class Predictor(pl.LightningModule):
                 self.model.roi_heads.mask_head.predictor.bias = mask_bias
                 self.model.roi_heads.mask_head.predictor.num_classes = len(classes_idxs)
 
+    def set_head_wrapper(self, head_class: MinimalPredictorWrapper):
+        """We implement custom ROIHead for box-predictor (e.g., heads with different self).
+        This function setup the wrapper for the current head
 
+        """
+
+        self.model.roi_heads.box_predictor = head_class(
+            self.model.roi_heads.box_predictor
+        )
+        
     def on_test_epoch_end(self):
         pass
     
@@ -143,7 +152,7 @@ class Predictor(pl.LightningModule):
         """
         Normalize, pad and batch the input images.
         """
-        images = [x["image"].to(self.device_id) for x in batched_inputs]
+        images = [x["image"] for x in batched_inputs]
         images = [(x - self.model.pixel_mean) / self.model.pixel_std for x in images]
         images = ImageList.from_tensors(images, self.model.backbone.size_divisibility)
         return images

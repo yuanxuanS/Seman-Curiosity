@@ -23,8 +23,9 @@ class ConsensusLabeler(pl.LightningModule):
                  **kwargs):
         super().__init__()
         
-        self.reinit(model)
         self.thr = thr
+        self.reinit(model)
+        
         
     def reinit(self, model=None):
         self.update_model(model)
@@ -32,7 +33,7 @@ class ConsensusLabeler(pl.LightningModule):
         
     def update_model(self, model):
         self.model = model
-        self.model.model.roi_heads.box_predictor.box_predictor.test_score_thresh = (
+        self.model.model.roi_heads.box_predictor.test_score_thresh = (
             self.thr
         )
         self.model.eval()

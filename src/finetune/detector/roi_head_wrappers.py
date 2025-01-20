@@ -6,6 +6,7 @@ from torch import nn
 from torch.nn import functional as F
 import torch
 import numpy as np
+from .detectron_utils import fast_rcnn_inference
 
 def soft_cross_entropy(input, target):
     logprobs = F.log_softmax(input, dim=1)
@@ -57,6 +58,8 @@ class MinimalPredictorWrapper(nn.Module):
     def losses(self, predictions, proposals):
         return self.box_predictor.losses(predictions, proposals)
     
+    def inference(self, predictions, proposals):
+        return self.box_predictor.inference(predictions, proposals)
 
 class BoxPredictorWrapper(MinimalPredictorWrapper):
     '''
@@ -147,7 +150,29 @@ class BoxPredictorWrapper(MinimalPredictorWrapper):
         }
     
     def inference(self, predictions, proposals):
-        pass
+        if len(predictions) == 3:
+            logits, adv_logits, _ = predictions
+        elif len(predictions) == 2:
+            logits, _ = predictions
+
+        # logits, _ = predictions
+        num_inst_per_image = [len(p) for p in proposals]
+
+        boxes = self.box_predictor.predict_boxes(predictions, proposals)
+        logits_per_image = F.softmax(logits, dim=-1).split(num_inst_per_image, dim=0)
+
+        scores = self.box_predictor.predict_probs(predictions, proposals)
+
+        shapes = [x.image_size for x in proposals]
+        return fast_rcnn_inference(
+            boxes,
+            scores,
+            shapes,
+            self.box_predictor.test_score_thresh,
+            self.box_predictor.test_nms_thresh,
+            self.box_predictor.test_topk_per_image,
+            logits=logits_per_image,
+        )
 
 
 class SoftHeadWrapper(BoxPredictorWrapper):

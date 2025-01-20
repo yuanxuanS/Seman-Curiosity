@@ -42,7 +42,7 @@ def get_training_params(cfg):
         ),
     ]
     exp_path = os.getcwd()          # TODO
-    checkpoint_dir = os.path.join(exp_path, "/exps_finetune/checkpoints")
+    checkpoint_dir = os.path.join(exp_path, "exps_finetune/checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     # save model

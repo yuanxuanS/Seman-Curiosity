@@ -1,13 +1,13 @@
-default:
+defaults:
   - detectron_args: maskrcnn
-training: pipeline_gt
+  - training: pipeline_gt
 
 notes: 
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_batchsize_notes_${notes}
 
 # data
 sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test/episodes_data
-testset_path: 
+testset_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/fix_test
 
 # training params
 update_target: True   # TODO
@@ -17,5 +17,6 @@ n_iterations: 1
 # device
 gpus: 1   # TODO [1,2,3] 多gpu训练？ v2.0以后使用accelerator
 
+base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
 
 
