@@ -8,3 +8,4 @@ third_parties/
 *.pth
 *.log
 *.txt
+*.json
