@@ -16,8 +16,8 @@ from pyntcloud import PyntCloud
 from scipy.spatial.kdtree import KDTree
 from torch.nn import functional as F
 
-from experimenting_env.sensor_data import AgentPoseSense, BBSense, DepthSense
-from experimenting_env.utils import inconsistencies as inc
+from ..sensors_data import AgentPoseSense, BBSense, DepthSense
+import src.finetune.utils.inconsistencies as inc
 
 from line_profiler import profile
 

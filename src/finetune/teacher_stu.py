@@ -3,7 +3,7 @@ from src.finetune.detector import multi_stage_models as models
 from src.finetune.detector.pseudolabeler import (
     ConsensusLabeler,
     SemanticMapConsensusLabeler,
-    SoftConsensusLabeler,
+    LogitsConsensusLabeler,
     VanillaConsensusLabeler
 )
 from .sensors_data import BBSense
@@ -46,7 +46,7 @@ class TeacherStudent(pl.LightningModule):
         
         # teacher model: pseudo labeler
         switch = {
-            "logits": SoftConsensusLabeler,
+            "logits": LogitsConsensusLabeler,
             "vanilla": VanillaConsensusLabeler,
             "semantic_map": SemanticMapConsensusLabeler,
         }
@@ -63,11 +63,13 @@ class TeacherStudent(pl.LightningModule):
         self.online_val_map_metric = MAP(class_metrics=True)
         self.test_map_metric = MAP(class_metrics=True)
         
+        self.kwargs = kwargs
+        
         self.init_student()
         
         self.save_hyperparameters()
         
-        self.kwargs = kwargs
+        
     
     def init_student(self):
         self.student_model = self.student_model_cls(self.detectron_args, **self.kwargs)
