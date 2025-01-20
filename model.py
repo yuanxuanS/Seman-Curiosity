@@ -178,6 +178,7 @@ class RL_Policy(nn.Module):
 
         if deterministic:
             action = dist.mode()
+            action = action.reshape(-1)
         else:
             action = dist.sample()
 

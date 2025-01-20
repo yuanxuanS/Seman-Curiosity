@@ -192,10 +192,11 @@ def main():
     
     torch.set_grad_enabled(False)
 
-    print("Starting training")
-    logging.info("Starting training")
-    print(f"training frames is {args.num_training_frames}")
-    logging.info(f"training frames is {args.num_training_frames}")
+    print("Starting running")
+    logging.info("Starting running")
+    if not args.eval:
+        print(f"training frames is {args.num_training_frames}")
+        logging.info(f"training frames is {args.num_training_frames}")
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
         
