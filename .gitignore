@@ -1,6 +1,6 @@
 data/
 exps/
-# third_parties/
+third_parties/detectron2/build
 outputs/
 
 # type
@@ -9,3 +9,5 @@ outputs/
 *.pth
 *.log
 *.txt
+*.so
+*.out
