@@ -15,7 +15,7 @@ n_iterations: 1
 
 
 # device
-gpus: 1   # TODO [1,2,3] 多gpu训练？ v2.0以后使用accelerator
+gpus: [3]   # TODO [1,2,3] 多gpu训练？ v2.0以后使用accelerator
 
 base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
 
