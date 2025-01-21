@@ -1,6 +1,7 @@
 data/
 exps/
 third_parties/
+outputs/
 
 # type
 *.pyc

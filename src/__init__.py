@@ -1,6 +1,6 @@
-from .agents import *
-from .envs import *
-from .algo import *
-from finetune import *
+from .policy_rl.agents import *
+from .policy_rl.envs import *
+from .policy_rl.algo import *
+from .finetune import *
 
 project_name = "Semantic_Curiosity"

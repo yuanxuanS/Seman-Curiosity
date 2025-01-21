@@ -1,8 +1,0 @@
-training:
-  use_gt: true
-sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test/episodes_data
-epochs: 20
-gpus: 1
-early_stopping: 0
-ema: false
-teacher_momentum: 0.0
