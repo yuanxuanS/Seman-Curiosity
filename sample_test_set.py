@@ -10,7 +10,7 @@ from src import constants
 from src.finetune.dataset_utils import save_obs
 from src.policy_rl import arguments
 from src.policy_rl.envs.habitat import _get_scenes_from_folder
-
+from src import constants
 def main() -> None:
     args = arguments.get_args()
     
@@ -26,15 +26,18 @@ def main() -> None:
     if "*" in config.DATASET.CONTENT_SCENES:
         content_dir = os.path.join(config.DATASET.EPISODES_DIR.format(
             split=args.split), "content")
-        scenes = _get_scenes_from_folder(content_dir)
+        # scenes = _get_scenes_from_folder(content_dir)
+        scenes = [sc + ".glb" for sc in constants.scenes[args.split]]
         config.DATASET.CONTENT_SCENES = scenes
+    else:
+        scenes = config.DATASET.CONTENT_SCENES
     config.freeze()
     
     
     
     dataset = make_dataset(config.DATASET.TYPE, config=config.DATASET)
     
-    output_path = "/data1/wpp_data/semantic_curiosity_sample_test/"
+    output_path = "/data1/wpp_data/semantic_curiosity_sample_test256/"
     os.makedirs(output_path, exist_ok=True)
     data_pth = output_path+"/data/"
     os.makedirs(data_pth, exist_ok=True)
@@ -51,12 +54,14 @@ def main() -> None:
 
     scenes = list(compress(scenes, semantic_filter_scenes))
 
+    print(f"image size is {args.env_frame_height}, {args.env_frame_width}")
     for scene_count, scene_id in enumerate(scenes):
         # if scene_count < 4:
         #     continue
+        
         extractor = sim_utils.FirstPersonImageExtractor(
             scene_filepath=scene_id,
-            img_size=(640, 640),        # TODO
+            img_size=(args.env_frame_height, args.env_frame_width),        # TODO
             output=["rgba", "depth", "semantic"],
         )
 

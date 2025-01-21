@@ -11,7 +11,7 @@ from src.policy_rl.agents.sem_cur import Sem_Cur_Env_Agent
 from .curio_env import Seman_Curio_Env
 
 from .utils.vector_env import VectorEnv, ThreadedVectorEnv
-
+from src import constants
 
 def make_env_fn(args, config_env, rank):
     dataset = make_dataset(config_env.DATASET.TYPE, config=config_env.DATASET)
@@ -63,7 +63,8 @@ def construct_envs(args):
     if "*" in basic_config.DATASET.CONTENT_SCENES:
         content_dir = os.path.join(basic_config.DATASET.EPISODES_DIR.format(
             split=args.split), "content")
-        scenes = _get_scenes_from_folder(content_dir)
+        # scenes = _get_scenes_from_folder(content_dir)
+        scenes = [sc + ".glb" for sc in constants.scenes[args.split]]
 
     if len(scenes) > 0:
         assert len(scenes) >= args.num_processes, (

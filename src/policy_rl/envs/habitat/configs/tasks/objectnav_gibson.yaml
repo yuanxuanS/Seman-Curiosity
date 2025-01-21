@@ -46,6 +46,7 @@ DATASET:
   DATA_PATH: "data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
   EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
   SCENES_DIR: "data/scene_datasets/"
+  # train
   # CONTENT_SCENES: [
   # ["Klickitat.glb", "Marstons.glb", "Hanson.glb", "Lakeville.glb", "Merom.glb",
   # "Lindenwood.glb", "Pinesdale.glb", "Forkland.glb", "Wainscott.glb", "Newfields.glb",

@@ -2,7 +2,7 @@ scenes = {}
 scenes["train"] = [
     'Allensville',
     'Beechwood',
-    'Benevolence',
+    # 'Benevolence',
     'Coffeen',
     'Cosmos',
     'Forkland',
@@ -32,7 +32,7 @@ scenes["val"] = [
     'Corozal',
     'Darden',
     'Markleeville',
-    'Wiconisco',
+    # 'Wiconisco',
 ]
 
 coco_categories = {

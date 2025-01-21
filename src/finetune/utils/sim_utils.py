@@ -147,7 +147,7 @@ class ClosestPointExtractor(PoseExtractor):
 class RandomPoseExtractor(PoseExtractor):
     def extract_poses(self, view, fp):
         height, width = view.shape
-        num_random_points = 5000
+        num_random_points = 10000       # set img number
         points = []
         while len(points) < num_random_points:
             # Get the row and column of a random point on the topdown view
@@ -173,6 +173,9 @@ class RandomPoseExtractor(PoseExtractor):
 
 
 class FirstPersonImageExtractor(ImageExtractor):
+    '''
+        用 random_pose_extractor(可指定位姿数) 采样位姿,获取样本; 
+    '''
     SIM_TO_COCO_MAPPING = {
         "chair": 56,
         "couch": 57,  # couch

@@ -55,7 +55,7 @@ def get_args():
                         help='1: save visualization as images')
     
     # Environment, dataset and episode specifications
-    parser.add_argument('-efw', '--env_frame_width', type=int, default=256,     # sim返回的RGB大小
+    parser.add_argument('-efw', '--env_frame_width', type=int, default=256,     # sim返回的RGB大小, 以及detector输入大小(预处理之前)
                         help='Frame width (default:84)')
     parser.add_argument('-efh', '--env_frame_height', type=int, default=256,
                         help='Frame height (default:84)')
@@ -64,7 +64,7 @@ def get_args():
     parser.add_argument('-fh', '--frame_height', type=int, default=128,
                         help='Frame height (default:84)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
-                        help="""Maximum episode length""")
+                        help="""Maximum episode length, steps in an episode""")
     parser.add_argument("--task_config", type=str,
                         default="tasks/objectnav_gibson.yaml",
                         help="path to config yaml containing task information")
