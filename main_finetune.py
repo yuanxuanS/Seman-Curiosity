@@ -49,14 +49,14 @@ def main(cfg):
         ),
     )
     dataset = BbsgtDataset(
-            data_path=os.path.join(cfg.test_path),
+            data_path=os.path.join(cfg.testset_path),
             transform=transform,
             remap_classes=True,
         )
 
     test_loader = get_loader(
         dataset,
-        batch_size=4,
+        batch_size=cfg.training.val_batch_size,
         shuffle=False,
         num_workers=10,
         collate_fn=dict_helper_collate,
