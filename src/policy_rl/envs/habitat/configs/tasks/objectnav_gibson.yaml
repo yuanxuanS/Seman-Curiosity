@@ -46,10 +46,10 @@ DATASET:
   DATA_PATH: "data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
   EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
   SCENES_DIR: "data/scene_datasets/"
-  # CONTENT_SCENES: [
-  #   "Allensville.glb", "Beechwood.glb", "Coffeen.glb", "Cosmos.glb", "Forkland.glb",
-  #   "Hanson.glb", "Hiteman.glb", "Klickitat.glb", "Lakeville.glb", "Leonardo.glb", 
-  #   "Lindenwood.glb", "Marstons.glb", "Merom.glb", "Mifflinburg.glb", "Newfields.glb",
-  #   "Onaga.glb", "Pinesdale.glb", "Pomaria.glb", "Ranchester.glb", "Shelbyville.glb",
-  #   "Stockman.glb", "Tolstoy.glb", "Wainscott.glb", "Woodbine.glb" 
-  # ]
+  CONTENT_SCENES: [
+    "Allensville.glb", "Beechwood.glb", "Coffeen.glb", "Cosmos.glb", "Forkland.glb",
+    "Hanson.glb", "Hiteman.glb", "Klickitat.glb", "Lakeville.glb", "Leonardo.glb", 
+    "Lindenwood.glb", "Marstons.glb", "Merom.glb", "Mifflinburg.glb", "Newfields.glb",
+    "Onaga.glb", "Pinesdale.glb", "Pomaria.glb", "Ranchester.glb", "Shelbyville.glb",
+    "Stockman.glb", "Tolstoy.glb", "Wainscott.glb", "Woodbine.glb" 
+  ]
