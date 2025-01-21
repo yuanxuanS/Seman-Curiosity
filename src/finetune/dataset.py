@@ -30,7 +30,7 @@ class BbsgtDataset(Dataset):
         self.data_path = data_path
         self.sampler = SampleLoader(data_path) if sampler is None else sampler
         
-        if input is not None:
+        if inputs is None:
             env_list, episode_list, steps_list = self.sampler.get_env_episode_and_steps_dense_list()
             if index_mask:
                 env_list = env_list[index_mask]
@@ -199,6 +199,9 @@ class FullDataset(BbsgtDataset):
         
         
 class PseudoFullDataset(BbsgtDataset):
+    '''
+    对伪标签也进行处理比如transfrom
+    '''
     def __init__(
         self,
         data_path,
@@ -247,7 +250,6 @@ class PseudoFullDataset(BbsgtDataset):
     
     def __getitem__(self, idx):
         """
-        Output sequences of RGBD image with random window
         """
 
         result = []

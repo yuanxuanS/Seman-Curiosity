@@ -5,12 +5,13 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "name": "finetune",
             "type": "debugpy",
             "request": "launch",
             "cwd": "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity",
-            "program": "finetune.py",
+            "program": "main_finetune.py",
             "python": "/home/users/wpp/miniconda3/envs/explore/bin/python",
             "console": "integratedTerminal"
         }

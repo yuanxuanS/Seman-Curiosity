@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 
 class HabitatDataModule(pl.LightningDataModule):
     '''
-    call: prepare_data()
-          setup()
+    call in pl : prepare_data(), then setup()
+    
     '''
     def __init__(self, 
                  pseudo_labeler=None, 
@@ -208,13 +208,13 @@ class GTDataModule(HabitatDataModule):
         inputs = sampler.get_env_episode_and_steps_dense_list()     
         filter_empty_instances = []
         
-        for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):
+        for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
             instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
 
             filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
 
 
-        return FullDataset(
+        return BbsgtDataset(
             data_path=None,
             sampler=sampler,
             index_mask=filter_empty_instances,      # 仅保留有mask的
