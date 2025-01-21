@@ -5,6 +5,7 @@ exps/
 # type
 *.pyc
 *.png
+*.jpg
 *.pth
 *.log
 *.txt
