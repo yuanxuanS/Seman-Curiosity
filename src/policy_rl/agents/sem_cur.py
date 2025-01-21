@@ -2,14 +2,15 @@ from torchvision import transforms
 import cv2
 import numpy as np
 from PIL import Image
-import src.policy_rl.agents.utils.visualization as vu
+from .utils import visualization as vu
 from src.constants import color_palette
 import os
 import torch
 import src.policy_rl.envs.utils.pose as pu
 from src.policy_rl.envs.habitat.curio_env import Seman_Curio_Env
-from src.policy_rl.agents.utils.semantic_prediction import SemanticPredMaskRCNN
+from .utils.semantic_prediction import SemanticPredMaskRCNN
 from src.finetune.dataset_utils import save_obs
+import quaternion
 
 class Sem_Cur_Env_Agent(Seman_Curio_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -45,7 +46,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             self.goal_name = "No"
     def reset(self):
         args = self.args
-
+        
         obs, info = super().reset()
         obs = self._preprocess_obs(obs)
 
@@ -58,7 +59,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         self.curr_loc = [args.map_size_cm / 100.0 / 2.0,
                          args.map_size_cm / 100.0 / 2.0, 0.]
         
-        
+        # visualize
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
         
@@ -181,7 +182,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = inputs['pose_pred']
 
         sem_map = inputs['sem_map_pred']        # local map
-        sem_map_full = np.rint(inputs['sem_map_pred_full'])
+        sem_map_full = inputs['sem_map_pred_full']
 
         gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
 
@@ -189,7 +190,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         sem_map_full += 5        # 语义id，从5开始
         
         # lcoal map
-        no_cat_mask = sem_map == 10     # 最后一个通道是什么
+        no_cat_mask = sem_map == 10     # =最后一个通道，代表没有object
         map_mask = np.rint(map_pred) == 1
         exp_mask = np.rint(exp_pred) == 1
         vis_mask = self.visited_vis[gx1:gx2, gy1:gy2] == 1

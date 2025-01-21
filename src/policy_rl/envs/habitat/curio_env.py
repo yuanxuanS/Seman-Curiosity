@@ -2,9 +2,16 @@ import numpy as np
 import gym
 import habitat
 import quaternion
-import src.policy_rl.envs.utils.pose as pu
+from ..utils import pose as pu
 from src.finetune.dataset_utils import save_obs
 import os
+from src.constants import coco_categories
+import bz2
+import _pickle as cPickle
+import skimage.morphology
+from ..utils.fmm_planner import FMMPlanner
+import json
+import gzip
 
 class Seman_Curio_Env(habitat.RLEnv):
     """The Semantic Curiosity environment class. The class is responsible
@@ -19,7 +26,13 @@ class Seman_Curio_Env(habitat.RLEnv):
 
         # Loading dataset info file
         self.split = config_env.DATASET.SPLIT
-        
+        self.episodes_dir = config_env.DATASET.EPISODES_DIR.format(
+            split=self.split)
+        dataset_info_file = self.episodes_dir + \
+            "{split}_info.pbz2".format(split=self.split)
+        with bz2.BZ2File(dataset_info_file, 'rb') as f:
+            self.dataset_info = cPickle.load(f)
+            
         # Specifying action and observation space
         self.action_space = gym.spaces.Discrete(3)
 
@@ -30,9 +43,8 @@ class Seman_Curio_Env(habitat.RLEnv):
 
         # Scene info
         self.last_scene_path = None
-        self.scene_path = None
-        self.scene_name = None
-
+        self.scene_path = None  
+        self.scene_name = None   
         # episode tracking into
         self.timestep = None
         self.info = {}
@@ -43,17 +55,31 @@ class Seman_Curio_Env(habitat.RLEnv):
 
         
     def reset(self):
-        """Resets the environment to a new episode."""
-
+        """Resets the environment to a new episode.
+                reset traversible initial location
+        
+        """
+        new_scene = self.episode_no % self.args.num_train_episodes == 0
         # Initializations
         self.timestep = 0
         self.episode_no += 1
 
-        obs = super().reset()
+        if new_scene:
+            obs = super().reset()
+        
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        
+        if self.split == "val":
+            obs = self.load_episode_loc()       # load episode for inital start position
+        else:
+            obs = self.initial_possible_loc()       # train时，随机生成初始位置
+
+
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
         self.last_sim_location = self.get_sim_location()
+        print(f"initial pose: {self.last_sim_location[0]}, {self.last_sim_location[1]}, {self.last_sim_location[2]}")
 
         # Set info
         self.info['time'] = self.timestep
@@ -62,6 +88,127 @@ class Seman_Curio_Env(habitat.RLEnv):
 
         return state, self.info
     
+    def load_episode_loc(self):
+        args = self.args
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+
+        if self.scene_path != self.last_scene_path: # 如果reset时加载新的环境
+            episodes_file = self.episodes_dir + \
+                "content/{}_episodes.json.gz".format(scene_name)
+
+            print("Loading episodes from: {}".format(episodes_file))
+            with gzip.open(episodes_file, 'r') as f:
+                self.eps_data = json.loads(
+                    f.read().decode('utf-8'))["episodes"]
+
+            self.eps_data_idx = 0
+            self.last_scene_path = self.scene_path
+            
+        # Load episode info
+        episode = self.eps_data[self.eps_data_idx]      # episode结束后重新reset，加载数据中不同epsiode的初始位置
+        self.eps_data_idx += 1
+        self.eps_data_idx = self.eps_data_idx % len(self.eps_data)
+        pos = episode["start_position"]
+        rot = quaternion.from_float_array(episode["start_rotation"])
+        
+        self._env.sim.set_agent_state(pos, rot)
+        obs = self._env.sim.get_observations_at(pos, rot)
+        return obs
+    
+    def initial_possible_loc(self):
+        args = self.args
+        
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+
+        scene_info = self.dataset_info[scene_name]
+        map_resolution = args.map_resolution
+
+        floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
+        floor_height = scene_info[floor_idx]['floor_height']
+        sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
+        map_obj_origin = scene_info[floor_idx]['origin']
+
+        cat_counts = sem_map.sum(2).sum(1)
+        possible_cats = list(np.arange(6))      # 0-5类别
+        
+        for i in range(6):
+            if cat_counts[i + 1] == 0:      # 从0-5的类别中，如果有一个类别的数量为0，则去除这个类别
+                possible_cats.remove(i)
+
+        object_boundary = args.success_dist # TODO：
+        
+        loc_found = False
+        while not loc_found:    # 得到合适的目标物体：到该目标的距离可行
+            if len(possible_cats) == 0:
+                print("No valid objects for {}".format(floor_height))
+                eps = eps - 1
+                continue
+            
+            goal_idx = np.random.choice(possible_cats)
+
+            for key, value in coco_categories.items():      # 找到目标的类别名
+                if value == goal_idx:
+                    goal_name = key
+
+            selem = skimage.morphology.disk(2)
+            traversible = skimage.morphology.binary_dilation(
+                sem_map[0], selem) != True      # obstacles: 3W/4W
+            traversible = 1 - traversible   # free space: <1W/4w
+            
+            planner = FMMPlanner(traversible)
+
+            selem = skimage.morphology.disk(
+                int(object_boundary * 100. / map_resolution))
+            goal_map = skimage.morphology.binary_dilation(
+                sem_map[goal_idx + 1], selem) != True       
+            goal_map = 1 - goal_map     # 目标物体的地图
+            
+            planner.set_multi_goal(goal_map)
+
+            m1 = sem_map[0] > 0     # free space
+            m2 = planner.fmm_dist > (object_boundary - object_boundary) * 20.0  #      
+            m3 = planner.fmm_dist < (20 - object_boundary) * 20.0
+
+            possible_starting_locs = np.logical_and(m1, m2)     # 在距离目标在一定距离范围内，选初始位置
+            possible_starting_locs = np.logical_and(
+                possible_starting_locs, m3) * 1.
+            if possible_starting_locs.sum() != 0:
+                loc_found = True
+            else:
+                print("Invalid object: {} / {} / {}".format(
+                    scene_name, floor_height, goal_name))
+                possible_cats.remove(goal_idx)
+                scene_info[floor_idx]["sem_map"][goal_idx + 1, :, :] = 0.
+                self.dataset_info[scene_name][floor_idx][
+                    "sem_map"][goal_idx + 1, :, :] = 0.
+        
+        loc_found = False       # 再找合适的初始位置
+        while not loc_found:        
+            pos = self._env.sim.sample_navigable_point()
+            x = -pos[2]
+            y = -pos[0]
+            min_x, min_y = map_obj_origin / 100.0   # 
+            map_loc = int((-y - min_y) * 20.), int((-x - min_x) * 20.)
+            if abs(pos[1] - floor_height) < args.floor_thr / 100.0 and \
+                    possible_starting_locs[map_loc[0], map_loc[1]] == 1:    # 且位置高度不能距离地板太远
+                loc_found = True
+
+        agent_state = self._env.sim.get_agent_state(0)
+        rotation = agent_state.rotation
+        rvec = quaternion.as_rotation_vector(rotation)
+        rvec[1] = np.random.rand() * 2 * np.pi
+        rot = quaternion.from_rotation_vector(rvec)
+        self._env.sim.set_agent_state(pos, rot)
+        obs = self._env.sim.get_observations_at(pos, rot)
+        
+        self.map_obj_origin = map_obj_origin
+        
+        return obs
+                
+
+
     def step(self, action):
         """Function to take an action in the environment.
 
@@ -83,7 +230,6 @@ class Seman_Curio_Env(habitat.RLEnv):
         # step
         obs, _, done, _ = super().step(action)
 
-        # TODO: Get pose change?
         dx, dy, do = self.get_pose_change()
         self.info['sensor_pose'] = [dx, dy, do]
 
@@ -153,6 +299,7 @@ class Seman_Curio_Env(habitat.RLEnv):
             o = 2 * np.pi - quaternion.as_euler_angles(agent_state.rotation)[1]
         if o > np.pi:
             o -= 2 * np.pi
+        
         return x, y, o
     
     def get_action_space(self):
