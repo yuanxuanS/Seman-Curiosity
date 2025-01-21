@@ -87,7 +87,7 @@ class HabitatDataModule(pl.LightningDataModule):
 
         return coco_pseudo_labels
     
-    def setup(self):
+    def setup(self, stage):
         '''pl func, called by trainer
             get datasets
         '''
@@ -106,7 +106,7 @@ class HabitatDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            collate_fn=list_helper_collate,
+            collate_fn=dict_helper_collate,     # __getItem__ 返回包含元素的单个dict, 使用dict_helper_coll
         )
         return train_loader
     

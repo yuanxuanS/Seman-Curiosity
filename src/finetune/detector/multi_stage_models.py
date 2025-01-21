@@ -35,7 +35,7 @@ class MultiStageModel(Predictor):
         
         self.lr = lr
         self.optimizer = optimizer
-        
+        self.opt_params = optimizer_params  # TODO Params for optimizer
         self.loss_weights = loss_weights    # TODO
 
         self.feature_projector = triplet.tinyprojection_MLP(1024, out_dim=128)
@@ -241,6 +241,9 @@ class MultiStageModel(Predictor):
         )
     
 class SoftMultiStageModel(MultiStageModel):
+    '''
+        with distill head
+    '''
     def __init__(self, *args, **kwargs):
         if "head_cls" not in kwargs:
             kwargs['head_cls'] = lambda x: SoftHeadWrapper(

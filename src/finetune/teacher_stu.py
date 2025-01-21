@@ -78,6 +78,7 @@ class TeacherStudent(pl.LightningModule):
         )
         
     def training_step(self, batched_inputs, batch_idx):
+        batch = []
         for i in batched_inputs:
             if isinstance(i, List):
                 batch += i

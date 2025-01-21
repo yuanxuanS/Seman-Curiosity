@@ -12,7 +12,7 @@ import albumentations as A
 import hydra
 import torch
 import os
-
+os.environ["WANDB_MODE"]="offline"
 @hydra.main(config_path='./configs_finetune/', config_name='train.yaml')
 def main(cfg):
     

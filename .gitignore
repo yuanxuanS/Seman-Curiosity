@@ -1,5 +1,6 @@
 data/
 exps/
+exps_finetune/
 third_parties/detectron2/build
 outputs/
 
@@ -11,3 +12,4 @@ outputs/
 *.txt
 *.so
 *.out
+*.zip

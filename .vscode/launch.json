@@ -14,7 +14,8 @@
             "cwd": "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity",
             "program": "main_finetune.py",
             "python": "/home/users/wpp/miniconda3/envs/explore/bin/python",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "justMyCode": false
         },
         {
             "name": "sample test",
