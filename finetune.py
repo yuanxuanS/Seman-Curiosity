@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 from arguments import get_args
-from pipelines import GTDataModule, HabitatDataModule
+from src.finetune.dataset import GTDataModule, HabitatDataModule
+from src.finetune import pipelines
 
 def main():
     args = get_args()

@@ -8,11 +8,11 @@ from collections import deque, defaultdict
 import gym
 import time
 from datetime import datetime
-from envs import make_vec_envs
+from src.policy_rl.envs import make_vec_envs
 from maps import Maps_Env
-from utils.storage import GlobalRolloutStorage
-from model import RL_Policy
-import algo
+from src.policy_rl.utils.storage import GlobalRolloutStorage
+from src.policy_rl.model import RL_Policy
+import src.policy_rl.algo
 import cv2
 import json
 
