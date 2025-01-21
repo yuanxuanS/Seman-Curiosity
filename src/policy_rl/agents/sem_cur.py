@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from PIL import Image
 import agents.utils.visualization as vu
-from constants import color_palette
+from src.constants import color_palette
 import os
 import torch
 import envs.utils.pose as pu

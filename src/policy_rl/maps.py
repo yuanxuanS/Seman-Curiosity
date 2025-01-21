@@ -1,7 +1,7 @@
 import torch
 from model import Semantic_Mapping
 import numpy as np
-from arguments import get_args
+from src.policy_rl.arguments import get_args
 from envs import make_vec_envs
 
 class Maps_Env:

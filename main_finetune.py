@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-from arguments import get_args
+from src.policy_rl.arguments import get_args
 from pipelines import GTDataModule, HabitatDataModule
 
 def main():
