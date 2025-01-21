@@ -1,6 +1,6 @@
 data/
 exps/
-third_parties/
+# third_parties/
 outputs/
 
 # type
