@@ -1,7 +1,7 @@
 data/
 exps/
 exps_finetune/
-third_parties/detectron2/build
+# third_parties/detectron2/build
 outputs/
 
 # type
