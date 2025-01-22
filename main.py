@@ -271,8 +271,8 @@ def main():
                 )
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
-            l_action = np.random.randint(0, 4, num_scenes)
-
+            l_action = np.random.randint(0, 3, num_scenes)
+        # print(f"action {l_action}")
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
