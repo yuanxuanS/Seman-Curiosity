@@ -37,7 +37,7 @@ def main() -> None:
     
     dataset = make_dataset(config.DATASET.TYPE, config=config.DATASET)
     
-    output_path = "/data1/wpp_data/semantic_curiosity_sample_test256/"
+    output_path = "/data1/wpp_data/semantic_curiosity_sample_test640/"
     os.makedirs(output_path, exist_ok=True)
     data_pth = output_path+"/data/"
     os.makedirs(data_pth, exist_ok=True)

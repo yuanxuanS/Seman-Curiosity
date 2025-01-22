@@ -7,7 +7,8 @@ from detectron2.structures.masks import BitMasks
 from .dataset_utils import SampleLoader
 from .sensors_data import BBSense
 import numpy as np
-
+import warnings
+warnings.filterwarnings("ignore")
 
 class BbsgtDataset(Dataset):
     '''

@@ -4,7 +4,7 @@ from src.finetune.utils.ddp_long_timeout import DDPPlugin
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pl_bolts.callbacks.byol_updates import BYOLMAWeightUpdate
-
+from hydra.utils import get_original_cwd, to_absolute_path
 import os
 
 def list_helper_collate(batch):
@@ -42,7 +42,7 @@ def get_training_params(cfg):
         ),
     ]
     # exp_path = os.getcwd()          # TODO
-    exp_path = cfg.base_dir+'/exps_finetune/'+cfg.exp_name
+    exp_path = os.getcwd()
     checkpoint_dir = os.path.join(exp_path, "checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
 

@@ -8,7 +8,7 @@ job:
       item_sep: '__'
       exclude_keys: []
 sweep:
-  dir: ${base_dir}/exps_finetune/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  dir: ${base_dir}/exps_finetune/${now:%Y-%m-%d}/
   subdir: ${exp_name}
   
 run:
