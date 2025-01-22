@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 
-from utils.model import AddBias
+from .model import AddBias
 
 """
 Modify standard PyTorch distributions so they are compatible with this code.

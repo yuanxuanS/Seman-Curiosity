@@ -2,14 +2,14 @@ import numpy as np
 import gym
 import habitat
 import quaternion
-import envs.utils.pose as pu
-from finetune.dataset_utils import save_obs
+from ..utils import pose as pu
+from src.finetune.dataset_utils import save_obs
 import os
-from constants import coco_categories
+from src.constants import coco_categories
 import bz2
 import _pickle as cPickle
 import skimage.morphology
-from envs.utils.fmm_planner import FMMPlanner
+from ..utils.fmm_planner import FMMPlanner
 import json
 import gzip
 

@@ -7,11 +7,11 @@ from habitat.config.default import get_config as cfg_env
 from habitat.datasets.pointnav.pointnav_dataset import PointNavDatasetV1
 from habitat import Config, Env, RLEnv, VectorEnv, make_dataset
 
-from agents.sem_cur import Sem_Cur_Env_Agent
+from src.policy_rl.agents.sem_cur import Sem_Cur_Env_Agent
 from .curio_env import Seman_Curio_Env
 
 from .utils.vector_env import VectorEnv, ThreadedVectorEnv
-
+from src import constants
 
 def make_env_fn(args, config_env, rank):
     dataset = make_dataset(config_env.DATASET.TYPE, config=config_env.DATASET)
@@ -49,7 +49,7 @@ def construct_envs(args):
     env_configs = []
     args_list = []
 
-    basic_config = cfg_env(config_paths=["envs/habitat/configs/"
+    basic_config = cfg_env(config_paths=["src/policy_rl/envs/habitat/configs/"
                                          + args.task_config])
     basic_config.defrost()
     basic_config.DATASET.SPLIT = args.split
@@ -63,7 +63,9 @@ def construct_envs(args):
     if "*" in basic_config.DATASET.CONTENT_SCENES:
         content_dir = os.path.join(basic_config.DATASET.EPISODES_DIR.format(
             split=args.split), "content")
-        scenes = _get_scenes_from_folder(content_dir)
+        # scenes = _get_scenes_from_folder(content_dir)
+        scenes = [sc + ".glb" for sc in constants.scenes[args.split]]
+        
 
     if len(scenes) > 0:
         assert len(scenes) >= args.num_processes, (
@@ -78,7 +80,7 @@ def construct_envs(args):
 
     print("Scenes per thread:")
     for i in range(args.num_processes):
-        config_env = cfg_env(config_paths=["envs/habitat/configs/"
+        config_env = cfg_env(config_paths=["src/policy_rl/envs/habitat/configs/"
                                            + args.task_config])
         config_env.defrost()
 

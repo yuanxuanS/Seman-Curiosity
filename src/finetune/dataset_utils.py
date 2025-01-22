@@ -1,7 +1,7 @@
-from finetune.sensors_utils import _get_info_from_string, \
+from .sensors_utils import _get_info_from_string, \
                         _get_info_from_string_withend
                         # get_sense_info
-from finetune.sensors_data import MODALITY_SENSE      
+from .sensors_data import MODALITY_SENSE      
 import multiprocessing
 
 import numpy as np

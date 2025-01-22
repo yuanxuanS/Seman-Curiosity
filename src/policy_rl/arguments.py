@@ -55,13 +55,13 @@ def get_args():
                         help='1: save visualization as images')
     
     # Environment, dataset and episode specifications
-    parser.add_argument('-efw', '--env_frame_width', type=int, default=256,     # sim返回的RGB大小
+    parser.add_argument('-efw', '--env_frame_width', type=int, default=640,     # sim返回的RGB大小
                         help='Frame width (default:84)')
-    parser.add_argument('-efh', '--env_frame_height', type=int, default=256,
+    parser.add_argument('-efh', '--env_frame_height', type=int, default=640,
                         help='Frame height (default:84)')
-    parser.add_argument('-fw', '--frame_width', type=int, default=128,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
+    parser.add_argument('-fw', '--frame_width', type=int, default=160,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
                         help='Frame width (default:84)')
-    parser.add_argument('-fh', '--frame_height', type=int, default=128,
+    parser.add_argument('-fh', '--frame_height', type=int, default=160,
                         help='Frame height (default:84)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length""")

@@ -2,14 +2,14 @@ from torchvision import transforms
 import cv2
 import numpy as np
 from PIL import Image
-import agents.utils.visualization as vu
-from constants import color_palette
+from .utils import visualization as vu
+from src.constants import color_palette
 import os
 import torch
-import envs.utils.pose as pu
-from envs.habitat.curio_env import Seman_Curio_Env
-from agents.utils.semantic_prediction import SemanticPredMaskRCNN
-from finetune.dataset_utils import save_obs
+from ..envs.utils import pose as pu
+from ..envs.habitat.curio_env import Seman_Curio_Env
+from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
+from src.finetune.dataset_utils import save_obs
 import quaternion
 
 class Sem_Cur_Env_Agent(Seman_Curio_Env):

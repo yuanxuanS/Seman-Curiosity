@@ -1,5 +1,5 @@
 
-from arguments import get_args
+from src.policy_rl.arguments import get_args
 import torch
 import numpy as np
 import os
@@ -9,10 +9,10 @@ import gym
 import time
 from datetime import datetime
 from src.policy_rl.envs import make_vec_envs
-from maps import Maps_Env
+from src.policy_rl.maps import Maps_Env
 from src.policy_rl.utils.storage import GlobalRolloutStorage
 from src.policy_rl.model import RL_Policy
-import src.policy_rl.algo
+from  src.policy_rl import algo 
 import cv2
 import json
 
