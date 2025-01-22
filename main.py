@@ -88,10 +88,11 @@ def main():
     # 5,6,7,.. : Semantic Categories
     maps = Maps_Env(args)
     local_map, local_pose = maps.update_semantic_map(obs, infos)
-
+    full_pose = maps.full_pose
+    
     if args.agent == "rl":
         # Local policy observation space
-        es = 1      # extra size: orientation
+        es = 3      # extra size: x, y, orientation
         l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
         l_action_space = envs.get_action_space()[0]
 
@@ -133,13 +134,18 @@ def main():
         # Get local policy input
         local_input = obs[:, :3, ...]
         local_orientation = torch.zeros(num_scenes, 1).long()
-
-        locs = local_pose.cpu().numpy()
+        local_xy = torch.zeros(num_scenes, 2)
+        
+        # locs = local_pose.cpu().numpy()
+        locs = full_pose.cpu().numpy()      # 使用全局pose
         for e in range(num_scenes):
             local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
-
+            local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+            
         extras = torch.zeros(num_scenes, es)
-        extras[:, 0] = local_orientation[:, 0]
+        # extras[:, 0] = local_orientation[:, 0]
+        extras[:, 2] = local_orientation[:, 0]
+        extras[:, :2] = local_xy[:]
 
         l_rollouts.obs[0].copy_(local_input)   # 
         l_rollouts.extras[0].copy_(extras)
@@ -181,7 +187,8 @@ def main():
     l_action = torch.tensor(l_action)
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
-
+    full_pose = maps.full_pose
+    
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
     logging.info("Start date and time: %s", start_datetime)
@@ -214,15 +221,17 @@ def main():
 
         # ------------------------------------------------------------------ 
         # update local input, next state
-        locs = local_pose.cpu().numpy()
+        locs = full_pose.cpu().numpy()
         
         if args.agent == "rl":
             for e in range(num_scenes):
                 local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
-
+                local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+                
             local_input = obs[:, :3, ...]       # rgb
             extras[:, 0] = local_orientation[:, 0]
-
+            extras[:, :2] = local_xy[:]
+            # print(f"input sxtras: {extras}")
         # Add samples to local policy storage
         reward = l_reward - last_reward
         
@@ -303,7 +312,7 @@ def main():
                 
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)
-
+        full_pose = maps.full_pose
         # ------------------------------------------------------------------
         # Training
         torch.set_grad_enabled(True)
