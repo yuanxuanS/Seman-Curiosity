@@ -59,9 +59,13 @@ def get_args():
                         help='Frame width (default:84)')
     parser.add_argument('-efh', '--env_frame_height', type=int, default=640,
                         help='Frame height (default:84)')
-    parser.add_argument('-fw', '--frame_width', type=int, default=160,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
+    parser.add_argument('-dfw', '--det_frame_width', type=int, default=256,
+                        help='Frame height (default:84)')
+    parser.add_argument('-dfh', '--det_frame_height', type=int, default=256,
+                        help='Frame height (default:84)')
+    parser.add_argument('-fw', '--frame_width', type=int, default=128,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
                         help='Frame width (default:84)')
-    parser.add_argument('-fh', '--frame_height', type=int, default=160,
+    parser.add_argument('-fh', '--frame_height', type=int, default=128,
                         help='Frame height (default:84)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length""")
@@ -154,6 +158,11 @@ def get_args():
     # parse arguments
     args = parser.parse_args()
 
+    # frame size
+    if not args.eval:
+        args.env_frame_height = args.det_frame_height
+        args.env_frame_width = args.det_frame_width
+    
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     if args.cuda:
         if args.auto_gpu_config:

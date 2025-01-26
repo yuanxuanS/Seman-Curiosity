@@ -125,14 +125,27 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
     def _preprocess_obs(self, obs, use_seg=True):
         args = self.args
         obs = obs.transpose(1, 2, 0)
-        rgb = obs[:, :, :3]     # 256,256,3
-        depth = obs[:, :, 3:4]
-
+        
+        rgb_ = obs[:, :, :3]     # 256,256,3
+        depth_ = obs[:, :, 3:4]
+        
+        
+        if args.det_frame_height != args.env_frame_height:
+            # print(f"before resize {rgb_.shape}")
+            rgb = np.resize(rgb_, (args.det_frame_height, args.det_frame_width, rgb_.shape[-1]))
+            # print(f"after resize {rgb.shape}")
+            depth = np.resize(depth_, (args.det_frame_height, args.det_frame_width, 1))
+        else:
+            rgb = rgb_
+            depth = depth_
+        del rgb_
+        del depth_
+    
         sem_seg_pred = self._get_sem_pred(
             rgb.astype(np.uint8), use_seg=use_seg)
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
-        ds = args.env_frame_width // args.frame_width  # Downscaling factor
+        ds = args.det_frame_width // args.frame_width  # Downscaling factor
         if ds != 1:
             rgb = np.asarray(self.res(rgb.astype(np.uint8)))
             depth = depth[ds // 2::ds, ds // 2::ds]
