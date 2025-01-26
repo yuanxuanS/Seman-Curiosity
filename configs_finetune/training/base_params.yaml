@@ -1,0 +1,31 @@
+# default mdetector training params setting
+epochs: 20
+batch_size: 2   # train, pseudo labeler predict
+val_batch_size: 4
+
+transform_type: strong_image
+
+
+
+cls_loss: cross_entropy   # focal
+lr: 0.0001
+optimizer: SGD
+optimizer_params:
+  momentum: 0.9
+  nesterov: True
+  # weight_decay: 5e-4  # TODO
+
+student_test_thr: 0.5
+teacher_pred_thr: 0.7
+
+
+
+# trick
+early_stopping: 0   # TODO
+ema: False    # TODO
+teacher_momentum: 0.    # TODO
+
+
+pipeline: Pipeline  # TODO 不同pipeline
+student_model: MultiStageModel  # TODO
+consensus: vanilla

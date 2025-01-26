@@ -63,12 +63,12 @@ def get_args():
                         help='Frame height (default:84)')
     parser.add_argument('-dfh', '--det_frame_height', type=int, default=256,
                         help='Frame height (default:84)')
-    parser.add_argument('-fw', '--frame_width', type=int, default=128,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
+    parser.add_argument('-fw', '--frame_width', type=int, default=160,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
                         help='Frame width (default:84)')
-    parser.add_argument('-fh', '--frame_height', type=int, default=128,
+    parser.add_argument('-fh', '--frame_height', type=int, default=160,
                         help='Frame height (default:84)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
-                        help="""Maximum episode length""")
+                        help="""Maximum episode length, steps in an episode""")
     parser.add_argument("--task_config", type=str,
                         default="tasks/objectnav_gibson.yaml",
                         help="path to config yaml containing task information")
@@ -144,7 +144,8 @@ def get_args():
     parser.add_argument('--global_downscaling', type=int, default=2)    # full map缩放为local map大小，可能不需要？
     parser.add_argument('--vision_range', type=int, default=100)
     parser.add_argument('--map_resolution', type=int, default=5)        # 每一网格的实际大小
-    parser.add_argument('--du_scale', type=int, default=1)
+    parser.add_argument('--du_scale', type=int, default=1,
+                        help="输入policy的RGB大小 frame_w 构建地图时是否缩小")
     parser.add_argument('--map_size_cm', type=int, default=2400)
     parser.add_argument('--cat_pred_threshold', type=float, default=5.0)
     parser.add_argument('--map_pred_threshold', type=float, default=1.0)
@@ -166,7 +167,7 @@ def get_args():
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     if args.cuda:
         if args.auto_gpu_config:
-            num_gpus = 3    # torch.cuda.device_count()
+            num_gpus = 3    #torch.cuda.device_count()
             if args.total_num_scenes != "auto":
                 args.total_num_scenes = int(args.total_num_scenes)
             elif "objectnav_gibson" in args.task_config and \

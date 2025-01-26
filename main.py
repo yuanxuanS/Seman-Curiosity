@@ -132,6 +132,7 @@ def main():
             l_policy.eval()
     
         # Get local policy input
+        # local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
         local_input = obs[:, :3, ...]
         local_orientation = torch.zeros(num_scenes, 1).long()
         local_xy = torch.zeros(num_scenes, 2)

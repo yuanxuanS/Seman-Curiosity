@@ -1,7 +1,8 @@
 data/
 exps/
 exps_finetune/
-# third_parties/
+third_parties/
+outputs/
 
 # type
 *.pyc
@@ -11,3 +12,6 @@ exps_finetune/
 *.log
 *.txt
 *.json
+*.so
+*.out
+*.zip

@@ -1,12 +1,16 @@
-from .sensors_utils import _get_info_from_string, \
+from src.finetune.sensors_utils import _get_info_from_string, \
                         _get_info_from_string_withend
                         # get_sense_info
-from .sensors_data import MODALITY_SENSE      
+from src.finetune.sensors_data import MODALITY_SENSE      
 import multiprocessing
 
 import numpy as np
 import glob
 import torch
+from src.finetune.utils.train_helpers import dict_helper_collate
+from detectron2.structures.boxes import BoxMode
+import pycocotools.mask as mask_util
+
 
 def save_obs(exp_path, env_id, episode_id, observations, timestamp):
 
@@ -69,7 +73,7 @@ class SampleLoader:
         env_list = [int(_get_info_from_string(s, "env")) for s in samples_paths]
         episode_list = [int(_get_info_from_string(s, "episode")) for s in samples_paths]
         steps_list = [int(_get_info_from_string(s, "step")) for s in samples_paths]
-        mod_list = [_get_info_from_string_withend(s, "modality", next_str="id") for s in samples_paths]
+        mod_list = [_get_info_from_string(s, "modality") for s in samples_paths]
 
         for sample_path, env_id, episode_id, step, mod in zip(
             samples_paths, env_list, episode_list, steps_list, mod_list
@@ -95,7 +99,7 @@ class SampleLoader:
     
     @staticmethod
     def _load_data(path: str):
-        mod = _get_info_from_string_withend(path, "modality", next_str="id")
+        mod = _get_info_from_string(path, "modality")
         return MODALITY_SENSE[mod].load(path)
     
     def get_sample(self, env, episode, step, mod):
@@ -129,9 +133,7 @@ class SampleLoader:
             results[mod] = data
         return results
 
-def dict_helper_collate(batch):
-    elem = batch[0]
-    return [{key: d[key] for key in elem} for d in batch]
+
 
 def get_loader(
     dataset,
@@ -151,3 +153,30 @@ def get_loader(
         pin_memory=False,
         persistent_workers=False,
     )
+    
+
+def get_coco_item_dict(labels):
+    instances = []
+
+    for index, y in enumerate(labels):
+        class_labels = y.gt_classes
+
+        annotations = [
+            {
+                'bbox': y[id_instance].gt_boxes.tensor[0].tolist(),
+                'bbox_mode': BoxMode.XYXY_ABS,
+                'category_id': class_labels[id_instance],
+                'segmentation': mask_util.encode(
+                    np.asfortranarray(y.gt_masks[id_instance])
+                ),
+                # TODO introduce 'uncertainties': y[id_instance].gt_uncertainty_masks[0],
+                'iscrowd': 0,
+                'infos': y[id_instance].infos[0],
+                'gt_logits': y[id_instance].gt_logits[0],
+            }
+            for id_instance in range(len(y))
+        ]
+
+        instances.append(annotations)
+
+    return instances

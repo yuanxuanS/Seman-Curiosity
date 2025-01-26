@@ -32,7 +32,7 @@ scenes["val"] = [
     'Corozal',
     'Darden',
     'Markleeville',
-    'Wiconisco',
+    # 'Wiconisco',
 ]
 
 coco_categories = {
