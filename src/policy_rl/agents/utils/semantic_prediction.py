@@ -17,6 +17,7 @@ from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.structures.instances import Instances
 import detectron2.data.transforms as T
 
+<<<<<<< HEAD:src/policy_rl/agents/utils/semantic_prediction.py
 from .detect_utils import box_iou_calc
 from src.constants import coco_categories_mapping
 import cv2
@@ -137,6 +138,8 @@ class SemanticPredMaskRCNN():
         if device is not None:
             self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to(device)
         return pot_mp
+=======
+>>>>>>> curiosity:agents/utils/semantic_prediction.py
 
 
 def compress_sem_map(sem_map):

@@ -5,9 +5,9 @@ import torchvision.models as models
 
 import numpy as np
 
-from utils.distributions import Categorical, DiagGaussian
-from utils.model import get_grid, ChannelPool, Flatten, NNBase
-import envs.utils.depth_utils as du
+from .utils.distributions import Categorical, DiagGaussian
+from .utils.model import get_grid, ChannelPool, Flatten, NNBase
+from .envs.utils import depth_utils as du
 
 
 class Goal_Oriented_Semantic_Policy(NNBase):
@@ -186,6 +186,7 @@ class RL_Policy(nn.Module):
 
         if deterministic:
             action = dist.mode()
+            action = action.reshape(-1)
         else:
             action = dist.sample()
 

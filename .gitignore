@@ -1,6 +1,13 @@
 data/
 exps/
+<<<<<<< HEAD
 # third_parties/
+=======
+exps_finetune/
+third_parties/
+third_parties/detectron2/build/
+outputs/
+>>>>>>> curiosity
 
 # type
 *.pyc
@@ -10,3 +17,8 @@ exps/
 *.log
 *.txt
 *.json
+*.so
+*.o
+*.out
+*.zip
+

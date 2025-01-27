@@ -1,8 +1,9 @@
+
 import torch
-from model import Semantic_Mapping
+from src.policy_rl.model import Semantic_Mapping
 import numpy as np
-from src.policy_rl.arguments import get_args
-from envs import make_vec_envs
+from .arguments import get_args
+from .envs import make_vec_envs
 
 class Maps_Env:
     def __init__(self, args):
@@ -250,3 +251,4 @@ if __name__ == "__main__":
     expl_area = torch.zeros(2)
     expl_area = maps.get_explore_area(expl_area)
     print(f" explore area: {expl_area}")
+>>>>>>> curiosity:maps.py

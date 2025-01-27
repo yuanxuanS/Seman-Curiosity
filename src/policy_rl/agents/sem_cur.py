@@ -2,14 +2,18 @@ from torchvision import transforms
 import cv2
 import numpy as np
 from PIL import Image
-import agents.utils.visualization as vu
+<<<<<<< HEAD:src/policy_rl/agents/sem_cur.py
+
+from .utils import visualization as vu
+>>>>>>> curiosity:agents/sem_cur.py
 from src.constants import color_palette
 import os
 import torch
-import envs.utils.pose as pu
-from envs.habitat.curio_env import Seman_Curio_Env
-from agents.utils.semantic_prediction import SemanticPredMaskRCNN
-from finetune.dataset_utils import save_obs
+from ..envs.utils import pose as pu
+from ..envs.habitat.curio_env import Seman_Curio_Env
+from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
+from src.finetune.dataset_utils import save_obs
+import quaternion
 
 class Sem_Cur_Env_Agent(Seman_Curio_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -128,9 +132,22 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         '''
         args = self.args
         obs = obs.transpose(1, 2, 0)
-        rgb = obs[:, :, :3]     # 256,256,3
-        depth = obs[:, :, 3:4]
-
+        
+        rgb_ = obs[:, :, :3]     # 256,256,3
+        depth_ = obs[:, :, 3:4]
+        
+        
+        if args.det_frame_height != args.env_frame_height:
+            # print(f"before resize {rgb_.shape}")
+            rgb = np.resize(rgb_, (args.det_frame_height, args.det_frame_width, rgb_.shape[-1]))
+            # print(f"after resize {rgb.shape}")
+            depth = np.resize(depth_, (args.det_frame_height, args.det_frame_width, 1))
+        else:
+            rgb = rgb_
+            depth = depth_
+        del rgb_
+        del depth_
+    
         sem_seg_pred = self._get_sem_pred(
             rgb.astype(np.uint8), use_seg=use_seg)
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
@@ -141,7 +158,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             depth)
         
         
-        ds = args.env_frame_width // args.frame_width  # Downscaling factor: 放缩到policy输入大小
+        ds = args.det_frame_width // args.frame_width  # Downscaling factor: 放缩到policy输入大小
         if ds != 1:
             rgb = np.asarray(self.res(rgb.astype(np.uint8)))
             depth = depth[ds // 2::ds, ds // 2::ds]
@@ -176,14 +193,6 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             semantic_pred = np.zeros((rgb.shape[0], rgb.shape[1], 6))
             self.rgb_vis = rgb[:, :, ::-1]
         return semantic_pred
-    
-    def _get_potential_mask(self, rgb, depth):
-        self.obns_vis = self.sem_pred._get_objectness_prediction(rgb)
-        poten_mask = self.sem_pred.get_potential_mask(depth)
-        return poten_mask
-    
-    
-    
     
     def _visualize(self, inputs, mode="full"):
         

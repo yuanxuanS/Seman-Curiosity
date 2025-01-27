@@ -1,0 +1,24 @@
+defaults:
+  - detectron_args: maskrcnn
+  - training: pipeline_gt
+  - hydra: default
+
+notes: In256_testset2
+exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
+
+# data
+sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv1_eval_450w/episodes_data
+testset_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/fix_test640/data
+
+# training params
+update_target: True   # TODO
+n_iterations: 0
+
+
+# training device
+gpus: [1]   # 指定gpu: [1,2,3] 多gpu训练  
+
+base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
+
+

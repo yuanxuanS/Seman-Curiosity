@@ -1,5 +1,5 @@
 
-from arguments import get_args
+from src.policy_rl.arguments import get_args
 import torch
 import numpy as np
 import os
@@ -8,11 +8,11 @@ from collections import deque, defaultdict
 import gym
 import time
 from datetime import datetime
-from envs import make_vec_envs
-from maps import Maps_Env
-from utils.storage import GlobalRolloutStorage
-from model import RL_Policy
-import algo
+from src.policy_rl.envs import make_vec_envs
+from src.policy_rl.maps import Maps_Env
+from src.policy_rl.utils.storage import GlobalRolloutStorage
+from src.policy_rl.model import RL_Policy
+from  src.policy_rl import algo 
 import cv2
 import json
 
@@ -47,7 +47,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -68,7 +68,6 @@ def main():
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
     per_step_poten_rewards = deque(maxlen=1000)
-    per_step_poten_rewards_cnt = 0
     per_step_l_rewards_all = deque(maxlen=1000)
     
     l_value_losses = deque(maxlen=1000)
@@ -91,10 +90,11 @@ def main():
     # 5,6,7,.. : Semantic Categories
     maps = Maps_Env(args)
     local_map, local_pose = maps.update_semantic_map(obs, infos)
-
+    full_pose = maps.full_pose
+    
     if args.agent == "rl":
         # Local policy observation space
-        es = 1      # extra size: orientation
+        es = 3      # extra size: x, y, orientation
         l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
         l_action_space = envs.get_action_space()[0]
 
@@ -136,13 +136,18 @@ def main():
         # Get local policy input
         local_input = torch.concat([obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]], dim=1)
         local_orientation = torch.zeros(num_scenes, 1).long()
-
-        locs = local_pose.cpu().numpy()
+        local_xy = torch.zeros(num_scenes, 2)
+        
+        # locs = local_pose.cpu().numpy()
+        locs = full_pose.cpu().numpy()      # 使用全局pose
         for e in range(num_scenes):
             local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
-
+            local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+            
         extras = torch.zeros(num_scenes, es)
-        extras[:, 0] = local_orientation[:, 0]
+        # extras[:, 0] = local_orientation[:, 0]
+        extras[:, 2] = local_orientation[:, 0]
+        extras[:, :2] = local_xy[:]
 
         l_rollouts.obs[0].copy_(local_input)   # 
         l_rollouts.extras[0].copy_(extras)
@@ -182,10 +187,9 @@ def main():
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
-    
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
-        
+    full_pose = maps.full_pose
     
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
@@ -197,10 +201,11 @@ def main():
     
     torch.set_grad_enabled(False)
 
-    print("Starting training")
-    logging.info("Starting training")
-    print(f"training frames is {args.num_training_frames}")
-    logging.info(f"training frames is {args.num_training_frames}")
+    print("Starting running")
+    logging.info("Starting running")
+    if not args.eval:
+        print(f"training frames is {args.num_training_frames}")
+        logging.info(f"training frames is {args.num_training_frames}")
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
         
@@ -214,19 +219,21 @@ def main():
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
             poten_reward = args.poten_reward_coeff *obs[:, 4, ...].sum(-1).sum(-1) / (args.frame_height * args.frame_width)  # obs size: 128*128
 
+        # per step reward? TODO
         # add explore metric: TODO
 
         # ------------------------------------------------------------------ 
         # update local input, next state
-        locs = local_pose.cpu().numpy()
+        locs = full_pose.cpu().numpy()
         
         if args.agent == "rl":
             for e in range(num_scenes):
                 local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
-
-            local_input = torch.concat([obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]], dim=1)       # rgb
+                local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+                
+            local_input = obs[:, :3, ...]       # rgb
             extras[:, 0] = local_orientation[:, 0]
-
+            extras[:, :2] = local_xy[:]
         
         reward = l_reward - last_reward     # semantic map reward: per step increase, >0
         
@@ -288,8 +295,8 @@ def main():
                 )
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
-            l_action = np.random.randint(0, 4, num_scenes)
-
+            l_action = np.random.randint(0, 3, num_scenes)
+        # print(f"action {l_action}")
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
@@ -320,7 +327,7 @@ def main():
                 
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)
-
+        full_pose = maps.full_pose
         # ------------------------------------------------------------------
         # Training
         torch.set_grad_enabled(True)
@@ -339,8 +346,10 @@ def main():
                 l_value_losses.append(l_value_loss)
                 l_action_losses.append(l_action_loss)
                 l_dist_entropies.append(l_dist_entropy)
-            l_rollouts.after_update()       # rollout的最后一个state是下一次initial state
-
+            if args.agent == "rl":
+                l_rollouts.after_update()       # rollout的最后一个state是下一次initial state
+            elif args.agent == "random":
+                pass
         torch.set_grad_enabled(False)
 
         # ------------------------------------------------------------------
