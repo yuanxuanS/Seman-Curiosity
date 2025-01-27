@@ -168,6 +168,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         return state
     
+    
     def _preprocess_depth(self, depth, min_d, max_d):
         depth = depth[:, :, 0] * 1
 
@@ -181,6 +182,11 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         depth[mask1] = 100.0
         depth = min_d * 100.0 + depth * max_d * 100.0
         return depth
+    
+    def _get_potential_mask(self, rgb, depth):
+        self.obns_vis = self.sem_pred._get_objectness_prediction(rgb)
+        poten_mask = self.sem_pred.get_potential_mask(depth)
+        return poten_mask
     
     def _get_sem_pred(self, rgb, use_seg=True):
         if use_seg:
