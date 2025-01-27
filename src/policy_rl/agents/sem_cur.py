@@ -2,10 +2,7 @@ from torchvision import transforms
 import cv2
 import numpy as np
 from PIL import Image
-<<<<<<< HEAD:src/policy_rl/agents/sem_cur.py
-
 from .utils import visualization as vu
->>>>>>> curiosity:agents/sem_cur.py
 from src.constants import color_palette
 import os
 import torch

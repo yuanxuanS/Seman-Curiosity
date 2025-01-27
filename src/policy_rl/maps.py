@@ -251,4 +251,3 @@ if __name__ == "__main__":
     expl_area = torch.zeros(2)
     expl_area = maps.get_explore_area(expl_area)
     print(f" explore area: {expl_area}")
->>>>>>> curiosity:maps.py
