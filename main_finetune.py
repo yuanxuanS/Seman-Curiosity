@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 from src.policy_rl.arguments import get_args
 from src.finetune.datamodule import GTDataModule, HabitatDataModule
-from src.finetune.dataset import BbsgtDataset
+from src.finetune.dataset_habitat import BbsgtDataset
 from src.finetune.pipelines import Pipeline
 from src.finetune.dataset_utils import get_loader
 from src.finetune.utils.train_helpers import dict_helper_collate
