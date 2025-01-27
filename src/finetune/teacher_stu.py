@@ -90,6 +90,7 @@ class TeacherStudent(pl.LightningModule):
             self.log_batch(batch, batch_idx)
             
         # train
+        self.student_model.train()
         losses, _ = self.student_model.training_step(batch, batch_idx)
         
         # log loss:
@@ -116,13 +117,13 @@ class TeacherStudent(pl.LightningModule):
         
     def validation_step(self, batch, batch_idx):
         if self.use_teacher:
-            self.target_validation_step(batch, batch_idx)
-        self.online_validation_step(batch, batch_idx)
+            self.tch_validation_step(batch, batch_idx)
+        self.stu_validation_step(batch, batch_idx)
         
-    def target_validation_step(self):
+    def tch_validation_step(self):
         pass
     
-    def online_validation_step(self, batch, batch_idx):
+    def stu_validation_step(self, batch, batch_idx):
         self.student_model.eval()
         losses, predictions = self.student_model.validation_step(batch, batch_idx)
         

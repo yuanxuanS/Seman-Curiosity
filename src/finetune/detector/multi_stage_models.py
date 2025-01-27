@@ -45,6 +45,7 @@ class MultiStageModel(Predictor):
         self.compute_projector_loss = True
         self.compute_proposal_loss = True
         
+        self.model.roi_heads.mask_on = mask_on      # TODO 原来就是mask on
         self.save_hyperparameters()
         
     def configure_optimizers(self, *args, **kwargs):
