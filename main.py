@@ -69,6 +69,7 @@ def main():
     per_step_rewards = deque(maxlen=1000)
     per_step_poten_rewards = deque(maxlen=1000)
     per_step_l_rewards_all = deque(maxlen=1000)
+    per_step_poten_rewards_cnt = 0
     
     l_value_losses = deque(maxlen=1000)
     l_action_losses = deque(maxlen=1000)
@@ -231,7 +232,8 @@ def main():
                 local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
                 local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
                 
-            local_input = obs[:, :3, ...]       # rgb
+            # local_input = obs[:, :3, ...]       # rgb
+            local_input = torch.concat([obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]], dim=1)       # rgb
             extras[:, 0] = local_orientation[:, 0]
             extras[:, :2] = local_xy[:]
         
