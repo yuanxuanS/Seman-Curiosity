@@ -1,26 +1,43 @@
 import pytorch_lightning as pl
 from src.policy_rl.arguments import get_args
-from pipelines import GTDataModule, HabitatDataModule
+from src.finetune.datamodule import GTDataModule, HabitatDataModule
+from src.finetune.dataset import BbsgtDataset
+from src.finetune.pipelines import Pipeline
+from src.finetune.dataset_utils import get_loader
+from src.finetune.utils.train_helpers import dict_helper_collate
 
-def main():
-    args = get_args()
+from detectron2.utils.events import EventStorage
+
+import albumentations as A
+import hydra
+import torch
+import os
+os.environ["WANDB_MODE"]="offline"
+@hydra.main(config_path='./configs_finetune/', config_name='train.yaml')
+def main(cfg):
     
-    pipeline = pipelines.Pipeline(args)
+    pipeline = Pipeline(cfg)
     
     trainer = pl.Trainer(**pipeline.trainer_config)
     
-    # dataset
-    if args.training == "use_gt":
-        dm = GTDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, **args, **args.training)
-    else:
-        dm = HabitatDataModule(pipeline.pseudo_labeler, pipeline.policy_trainer, dataset_path, **args, **cfg.training)
+    for id_iteration in range(cfg.n_iterations):
+        # dataset
+        dataset_path = cfg.sample_path
+        if "use_gt" in cfg.training and cfg.training.use_gt:    # TODO?
+            dm = GTDataModule(pipeline.pseudo_labeler, dataset_path, 
+                            **cfg, **cfg.training)    # TODO
+        else:
+            dm = HabitatDataModule(pipeline.pseudo_labeler, dataset_path, 
+                                **cfg, **cfg.training)   # # TODO
 
-    # training
-    pipeline.fit_student_and_update_teacher(dm, trainer)
-    id_iteration = 0
-    checkpoint_path = f"iteration-{id_iteration}.ckpt"
-    trainer.save_checkpoint(checkpoint_path)
+        # training
     
+        pipeline.fit_student_and_update_teacher(dm, trainer)
+    
+        checkpoint_path = f"iteration-{id_iteration}.ckpt"
+        trainer.save_checkpoint(checkpoint_path)        # TODO 绝对路径还是i相对路径
+        pipeline.save_teacher_and_update_configs()
+        
     # testing
     transform = A.Compose(
         [
@@ -31,15 +48,15 @@ def main():
             label_fields=['class_labels', 'infos'],
         ),
     )
-    dataset = SinglecamEpisodeDetectionHabitatObjectsDataset(
-            os.path.join(cfg.data_base_dir, "fix_test"),
+    dataset = BbsgtDataset(
+            data_path=os.path.join(cfg.testset_path),
             transform=transform,
             remap_classes=True,
         )
 
     test_loader = get_loader(
         dataset,
-        batch_size=4,
+        batch_size=cfg.training.val_batch_size,
         shuffle=False,
         num_workers=10,
         collate_fn=dict_helper_collate,
