@@ -1,5 +1,5 @@
-scenes = {}
-scenes["train"] = [
+
+dataset_v1 = [[
     'Allensville',
     'Beechwood',
     # 'Benevolence',
@@ -25,15 +25,42 @@ scenes["train"] = [
     'Tolstoy',
     'Wainscott',
     'Woodbine',
-]
-
-scenes["val"] = [
+], [
     'Collierville',
     'Corozal',
     'Darden',
     'Markleeville',
     # 'Wiconisco',
-]
+]]
+
+dataset_v2 = [[
+    'Adairsville', 'Albertville', 'Anaheim', 'Ancor', 'Andover',
+    'Annona', 'Athens', 'Bautista', 'Bonesteel', 'Bonnie',
+    'Broseley', 'Brown', 'Browntown', 'Byers', 'Castor',
+    'Churchton', 'Clairton', 'Cottonport', 'Duarte', 'Eagan',
+    'Emmaus', 'Frankfort', 'Globe', 'Goodfield', 'Goodwine',
+    'Goodyear', 'Gravelly', 'Hainesburg', 'Hildebran', 'Hillsdale',
+    'Hominy', 'Hordville', 'Hortense', 'Irvine', 'Kemblesville', 
+    'Kobuk', 'Lynchburg', 'Maida', 'Martinville', 'Maugansville',
+    'Micanopy', 'Musicks', 'Neibert', 'Newcomb', 'Nuevo',
+    'Oyens', 'Pablo', 'Parole', 'Pearce', 'Pittsburg',
+    'Potterville', 'Readsboro', 'Rosser', 'Sands', 'Shelbiana',
+    'Silas', 'Soldier', 'Southfield', 'Springerville', 'Stilwell',
+    'Sugarville', 'Sunshine', 'Sussex', 'Sweatman', 'Swormville',
+    'Thrall', 'Timberon', 'Tokeland', 'Touhy', 'Tyler',
+    'Victorville', 'Waipahu', 'Willow', 'Wilseyville', 
+    # 'Wyldwood'
+               ],
+    [
+    'Airport', 'Arkansaw', 'Bohemia', 'Chilhowie', 'Goffs',
+    'Highspire', 'Marland', 'Neshkoro', 'Pamelia', 'Rogue',
+    'Scioto', 'Swisshome', 'Tilghmanton', 'Westfield', 'Winooski'
+              ]]
+scenes = {}
+scenes["train"] = dataset_v1[0]
+
+scenes["val"] = dataset_v1[1]
+
 
 coco_categories = {
     "chair": 0,

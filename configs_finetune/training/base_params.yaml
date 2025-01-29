@@ -1,13 +1,13 @@
 # default mdetector training params setting
-epochs: 20
-batch_size: 2   # train, pseudo labeler predict
+epochs: 10
+batch_size: 16   # train, pseudo labeler predict
 val_batch_size: 4
 
 transform_type: strong_image
 
 
 
-cls_loss: cross_entropy   # focal
+cls_loss: focal # cross_entropy   # 
 lr: 0.0001
 optimizer: SGD
 optimizer_params:

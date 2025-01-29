@@ -63,9 +63,9 @@ def get_args():
                         help='Frame height (default:84)')
     parser.add_argument('-dfh', '--det_frame_height', type=int, default=256,
                         help='Frame height (default:84)')
-    parser.add_argument('-fw', '--frame_width', type=int, default=160,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
+    parser.add_argument('-fw', '--frame_width', type=int, default=128,      # policy输入大小, 在输入前将env_frame_width变为frame_width大小
                         help='Frame width (default:84)')
-    parser.add_argument('-fh', '--frame_height', type=int, default=160,
+    parser.add_argument('-fh', '--frame_height', type=int, default=128,
                         help='Frame height (default:84)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length, steps in an episode""")
