@@ -101,7 +101,7 @@ class Predictor(pl.LightningModule):
                 self.model.roi_heads.mask_head.predictor.bias = mask_bias
                 self.model.roi_heads.mask_head.predictor.num_classes = len(classes_idxs)
 
-    def set_head_wrapper(self, head_class: MinimalPredictorWrapper):
+    def set_head_wrapper(self, head_class: MinimalPredictorWrapper, **kwargs):
         """We implement custom ROIHead for box-predictor (e.g., heads with different self).
         This function setup the wrapper for the current head
 

@@ -81,7 +81,11 @@ class BoxPredictorWrapper(MinimalPredictorWrapper):
             self.focal_loss_alpha = kwargs['focal_loss_alpha']
             self.focal_loss_gamma = kwargs['focal_loss_gamma']
             self.cls_loss = lambda x, y, reduction: 10* loss_func(  # noqa: E731
-                x, y, reduce=False, reduction=reduction
+                x, y, 
+                # reduce=False, 
+                reduction=reduction,
+                alpha=self.focal_loss_alpha,
+                gamma=self.focal_loss_gamma,
             )
         else:
             self.cls_loss = lambda x, y, reduction: loss_func(  

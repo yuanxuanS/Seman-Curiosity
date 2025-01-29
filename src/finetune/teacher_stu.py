@@ -51,7 +51,7 @@ class TeacherStudent(pl.LightningModule):
             "semantic_map": SemanticMapConsensusLabeler,
         }
         self.teacher_model: ConsensusLabeler = switch[consensus](
-            model=models.MultiStageModel(detectron_args, prune=True),
+            model=models.MultiStageModel(detectron_args, prune=True, **kwargs),
             temperature=temperature,
             thr=teacher_pred_thr,
             solution=solution,

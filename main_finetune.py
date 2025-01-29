@@ -20,6 +20,13 @@ def main(cfg):
     
     trainer = pl.Trainer(**pipeline.trainer_config)
     
+    if "checkpoint_path" in cfg and cfg.checkpoint_path is not None:
+        ckpt_path = cfg.checkpoint_path
+        
+        if os.path.exists(ckpt_path):
+            print(f"load from {ckpt_path}")
+            pipeline.teacher_student = pipeline.teacher_student.load_from_checkpoint(ckpt_path)
+                
     for id_iteration in range(cfg.n_iterations):
         # dataset
         dataset_path = cfg.sample_path
@@ -62,6 +69,7 @@ def main(cfg):
         collate_fn=dict_helper_collate,
     )
 
+    
     with EventStorage():
         with torch.no_grad():
             trainer.test(pipeline.teacher_student, test_loader)
