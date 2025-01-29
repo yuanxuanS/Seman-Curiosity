@@ -163,7 +163,7 @@ def main():
         l_action = l_action.cpu().numpy()
     
     elif args.agent == "random":
-        l_action = np.random.randint(0, 4, num_scenes)
+        l_action = np.random.randint(0, 3, num_scenes)
     
     # for visualize
     full_map = maps.full_map

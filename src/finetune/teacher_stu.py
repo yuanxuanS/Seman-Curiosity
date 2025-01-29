@@ -168,7 +168,7 @@ class TeacherStudent(pl.LightningModule):
         ]
         self.online_val_map_metric.update(pred, gt)
         
-    def validation_epoch_end(self):
+    def validation_epoch_end(self, outputs):
         # self.online_val_map_metric = self.online_val_map_metric.to(self.device_id)
         results = self.online_val_map_metric.compute()
         for k in results.keys():
@@ -181,7 +181,7 @@ class TeacherStudent(pl.LightningModule):
                 batch_size=self.batch_size,
             )
         self.online_val_map_metric = MAP(class_metrics=True)
-        # self.online_val_map_metric.to(self.device)
+        self.online_val_map_metric.to(self.device)
     
     def test_step(self, batch, batch_idx):
         self.student_model.eval()
