@@ -92,7 +92,7 @@ def construct_envs(args):
             print("Thread {}: {}".format(i, config_env.DATASET.CONTENT_SCENES))
 
         if i < args.num_processes_on_first_gpu:
-            gpu_id = 1
+            gpu_id = 0  #1
         else:
             gpu_id = int((i - args.num_processes_on_first_gpu)
                          // args.num_processes_per_gpu) + args.sim_gpu_id       # 其他要分配的gpu的开始id
