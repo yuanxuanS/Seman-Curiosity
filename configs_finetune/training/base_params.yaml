@@ -1,6 +1,6 @@
 # default mdetector training params setting
 epochs: 10
-batch_size: 16   # train, pseudo labeler predict
+batch_size: 8   # train, pseudo labeler predict
 val_batch_size: 4
 
 transform_type: strong_image

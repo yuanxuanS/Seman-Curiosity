@@ -57,9 +57,9 @@ dataset_v2 = [[
     'Scioto', 'Swisshome', 'Tilghmanton', 'Westfield', 'Winooski'
               ]]
 scenes = {}
-scenes["train"] = dataset_v1[0]
+scenes["train"] = dataset_v2[0]
 
-scenes["val"] = dataset_v1[1]
+scenes["val"] = dataset_v2[1]
 
 
 coco_categories = {
