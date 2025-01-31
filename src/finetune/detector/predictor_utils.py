@@ -152,7 +152,7 @@ class Predictor(pl.LightningModule):
         """
         Normalize, pad and batch the input images.
         """
-        images = [x["image"] for x in batched_inputs]
+        images = [x["image"][[2,1,0], :, :] for x in batched_inputs]
         images = [(x - self.model.pixel_mean) / self.model.pixel_std for x in images]
         images = ImageList.from_tensors(images, self.model.backbone.size_divisibility)
         return images
