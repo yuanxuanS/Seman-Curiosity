@@ -5,6 +5,7 @@ from src.finetune.dataset_habitat import BbsgtDataset
 from src.finetune.pipelines import Pipeline
 from src.finetune.dataset_utils import get_loader
 from src.finetune.utils.train_helpers import dict_helper_collate
+from src.finetune.dataset_utils import get_coco_item_dict, SampleLoader
 
 from detectron2.utils.events import EventStorage
 
@@ -55,12 +56,19 @@ def main(cfg):
             label_fields=['class_labels', 'infos'],
         ),
     )
-    dataset = BbsgtDataset(
-            data_path=os.path.join(cfg.testset_path),
-            transform=transform,
-            remap_classes=True,
-        )
+    sampler = SampleLoader(cfg.testset_path)
+    inputs = sampler.get_env_episode_and_steps_dense_list()     
+    filter_empty_instances = []
+    for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
+        instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
 
+        filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+    dataset = BbsgtDataset(
+            data_path=None,
+            sampler=sampler,
+            index_mask=filter_empty_instances,      # 仅保留有mask的
+            transform=transform,
+        )
     test_loader = get_loader(
         dataset,
         batch_size=cfg.training.val_batch_size,

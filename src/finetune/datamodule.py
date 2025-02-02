@@ -170,8 +170,20 @@ class HabitatDataModule(pl.LightningDataModule):
             ),
         )
 
+        sampler = SampleLoader(self.testset_path)
+        
+        inputs = sampler.get_env_episode_and_steps_dense_list()     
+        filter_empty_instances = []
+        
+        for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
+            instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
+
+            filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+
         dataset = BbsgtDataset(
-            data_path=self.testset_path,
+            data_path=None,
+            sampler=sampler,
+            index_mask=filter_empty_instances,      # 仅保留有mask的
             transform=transform,
         )
         return dataset
