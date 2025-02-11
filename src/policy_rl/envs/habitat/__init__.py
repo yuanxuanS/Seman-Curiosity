@@ -54,9 +54,9 @@ def construct_envs(args):
     basic_config.defrost()
     basic_config.DATASET.SPLIT = args.split
     basic_config.DATASET.DATA_PATH = \
-        basic_config.DATASET.DATA_PATH.replace("v1", args.version)
+        basic_config.DATASET.DATA_PATH.replace("v3", args.version)
     basic_config.DATASET.EPISODES_DIR = \
-        basic_config.DATASET.EPISODES_DIR.replace("v1", args.version)
+        basic_config.DATASET.EPISODES_DIR.replace("v3", args.version)
     basic_config.freeze()
 
     scenes = basic_config.DATASET.CONTENT_SCENES
@@ -131,9 +131,9 @@ def construct_envs(args):
         config_env.SIMULATOR.TURN_ANGLE = args.turn_angle
         config_env.DATASET.SPLIT = args.split
         config_env.DATASET.DATA_PATH = \
-            config_env.DATASET.DATA_PATH.replace("v1", args.version)
+            config_env.DATASET.DATA_PATH.replace("v3", args.version)
         config_env.DATASET.EPISODES_DIR = \
-            config_env.DATASET.EPISODES_DIR.replace("v1", args.version)
+            config_env.DATASET.EPISODES_DIR.replace("v3", args.version)
 
         config_env.freeze()
         env_configs.append(config_env)

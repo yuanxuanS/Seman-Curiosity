@@ -43,10 +43,10 @@ TASK:
 DATASET:
   TYPE: PointNav-v1
   SPLIT: train
-  # DATA_PATH: "data2/datasets/objectnav/gibson/v3/{split}/{split}.json.gz"
-  # EPISODES_DIR: "data2/datasets/objectnav/gibson/v3/{split}/"
-  DATA_PATH: "data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
-  EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
+  DATA_PATH: "data2/datasets/objectnav/gibson/v3/{split}/{split}.json.gz"
+  EPISODES_DIR: "data2/datasets/objectnav/gibson/v3/{split}/"
+  # DATA_PATH: "data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
+  # EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
   SCENES_DIR: "data/scene_datasets/"
   # CONTENT_SCENES: [
   #   "Allensville.glb", 

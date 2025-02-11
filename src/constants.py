@@ -44,11 +44,11 @@ dataset_v2 = [[
     'Kobuk', 'Lynchburg', 'Maida', 'Martinville', 'Maugansville',
     'Micanopy', 'Musicks', 'Neibert', 'Newcomb', 'Nuevo',
     'Oyens', 'Pablo', 'Parole', 'Pearce', 'Pittsburg',
-    'Potterville', 'Readsboro', 'Rosser', 'Sands', 'Shelbiana',
-    'Silas', 'Soldier', 'Southfield', 'Springerville', 'Stilwell',
-    'Sugarville', 'Sunshine', 'Sussex', 'Sweatman', 'Swormville',
-    'Thrall', 'Timberon', 'Tokeland', 'Touhy', 'Tyler',
-    'Victorville', 'Waipahu', 'Willow', 'Wilseyville', 
+    # 'Potterville', 'Readsboro', 'Rosser', 'Sands', 'Shelbiana',
+    # 'Silas', 'Soldier', 'Southfield', 'Springerville', 'Stilwell',
+    # 'Sugarville', 'Sunshine', 'Sussex', 'Sweatman', 'Swormville',
+    # 'Thrall', 'Timberon', 'Tokeland', 'Touhy', 'Tyler',
+    # 'Victorville', 'Waipahu', 'Willow', 'Wilseyville', 
     # 'Wyldwood'
                ],
     [
@@ -57,9 +57,9 @@ dataset_v2 = [[
     'Scioto', 'Swisshome', 'Tilghmanton', 'Westfield', 'Winooski'
               ]]
 scenes = {}
-scenes["train"] = dataset_v1[0]
+scenes["train"] = dataset_v2[0]
 
-scenes["val"] = dataset_v1[1]
+scenes["val"] = dataset_v2[1]
 
 
 coco_categories = {
