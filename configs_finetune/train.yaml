@@ -3,11 +3,12 @@ defaults:
   - training: pipeline_gt
   - hydra: default
 
-notes: obnsSamples
+notes: zone
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
 
 # data
-sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random_init_sample/episodes_data
+sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_zone_eval_best/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random_init_sample/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random_sample/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/episodes_data
