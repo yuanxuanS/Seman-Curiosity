@@ -13,9 +13,18 @@ import albumentations as A
 import hydra
 import torch
 import os
+import random
+import numpy as np
+
 os.environ["WANDB_MODE"]="offline"
 @hydra.main(config_path='./configs_finetune/', config_name='train.yaml')
 def main(cfg):
+    seed = 1234
+    pl.seed_everything(seed, workers=True)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
     
     pipeline = Pipeline(cfg)
     
