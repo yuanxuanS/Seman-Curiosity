@@ -20,11 +20,11 @@ testset_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/fix_tes
 # training params
 update_target: True   # TODO
 n_iterations: 1
-checkpoint_path: 
+checkpoint_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-02-14/02-14-11-28-04_gt_consensus_vanilla_bs_8_notes_zone/iteration-0.ckpt
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-01-29/01-29-16-33-01_gt_consensus_vanilla_bs_16_notes_In640/checkpoints/epoch=09.ckpt
 
 # training device
-gpus: [3,]   # 指定gpu: [1,2,3] 多gpu训练  
+gpus: [2,]   # 指定gpu: [1,2,3] 多gpu训练  
 
 base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
 
