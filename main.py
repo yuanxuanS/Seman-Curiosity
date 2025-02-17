@@ -215,7 +215,7 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+            l_reward = args.reward_coeff* maps.get_semantic_difference()
 
         # per step reward? TODO
         # add explore metric: TODO
