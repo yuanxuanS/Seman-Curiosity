@@ -50,6 +50,8 @@ class Maps_Env:
         # allpose
         self.pose_inputs = np.zeros((self.num_scenes, 7))   # pose in full map, local bdry in full map
         # initialize
+        self.last_map = [None] * num_scenes
+        self.this_map = [None] * num_scenes
         self._init_map_and_pose()
 
     def get_all_pose(self):
@@ -87,7 +89,8 @@ class Maps_Env:
                                     self.lmb[e, 2]:self.lmb[e, 3]]
             self.local_pose[e] = self.full_pose[e] - \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
-    
+            self.last_map[e] = self.local_map[e]
+            
     def _init_map_and_pose_for_env(self, e):
         self.full_map[e].fill_(0.)
         self.full_pose[e].fill_(0.)
@@ -111,6 +114,8 @@ class Maps_Env:
         self.local_map[e] = self.full_map[e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]]
         self.local_pose[e] = self.full_pose[e] - \
             torch.from_numpy(self.origins[e]).to(self.device).float()
+        
+        self.last_map[e] = self.local_map[e]
         
     def reset_map_and_pose(self):
         for e in range(self.num_scenes):
@@ -194,6 +199,9 @@ class Maps_Env:
         # agent当前观察到的自我中心的map
         _, local_map, _, local_pose = \
             self.semantic_map(obs, poses, self.local_map, self.local_pose)
+        #
+        self.last_map = self.local_map
+        self.this_map = local_map
         
         # update 2-3: curr and past maps
         locs = local_pose.cpu().numpy()
@@ -222,6 +230,14 @@ class Maps_Env:
 
         return sum_res
     
+    def get_semantic_difference(self):
+        # difference of local map
+        this_map_indicator = (self.this_map > 0.).float()
+        last_map_indicator = (self.last_map > 0.).float()
+        
+        diff = this_map_indicator - last_map_indicator  # env, cls+4, w, h
+        return diff[:, 4:9, ...].sum(-1).sum(-1).sum(-1)  # env, 
+        
     def get_explore_area(self, explo_area):
         '''
         explo_area: num_scenes, 

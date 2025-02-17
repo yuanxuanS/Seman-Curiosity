@@ -48,7 +48,7 @@ def get_training_params(cfg):
 
     # save model
     ckpt_cb = ModelCheckpoint(      
-        monitor="val_map_50_online",
+        monitor="val_map_50_epoch",
         mode='max',
         save_last=True,
         verbose=True,

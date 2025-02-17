@@ -249,7 +249,7 @@ class Semantic_Mapping(nn.Module):
         self.init_grid = torch.zeros(
             args.num_processes, 1 + self.num_sem_categories, vr, vr,
             self.max_height - self.min_height
-        ).float().to(self.device)
+        ).float().to(self.device)       # cls+1, h, w, z
         self.feat = torch.ones(
             args.num_processes, 1 + self.num_sem_categories,
             self.screen_h // self.du_scale * self.screen_w // self.du_scale
@@ -279,23 +279,23 @@ class Semantic_Mapping(nn.Module):
         xy_resolution = self.resolution
         z_resolution = self.z_resolution
         vision_range = self.vision_range
-        XYZ_cm_std = agent_view_centered_t.float()
+        XYZ_cm_std = agent_view_centered_t.float()      # 每个像素点的xyz坐标。env, h,w,3 
         XYZ_cm_std[..., :2] = (XYZ_cm_std[..., :2] / xy_resolution)
         XYZ_cm_std[..., :2] = (XYZ_cm_std[..., :2] -
                                vision_range // 2.) / vision_range * 2.
         XYZ_cm_std[..., 2] = XYZ_cm_std[..., 2] / z_resolution
         XYZ_cm_std[..., 2] = (XYZ_cm_std[..., 2] -
                               (max_h + min_h) // 2.) / (max_h - min_h) * 2.
-        self.feat[:, 1:, :] = nn.AvgPool2d(self.du_scale)(
-            obs[:, 5:, :, :]
-        ).view(bs, c - 5, h // self.du_scale * w // self.du_scale)
+        self.feat[:, 1:, :] = nn.AvgPool2d(self.du_scale)(      # feat的0通道都是1
+            obs[:, 4:, :, :]
+        ).view(bs, c - 4, h // self.du_scale * w // self.du_scale)
 
         XYZ_cm_std = XYZ_cm_std.permute(0, 3, 1, 2)
         XYZ_cm_std = XYZ_cm_std.view(XYZ_cm_std.shape[0],
                                      XYZ_cm_std.shape[1],
                                      XYZ_cm_std.shape[2] * XYZ_cm_std.shape[3])
 
-        voxels = du.splat_feat_nd(
+        voxels = du.splat_feat_nd(      # env, num_sem, range_h, range_w, height
             self.init_grid * 0., self.feat, XYZ_cm_std).transpose(2, 3)
 
         min_z = int(25 / z_resolution - min_h)
@@ -304,7 +304,11 @@ class Semantic_Mapping(nn.Module):
         # get explore and obstable map
         agent_height_proj = voxels[..., min_z:max_z].sum(4)
         all_height_proj = voxels.sum(4)
-
+        # seman_ = voxels[:, 1:].max(1)
+        # seman_cls_value = seman_.values       # env, cls+1, h, w, z
+        # seman_cls = seman_.indices
+        # seman_cls[seman_cls_value > 0] += 1     # 避免和free space混合，类别idx从1开始
+        
         fp_map_pred = agent_height_proj[:, 0:1, :, :]   # obstacle map
         fp_exp_pred = all_height_proj[:, 0:1, :, :]     # explore map
         fp_map_pred = fp_map_pred / self.map_pred_threshold
@@ -365,12 +369,13 @@ class Semantic_Mapping(nn.Module):
         translated = F.grid_sample(rotated, trans_mat, align_corners=True)
 
         # update map with last map
-        maps2 = torch.cat((maps_last.unsqueeze(1), translated.unsqueeze(1)), 1)
+        # maps2 = torch.cat((maps_last.unsqueeze(1), translated.unsqueeze(1)), 1)
 
-        map_pred, _ = torch.max(maps2, 1)
+        # map_pred, _ = torch.max(maps2, 1)
+        map_pred = translated
 
         return fp_map_pred, map_pred, pose_pred, current_poses
-
+    
 
 if __name__ == "__main__":
     import gym

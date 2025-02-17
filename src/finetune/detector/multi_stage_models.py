@@ -31,7 +31,8 @@ class MultiStageModel(Predictor):
         assert prune == True, "must prune detection model"
         if prune:  # Prune classifier instead of initializing a new one
             self.reinit_head(BBSense.CLASSES)
-        self.set_head_wrapper(head_cls)
+        self.set_head_wrapper(head_cls, focal_loss_alpha=kwargs['training'].focal_loss_alpha if 'focal_loss_alpha' in kwargs['training'] else None,
+                                         focal_loss_gamma=kwargs['training'].focal_loss_gamma if 'focal_loss_gamma' in kwargs['training'] else None)
         
         self.lr = lr
         self.optimizer = optimizer
@@ -252,5 +253,7 @@ class SoftMultiStageModel(MultiStageModel):
                 cls_loss=kwargs.get('cls_loss', 'cross_entropy'),
                 temperature=kwargs.get('temperature', 1.0),
                 alpha=kwargs.get('alpha', 0.5),
+                focal_loss_alpha=kwargs['training'].get('focal_loss_alpha', 0.25),
+                focal_loss_gamma=kwargs['training'].get('focal_loss_gamma', 2.0)
             )
         super().__init__(*args, **kwargs)

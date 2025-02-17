@@ -135,6 +135,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         
         
         if args.det_frame_height != args.env_frame_height:
+            # print(f"before resize {rgb_.shape}")
             rgb = cv2.resize(rgb_, (args.det_frame_height, args.det_frame_width))   #, rgb_.shape[-1]))
             # print(f"after resize {rgb.shape}")
             depth = cv2.resize(depth_, (args.det_frame_height, args.det_frame_width))[..., None] #, 1))

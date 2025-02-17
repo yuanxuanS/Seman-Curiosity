@@ -209,10 +209,10 @@ def splat_feat_nd(init_grid, feat, coords):
     """
     Args:
         init_grid: B X nF X W X H X D X ..
-        feat: B X nF X nPt
+        feat: B X nF X nPt      feat为RGB分割物体的0, 1 mask; nF是特征维度=语义类别数+1, nPt为像素个数
         coords: B X nDims X nPt in [-1, 1]
     Returns:
-        grid: B X nF X W X H X D X ..
+        grid: B X nF X W X H X D X ..       返回每个特征/语义通道的voxel值, 值为整数
     
     点云特征到规则网格 grid 的稀疏映射：
         归一化点云坐标：将点云坐标映射到网格范围。
@@ -221,22 +221,21 @@ def splat_feat_nd(init_grid, feat, coords):
         高效实现：通过张量操作和 scatter_add_ 函数实现并行化，避免逐点循环计算。
     """
     wts_dim = []
-    pos_dim = []
-    grid_dims = init_grid.shape[2:]     # 网格范围
+    pos_dim = []    # len=维度=3， [[取floor的voxel索引， 取ceil后的voxel索引], ]
+    grid_dims = init_grid.shape[2:]     # voxel范围，range_h, range_w, height
 
     B = init_grid.shape[0]
     F = init_grid.shape[1]
 
     n_dims = len(grid_dims)
 
-    grid_flat = init_grid.view(B, F, -1)        # 网格, 每个点展平为一维
+    grid_flat = init_grid.view(B, F, -1)        # 网格, 每个特征/类别的像素点展平为一维
 
-    # 计算每个点的特征在voxelize的网格上的权重： 
+    # 计算每个点在voxelize每个网格上的权重： 
     #   每个点有ndim*2种情况，ndim需要根据位置坐标计算权重，
     #   2是坐标靠近floor和ceil两种不同权重计算方式
-    #   c—— w-[0,1], h-...., d-...
-    for d in range(n_dims):
-        # 归一化坐标到网格范围 [0, grid_dims[d]]
+    for d in range(n_dims):     # range_h, range_w, height每个维度上
+        # 将坐标rescale到网格范围 [0, grid_dims[d]]
         pos = coords[:, [d], :] * grid_dims[d] / 2 + grid_dims[d] / 2       
         pos_d = []
         wts_d = []
@@ -247,7 +246,7 @@ def splat_feat_nd(init_grid, feat, coords):
             safe_ix = (pos_ix > 0) & (pos_ix < grid_dims[d])        # 只取在网格范围内的点
             safe_ix = safe_ix.type(pos.dtype)
 
-            wts_ix = 1 - torch.abs(pos - pos_ix)        # b, nPt, 根据位置计算权重， 如果floor前后差大，即偏离floor远，权重小
+            wts_ix = 1 - torch.abs(pos - pos_ix)        # b, nPt, 权重为距离整数索引的浮点值
 
             wts_ix = wts_ix * safe_ix
             pos_ix = pos_ix * safe_ix
@@ -255,22 +254,23 @@ def splat_feat_nd(init_grid, feat, coords):
             pos_d.append(pos_ix)
             wts_d.append(wts_ix)
 
-        pos_dim.append(pos_d)   # 坐标在每个维度上来说，坐标值floor后的权重；ndim，2(0,1两种情况)，b, nPt
+        pos_dim.append(pos_d)   
         wts_dim.append(wts_d)
 
     l_ix = [[0, 1] for d in range(n_dims)]
 
-    # 将特征根据权重赋值给网格
-    # 每种权重情况都要乘一遍权重
-    for ix_d in itertools.product(*l_ix):       # 遍历所有可能的组合， 例如，对于 n_dims = 3，ix_d 可能是 (0, 0, 0), (0, 0, 1), (0, 1, 0), ..., (1, 1, 1)
+    # 遍历所有可能的组合， 例如，对于 n_dims = 3，ix_d 可能是 (0, 0, 0), (0, 0, 1), (0, 1, 0), ..., (1, 1, 1)
+    # 值 = 权重 * 特征
+    # 每种情况的权重都要取一遍；加在voxel：grid_flat上； 最后的某个特征/类别 通道的值代表属于该类别的概率
+    for ix_d in itertools.product(*l_ix):       
         wts = torch.ones_like(wts_dim[0][0])
         index = torch.zeros_like(wts_dim[0][0])
         for d in range(n_dims):
-            index = index * grid_dims[d] + pos_dim[d][ix_d[d]]  # pos_dim中对应维度，对应靠近0 or 1 的整数坐标； 每一维的size坐标相乘，因为voxel索引是所有维度展开的，从0开始， w*h*d结束
+            index = index * grid_dims[d] + pos_dim[d][ix_d[d]]  # pos_dim，对应靠近0 or 1 的voxel坐标； 每一维的size坐标相乘，因为voxel索引是所有维度展开的，从0开始， w*h*d结束
             wts = wts * wts_dim[d][ix_d[d]] # 该整数坐标对应的权重， 多个权重连乘
 
         index = index.long()        # 在
-        grid_flat.scatter_add_(2, index.expand(-1, F, -1), feat * wts)  # index: b, 17, num_coord; wts: b,1,num_coord; feat: b, 17, num_coord; 将coord的点的特征赋值给对应voxel:根据点坐标对特征加权；对每个点云，特征加权给靠近floor，再加权给靠近ceil
+        grid_flat.scatter_add_(2, index.expand(-1, F, -1), feat * wts)  # feat: env,sem+1, ...; wts: env, 1, ...; 每个特征/语义通道都乘同样的权重
         grid_flat = torch.round(grid_flat)
-
+    # 最后返回的值为整数; 第0通道， feat*wts时，feat都为1， 但是wts为浮点数；round(feat*wts)可能得到0；代表有obstacle的概率：
     return grid_flat.view(init_grid.shape)

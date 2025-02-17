@@ -101,7 +101,7 @@ class Predictor(pl.LightningModule):
                 self.model.roi_heads.mask_head.predictor.bias = mask_bias
                 self.model.roi_heads.mask_head.predictor.num_classes = len(classes_idxs)
 
-    def set_head_wrapper(self, head_class: MinimalPredictorWrapper):
+    def set_head_wrapper(self, head_class: MinimalPredictorWrapper, **kwargs):
         """We implement custom ROIHead for box-predictor (e.g., heads with different self).
         This function setup the wrapper for the current head
 
@@ -152,7 +152,8 @@ class Predictor(pl.LightningModule):
         """
         Normalize, pad and batch the input images.
         """
-        images = [x["image"][[2,1,0], :, :] for x in batched_inputs]
+        # images = [x["image"][[2,1,0], :, :] for x in batched_inputs]    # TO bgr
+        images = [x["image"] for x in batched_inputs]    # TO bgr
         images = [(x - self.model.pixel_mean) / self.model.pixel_std for x in images]
         images = ImageList.from_tensors(images, self.model.backbone.size_divisibility)
         return images

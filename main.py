@@ -47,7 +47,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -165,7 +165,7 @@ def main():
         l_action = l_action.cpu().numpy()
     
     elif args.agent == "random":
-        l_action = np.random.randint(0, 4, num_scenes)
+        l_action = np.random.randint(0, 3, num_scenes)
     
     # for visualize
     full_map = maps.full_map
@@ -217,7 +217,7 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+            l_reward = args.reward_coeff* maps.get_semantic_difference()
             poten_reward = args.poten_reward_coeff *obs[:, 4, ...].sum(-1).sum(-1) / (args.frame_height * args.frame_width)  # obs size: 128*128
 
         # per step reward? TODO

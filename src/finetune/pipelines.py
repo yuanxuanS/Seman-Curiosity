@@ -35,6 +35,7 @@ class Pipeline:
         
         with EventStorage():
             if checkpoint_path:
+                print(f"load ckpt: {checkpoint_path}")
                 trainer.fit(self.teacher_student, dataloader, ckpt_path=checkpoint_path)
             else:
                 trainer.fit(self.teacher_student, dataloader)
@@ -48,6 +49,6 @@ class Pipeline:
         self.pseudo_labeler.to("cpu")
         self.trainer_config['max_epochs'] += self.epochs_per_iteration
         # TODO
-        if self.cfg.training['update_target']: 
+        if self.cfg.update_target: 
             if  not self.cfg.training.ema:
                 self.pseudo_labeler.reinit(self.teacher_student.student_model)

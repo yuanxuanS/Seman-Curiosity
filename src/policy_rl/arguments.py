@@ -185,8 +185,8 @@ def get_args():
             # GPU Memory required for the SemExp model:         # TODO
             #       0.8 + 0.4 * args.total_num_scenes (GB)
             # GPU Memory required per thread: 2.6 (GB) _ > 2.4
-            m_per_thread = 2.6
-            min_memory_required =max(0.8 + 0.4 * args.total_num_scenes, m_per_thread)
+            m_per_thread = 2.4
+            min_memory_required =max(0.6 + 0.4 * args.total_num_scenes, m_per_thread)
             # max(0.8 + 0.4 * args.total_num_scenes, m_per_thread)   # TODO
             # Automatically configure number of training threads based on
             # number of GPUs available and GPU memory size
