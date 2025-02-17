@@ -48,8 +48,10 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         args = self.args
 
         obs, info = super().reset()
-        obs = self._preprocess_obs(obs)
+        obs, poten_cnt = self._preprocess_obs(obs)
 
+        info['potential_num'] = poten_cnt
+        
         self.obs_shape = obs.shape
 
         # Episode initializations
@@ -112,10 +114,12 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         
         
         # preprocess obs
-        obs = self._preprocess_obs(obs) 
+        obs, poten_cnt = self._preprocess_obs(obs) 
         self.last_action = action['action']     
         self.obs = obs
+        info['potential_num'] = poten_cnt
         self.info = info
+        
 
 
         return obs, 0., done, info
@@ -150,7 +154,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
         # potential mask
-        potential_mask = self._get_potential_mask(      # w,h,1
+        potential_mask, potential_cnt = self._get_potential_mask(      # w,h,1
             rgb.astype(np.uint8), 
             depth)
         
@@ -166,7 +170,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         state = np.concatenate((rgb, depth, potential_mask, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)
 
-        return state
+        return state, potential_cnt
     
     
     def _preprocess_depth(self, depth, min_d, max_d):
@@ -185,8 +189,8 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
     
     def _get_potential_mask(self, rgb, depth):
         self.obns_vis = self.sem_pred._get_objectness_prediction(rgb)
-        poten_mask = self.sem_pred.get_potential_mask(depth)
-        return poten_mask
+        poten_mask, poten_cnt = self.sem_pred.get_potential_mask(depth)
+        return poten_mask, poten_cnt
     
     def _get_sem_pred(self, rgb, use_seg=True):
         if use_seg:

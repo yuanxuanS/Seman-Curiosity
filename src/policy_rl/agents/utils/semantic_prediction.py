@@ -85,7 +85,7 @@ class SemanticPredMaskRCNN():
         
         self.obns_instances[0]['instances'] = self.obns_instances[0]['instances'].to("cpu")
         
-        
+        cnt = 0
         
         width, height = self.obns_instances[0]['instances'].image_size
         pot_mp = np.zeros((height, width, 1))
@@ -96,7 +96,7 @@ class SemanticPredMaskRCNN():
         # no objectness prediction
         if not len(objectness_boxes):  
             # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
-            return pot_mp
+            return pot_mp, cnt
             
         for j in range(len(objectness_boxes)):
             boxes_ = v._convert_boxes(objectness_boxes[j]).reshape(4,) # convert from 1*4 to 4*1
@@ -120,6 +120,7 @@ class SemanticPredMaskRCNN():
                 if (iou > 0.5).any():   # detected by maskrcnn as well, remove it
                     continue
             print("has far object")
+            cnt += 1
             pot_mp = v.draw_patch(box_coord=boxes_, color='white')
         
         
@@ -136,7 +137,7 @@ class SemanticPredMaskRCNN():
                 
         if device is not None:
             self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to(device)
-        return pot_mp
+        return pot_mp, cnt
 
 
 def compress_sem_map(sem_map):

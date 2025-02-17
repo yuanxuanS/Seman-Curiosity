@@ -218,7 +218,7 @@ def main():
             l_reward = last_reward
         else:
             l_reward = args.reward_coeff* maps.get_semantic_difference()
-            poten_reward = (obs[:, 4, ...].sum(-1).sum(-1) > 0.).float()  # obs size: 128*128
+            poten_reward = torch.tensor([info["potential_num"] for info in infos], dtype=torch.float, device=l_reward.device)
             # poten_reward = args.poten_reward_coeff *obs[:, 4, ...].sum(-1).sum(-1) / (args.frame_height * args.frame_width)  # obs size: 128*128
 
         # per step reward? TODO
