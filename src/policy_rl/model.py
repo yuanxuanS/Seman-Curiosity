@@ -287,8 +287,8 @@ class Semantic_Mapping(nn.Module):
         XYZ_cm_std[..., 2] = (XYZ_cm_std[..., 2] -
                               (max_h + min_h) // 2.) / (max_h - min_h) * 2.
         self.feat[:, 1:, :] = nn.AvgPool2d(self.du_scale)(      # feat的0通道都是1
-            obs[:, 4:, :, :]
-        ).view(bs, c - 4, h // self.du_scale * w // self.du_scale)
+            obs[:, 5:, :, :]
+        ).view(bs, c - 5, h // self.du_scale * w // self.du_scale)
 
         XYZ_cm_std = XYZ_cm_std.permute(0, 3, 1, 2)
         XYZ_cm_std = XYZ_cm_std.view(XYZ_cm_std.shape[0],
