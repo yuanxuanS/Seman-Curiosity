@@ -31,9 +31,14 @@ class Frontier:
         self.count_forward_actions = None
         
         self.goals = None
+        self.short_time_goals = None
         self.replan = None
-        self.counts = None
+        self.counts = None      # replan steps
         self.rotation_counts = None
+        
+        self.been_stuck = None
+        self.stuck_cnt = None
+        self.stuck_goal = None
         
         # self.obs_shape = None
         
@@ -66,22 +71,27 @@ class Frontier:
         self.last_goal = [[None, None]]*env_nums
         
         self.goals = [None]*env_nums
+        self.short_time_goals = [None]*env_nums
         self.replan = [True]*env_nums
         self.counts = [0]*env_nums
         self.rotation_counts = [0]*env_nums
+        
+        self.been_stuck = [False]*env_nums
+        self.stuck_cnt = [0]*env_nums
+        self.stuck_goal = [None]*env_nums
     
     def get_actions(self, vis_inputs):
         
         actions = []
         for e, p_input in enumerate(vis_inputs):
             
-            # update loc
+            # update loc: real distance (m)
             start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
                 p_input['pose_pred']
             self.last_loc[e] = self.curr_loc[e]
             self.curr_loc[e] = [start_x, start_y, start_o]
             
-            if self.rotation_counts[e] < 15:
+            if self.rotation_counts[e] < 10:        
                 action = 2  # left
                 actions.append(action)
                 self.rotation_counts[e] += 1
@@ -93,43 +103,48 @@ class Frontier:
                 self.replan[e] = True
                 self.counts[e] = 0
             else:
-                # goal_x, goal_y = self.goals[e][0], self.goals[e][1]
-                # if abs(goal_x - x2) < 1 and abs(goal_y - y2) < 1:
-                #     self.replan[e] = True
-                # else:
-                #     self.replan[e] = False
-                self.replan[e] = self.counts[e] == 10
+                # replan if get close to goal
+                goal_r, goal_c = self.goals[e][0], self.goals[e][1]
+                if abs(goal_c - x2) < 10 and abs(goal_r - y2) < 10:     # for grid distance
+                    self.replan[e] = True
+                else:
+                    self.replan[e] = False
+                # replan if long time or get in goal
+                self.replan[e] = self.counts[e] == 50 or self.replan[e]
                 if self.replan[e]:
                     self.counts[e] = 0 
                 else:
                     self.counts[e] += 1
                 
             
-            if self.replan[e]:
-                
-                fmap = self.get_frontier_map(p_input, e)
-                gain_fmap = self.get_frontier_gains(fmap, p_input)
+            if self.replan[e]:  # compute goal on full map
+
+                fmap, lagst_contrs = self.get_frontier_map(p_input, e)
+                gain_fmap = self.get_frontier_gains(fmap, p_input, lagst_contrs)
                 goal = self.sample_frontier(gain_fmap, e)
                 self.goals[e] = goal
                 # print(f"replan in env :{e}, goal {goal}")
             else:
                 goal = self.goals[e]
-            
+
             self.last_goal[e] = goal
-            action = self.get_determine_action(p_input, goal, e)
+            action, short_time_goal = self.get_determine_action(p_input, goal, e)
+            print(f"goal: {goal}, short_time_goal: {short_time_goal}, action: {action}")
             actions.append(action)
-        return np.array(actions)
+            self.short_time_goals[e] = short_time_goal
+        return np.array(actions), self.goals, self.short_time_goals
     
     def get_determine_action(self, p_input, goal, env_idx):
-        # object-oriented 里面的determin policy
-
+        '''
+        object-oriented 里面的determin policy
+            goal: r, c
+        '''
         # convert goal to goal map            
         goal_map = np.zeros((self.map_shape[1], self.map_shape[0]))
         goal_map[goal[0], goal[1]] = 1
             
-        action = self._plan(p_input, goal_map, env_idx)
-        
-        return action
+        action, short_time_goal = self._plan(p_input, goal_map, env_idx)
+        return action, short_time_goal
         
     def _plan(self, planner_inputs, goal, env_idx):
         """Function responsible for planning
@@ -139,8 +154,8 @@ class Frontier:
                 dict with following keys:
                     'map_pred_full'  (ndarray): (M, M) map prediction
                     'goal'      (ndarray): (M, M) goal locations
-                    'pose_pred' (ndarray): (7,) array  denoting pose (x,y,o)
-                                 and planning window (gx1, gx2, gy1, gy2)
+                    'pose_pred' (ndarray): (7,) array  denoting pose in full map (x,y,o)
+                                 and planning window of local map (gx1, gx2, gy1, gy2)
                     'found_goal' (bool): whether the goal object is found
 
         Returns:
@@ -155,33 +170,23 @@ class Frontier:
 
         # Get pose prediction and global policy planning window
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
-            planner_inputs['pose_pred']
+            planner_inputs['pose_pred']     # x,y,o为全局，如果要用局部的，需要减去局部原点gx1, gy1
         gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
         planning_window = [gx1, gx2, gy1, gy2]
 
-        # Get curr loc
-        # self.curr_loc[env_idx] = [start_x, start_y, start_o]
-        r, c = start_y, start_x
-        start = [int(r * 100.0 / args.map_resolution - gx1),
-                 int(c * 100.0 / args.map_resolution - gy1)]
+        r, c = start_y, start_x     # 转化为格子坐标
+        start = [int(r * 100.0 / args.map_resolution),
+                 int(c * 100.0 / args.map_resolution)]
         start = pu.threshold_poses(start, map_pred.shape)
 
-        self.visited[env_idx, gx1:gx2, gy1:gy2][start[0] - 0:start[0] + 1,
-                                       start[1] - 0:start[1] + 1] = 1
+        # self.visited[env_idx, gx1:gx2, gy1:gy2][start[0] - 0:start[0] + 1,
+        #                                start[1] - 0:start[1] + 1] = 1
+        self.visited[env_idx, :, :][start[0] - 0:start[0] + 1,
+                                       start[1] - 0:start[1] + 1] = 1       # 记录agent走过的轨迹
 
-        # if args.visualize or args.print_images:
-        #     # Get last loc
-        #     last_start_x, last_start_y = self.last_loc[0], self.last_loc[1]
-        #     r, c = last_start_y, last_start_x
-        #     last_start = [int(r * 100.0 / args.map_resolution - gx1),
-        #                   int(c * 100.0 / args.map_resolution - gy1)]
-        #     last_start = pu.threshold_poses(last_start, map_pred.shape)
-        #     self.visited_vis[gx1:gx2, gy1:gy2] = \
-        #         vu.draw_line(last_start, start,
-        #                      self.visited_vis[gx1:gx2, gy1:gy2])
 
         # Collision check
-        if self.last_actions[env_idx] == 1:
+        if self.last_actions[env_idx] == 0:
             x1, y1, t1 = self.last_loc[env_idx]
             x2, y2, _ = self.curr_loc[env_idx]
             buf = 4
@@ -192,9 +197,13 @@ class Frontier:
                 if self.col_width[env_idx] == 7:
                     length = 4
                     buf = 3
+                    self.been_stuck[env_idx] = True
+                    self.stuck_cnt[env_idx] += 1
                 self.col_width[env_idx] = min(self.col_width[env_idx], 5)
             else:
                 self.col_width[env_idx] = 1
+                self.been_stuck[env_idx] = False
+                self.stuck_cnt[env_idx] = 0
 
             dist = pu.get_l2_distance(x1, x2, y1, y2)
             if dist < args.collision_threshold:  # Collision
@@ -217,6 +226,21 @@ class Frontier:
         stg, stop = self._get_stg(map_pred, start, np.copy(goal),
                                   planning_window, env_idx)
 
+        if self.been_stuck[env_idx] and self.stuck_cnt[env_idx] >= 40:
+            if self.stuck_goal[env_idx] is None:     # 卡住后，寻找新的目标点
+
+                navigable_indices = np.argwhere(self.visited[env_idx, :, :] > 0)
+                goal_ = np.array([0, 0])
+                for _ in range(100):    # 随机从探索过的地图中找新的目标点goal
+                    random_index = np.random.choice(len(navigable_indices))
+                    goal_ = navigable_indices[random_index]
+                    if pu.get_l2_distance(goal_[0], start[0], goal_[1], start[1]) > 16:   # 在lcoal map上找一个较远距离的目标点
+                        goal_ = pu.threshold_poses(goal_, map_pred.shape)                
+                        self.stuck_goal[env_idx] = [int(goal_[0]), int(goal_[1])]      # 在全局地图的位置
+            else:
+                goal_ = np.array([self.stuck_goal[env_idx][0], self.stuck_goal[env_idx][1]])
+                goal_ = pu.threshold_poses(goal_, map_pred.shape)
+            stg = goal_
         # Deterministic Local Policy
         (stg_x, stg_y) = stg
         angle_st_goal = math.degrees(math.atan2(stg_x - start[0],
@@ -235,9 +259,10 @@ class Frontier:
             action = 1  #2  # Left
         else:
             action = 0  #1  # Forward
-
+            
+        # check stuck
         self.last_actions[env_idx] = action
-        return action
+        return action, stg
 
     
     def _get_stg(self, grid, start, goal, planning_window, env_idx):
@@ -262,11 +287,11 @@ class Frontier:
         #             [x1:x2, y1:y2] == 1] = 0
         # traversible[self.visited[env_idx][gx1:gx2, gy1:gy2][x1:x2, y1:y2] == 1] = 1
         traversible[self.collision_map[env_idx]
-                    [x1:x2, y1:y2] == 1] = 0
-        traversible[self.visited[env_idx][x1:x2, y1:y2] == 1] = 1
+                    [x1:x2, y1:y2] == 1] = 0    # 去掉碰撞区
+        traversible[self.visited[env_idx][x1:x2, y1:y2] == 1] = 1       # agent 轨迹也是可行区
 
         traversible[int(start[0] - x1) - 1:int(start[0] - x1) + 2,
-                    int(start[1] - y1) - 1:int(start[1] - y1) + 2] = 1
+                    int(start[1] - y1) - 1:int(start[1] - y1) + 2] = 1      # 现在agent位置的周围
 
         traversible = add_boundary(traversible)
         goal = add_boundary(goal, value=0)
@@ -288,117 +313,120 @@ class Frontier:
     def sample_frontier(self, gains_fmap, env_idx):
         '''
             get a frontier goal with max gain
+                gains_fmap: 1, full_w, full_h
         '''
 
-        
-        gfmap = gains_fmap
-        flat_indices = np.where(gfmap.flatten() > 1)[0]
-        random_index = random.choice(flat_indices)
-        max_idx = np.unravel_index(random_index, gfmap.shape)
-        # while True:
-        #     max_idx = np.argmax(gfmap)
-        #     max_idx = np.unravel_index(max_idx, gfmap.shape)
-        #     if max_idx[0] == self.last_goal[env_idx][0] and max_idx[1] == self.last_goal[env_idx][1]:
-        #         gfmap[max_idx[0], max_idx[1]] = 0. 
-        #         continue
-        #     else:
-        #         break
+        gfmap = gains_fmap.squeeze(0)
+        # flat_indices = np.where(gfmap.flatten() > 1)[0]
+        # random_index = random.choice(flat_indices)
+        # max_idx = np.unravel_index(random_index, gfmap.shape)
+        while True:
+            max_idx = np.argmax(gfmap)
+            max_idx = np.unravel_index(max_idx, gfmap.shape)    # max_idx: r, c
+            if max_idx[0] == self.last_goal[env_idx][0] and max_idx[1] == self.last_goal[env_idx][1]:
+                gfmap[max_idx[0], max_idx[1]] = 0. 
+                continue
+            else:
+                break
             
         return max_idx
         
         
-    def get_frontier_gains(self, frontier_map, p_input, type="2"):
+    def get_frontier_gains(self, frontier_map, p_input, largest_contours, type="2"):
         '''
+
         compute frontiers' gains.
             frontier_map: ndarray
+            largest_contours: contours of frontiers
             
         return:
             gains_fmaps: ndarray: num_envs, H, W
         '''
-        if type == "1":
-            
-            for e, p_input in enumerate(p_inputs):
-                exp_map = np.rint(p_input["pose_pred_full"])
-                unk_map = 1 - exp_map
-                kernel = np.ones((5, 5), dtype=np.uint8)
-                area_value_map = cv2.filter2D(unk_map, -1, kernel)
-                
-                fmap = frontier_maps[e]
-                gains_fmap = fmap * area_value_map
-                gains_fmaps.append(gains_fmap)
-            
-        elif type == "2":
-            # Compute unexplored free-space starting from each frontier
-            
+        # Compute unexplored free-space starting from each frontier: PONI, SemanticMapPrecomputedDataset. get_masks_and_labels()
+        
 
-            # floor_map = out_semmap[0, FLOOR_ID] # (H, W)
-            # unexp_map = ~torch.any(in_semmap[0], dim=0) # (H, W)
-            # unexp_floor_map = floor_map & unexp_map # (H, W)
-            # unexp_floor_map = unexp_floor_map.cpu().numpy()
+        # floor_map = out_semmap[0, FLOOR_ID] # (H, W)
+        # unexp_map = ~torch.any(in_semmap[0], dim=0) # (H, W)
+        # unexp_floor_map = floor_map & unexp_map # (H, W)
+        # unexp_floor_map = unexp_floor_map.cpu().numpy()
+        
+        out_area_pfs = None
             
-            out_area_pfs = None
-                
-            exp_map = np.rint(p_input["exp_pred_full"])
-            unk_map = 1 - exp_map
-            
-            # Identify connected components of unexplored floor space
-            unexp_floor_map = unk_map.astype(np.uint8) * 255
-            ncomps, comp_labs, _, _ = cv2.connectedComponentsWithStats(
-                unexp_floor_map, 4 , cv2.CV_32S
-            )
-            
-            # Compute contours of frontiers
-            contours = None
-            contours, _ = cv2.findContours(
-                frontier_map.astype(np.uint8),
-                cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
-            )
-            contours = [contour[:, 0].tolist() for contour in contours] # Clean format
+        exp_map = np.rint(p_input["exp_pred_full"])
+        unk_map = 1 - exp_map
+        
+        # Identify connected components of unexplored floor space
+        unexp_floor_map = unk_map.astype(np.uint8) * 255
+        ncomps, comp_labs, _, _ = cv2.connectedComponentsWithStats(
+            unexp_floor_map, 4 , cv2.CV_32S
+        )
+        # breakpoint()
+        # Compute contours of frontiers
+        # contours = None
+        # contours, _ = cv2.findContours(
+        #     frontier_map.astype(np.uint8),
+        #     cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE        # 仅检测最外层的轮廓
+        # )
+        # contours = [contour[:, 0].tolist() for contour in contours] # Clean format
 
-            # Only select largest 5 contours
-            largest_contours = sorted(
-                contours, key=lambda cnt: len(cnt), reverse=True
-            )[:5]
-            contour_stats = [0.0 for _ in range(len(largest_contours))]
-            # For each connected component, find the intersecting frontiers and
-            # add area to them.
-            kernel = np.ones((5, 5))
-            self.grid_size = unexp_floor_map.shape
-            for i in range(1, ncomps):
-                comp = (comp_labs == i).astype(np.float32)
-                comp_area = comp.sum().item()   # * (self.grid_size[0] *self.grid_size[1])
-                # dilate
-                comp = cv2.dilate(comp, kernel, iterations=1)
-                # intersect with frontiers
-                for j, contour in enumerate(largest_contours):
-                    intersection = 0.0
-                    for x, y in contour:
-                        intersection += comp[y, x]
-                    if intersection > 0:
-                        contour_stats[j] += comp_area
-            # Create out areas map
-            out_area_pfs = torch.zeros(self.grid_size, dtype=torch.float) # (H, W)
-                
-            normalize_area_by_constant = False
-            # if normalize_area_by_constant:
-            #     total_area = self.cfg.max_unexp_area
-            # else:
-            #     total_area = floor_map.sum().item() * (self.grid_size ** 2) / 2.0
-            for stat, contour in zip(contour_stats, largest_contours):
-                # Use linear scoring
-                score = stat
-                # score = np.clip(stat / (total_area + EPS), 0.0, 1.0)
+        # for largest 5 contours
+        # largest_contours = sorted(
+        #     contours, key=lambda cnt: len(cnt), reverse=True
+        # )[:5]
+        contour_stats = [0.0 for _ in range(len(largest_contours))]
+        # For each connected component, find the intersecting frontiers and
+        # add area to them. (as frontier gain)
+        kernel = np.ones((5, 5))
+        self.grid_size = unexp_floor_map.shape
+        
+        
+        for i in range(1, ncomps):
+            comp = (comp_labs == i).astype(np.float32)
+            comp_area = comp.sum().item()   # * (self.grid_size[0] *self.grid_size[1])
+            # dilate
+            comp = cv2.dilate(comp, kernel, iterations=1)
+            # intersect with frontiers
+            for j, contour in enumerate(largest_contours):
+                intersection = 0.0
                 for x, y in contour:
-                    out_area_pfs[y, x] = score
-            # Dilate the area map
-            out_area_pfs = out_area_pfs.unsqueeze(0).unsqueeze(1) # (1, 1, H, W)
-            out_area_pfs = torch.nn.functional.max_pool2d(
-                out_area_pfs, 7, stride=1, padding=3
-            )
-            out_area_pfs = out_area_pfs.squeeze(1) # (1, H, W)
+                    intersection += comp[y, x]
+                if intersection > 0:
+                    contour_stats[j] += comp_area
+            
+        # normalize_area_by_constant = False
+        # if normalize_area_by_constant:
+        #     total_area = self.cfg.max_unexp_area
+        # else:
+        #     total_area = floor_map.sum().item() * (self.grid_size ** 2) / 2.0
+        
+        def calculate_centroid(points):
+            x_coords = [point[0] for point in points]
+            y_coords = [point[1] for point in points]
+            centroid_x = sum(x_coords) / len(points)
+            centroid_y = sum(y_coords) / len(points)
+            return (centroid_x, centroid_y)
+        # create frontier gain map
+        gains_fmap = torch.zeros(self.grid_size, dtype=torch.float)
+        for stat, contour in zip(contour_stats, largest_contours):
+            score = stat
+            center_c, center_r = calculate_centroid(contour)
+            gains_fmap[int(center_r), int(center_c)] = score
+        
+        # Create out areas map
+        # out_area_pfs = torch.zeros(self.grid_size, dtype=torch.float) # (H, W)
+        # for stat, contour in zip(contour_stats, largest_contours):
+        #     # Use linear scoring
+        #     score = stat
+        #     # score = np.clip(stat / (total_area + EPS), 0.0, 1.0)
+        #     for x, y in contour:
+        #         out_area_pfs[y, x] = score
+        # Dilate the area map
+        # out_area_pfs = out_area_pfs.unsqueeze(0).unsqueeze(1) # (1, 1, H, W)
+        # out_area_pfs = torch.nn.functional.max_pool2d(
+        #     out_area_pfs, 7, stride=1, padding=3
+        # )
+        # out_area_pfs = out_area_pfs.squeeze(1) # (1, H, W)
 
-        gains_fmap = out_area_pfs
-        # gains_fmaps = np.concatenate(gains_fmaps, axis=0)
         return gains_fmap
     
     def get_frontier_maps(self, inputs_envs):
@@ -410,7 +438,7 @@ class Frontier:
             
     def get_frontier_map(self, planner_inputs, env_idx):
         """Function responsible for computing frontiers in the input map
-
+            from IEVE-main: Instance_Exp_Env_Agent: get_frontier_map()
         Args:
             planner_inputs (dict):
                 dict with following keys:
@@ -431,6 +459,7 @@ class Frontier:
         # exp_map = skimage.morphology.dilation(
         #     exp_map,
         #     selem)
+        
         # compute free and unexplored maps
         free_map = (1 - obs_map) * exp_map
         unk_map = 1 - exp_map
@@ -469,7 +498,8 @@ class Frontier:
         #     frontiers, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         # )
         # self.frontier_vis = cv2.drawContours(self.frontier_vis,contours_vis,-1,(122,122,255),3) 
-
+        
+        largest_contours = []
         if len(contours) > 0:
             contours = [c[:, 0].tolist() for c in contours]  # Clean format
             new_frontiers = np.zeros_like(frontiers)  
@@ -482,6 +512,8 @@ class Frontier:
                 if lc > 0:
                     new_frontiers[contour[lc // 2, 1], contour[lc // 2, 0]] = 1
             frontiers = new_frontiers
+            largest_contours = contours[:5]
+        # breakpoint()
         frontiers = frontiers > 0
         # Mask out frontiers very close to the agent
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = planner_inputs["pose_pred"]
@@ -506,10 +538,8 @@ class Frontier:
                 rand_x = np.random.randint(start[1] - ncells, start[1] + ncells + 1)
                 frontiers[rand_y, rand_x] = True
 
-        # collision check
-        # frontiers[self.collision_map[env_idx] > 0.1] = False
         
-        return frontiers
+        return frontiers, largest_contours
         
 if __name__ == "__main__":
     args = get_args()

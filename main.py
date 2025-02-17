@@ -187,8 +187,11 @@ def main():
     elif args.agent == "frontier":
         l_policy = Frontier(args)
         l_policy.reset(num_scenes)
-        l_action = l_policy.get_actions(vis_inputs)        
-        
+        l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
+        for e, p_input in enumerate(vis_inputs):
+            if args.visualize or args.print_images:
+                p_input["frontier_goal"] = goals[e]
+                p_input["short_time_goal"] = short_time_goals[e]
     # transition:
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
@@ -292,13 +295,11 @@ def main():
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
             l_action = np.random.randint(0, 3, num_scenes)
-        elif args.agent == "frontier":
-            l_action = l_policy.get_actions(vis_inputs)        
 
-        # print(f"action {l_action}")
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
+                
             p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
             p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
             p_input['pose_pred'] = maps.get_all_pose()[e]
@@ -306,14 +307,23 @@ def main():
             p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
             p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
             p_input['pose_pred'] = maps.get_all_pose()[e]
+            
+
             if args.visualize or args.print_images:
                 local_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred'] = local_map[e, 4:, :, :
                                                     ].argmax(0).cpu().numpy()
                 full_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred_full'] = full_map[e, 4:, :, :
-                                                        ].argmax(0).cpu().numpy()
-
+                                                        ].argmax(0).cpu().numpy()                    
+        
+        if args.agent == "frontier":  # must be after updating vis_inputs
+            l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
+            if args.visualize or args.print_images:
+                for e, p_input in enumerate(vis_inputs):
+                    p_input["frontier_goal"] = goals[e]
+                    p_input["short_time_goal"] = short_time_goals[e]
+        
         # transition: next state
         # pred instance, get semantic masks and step env
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
