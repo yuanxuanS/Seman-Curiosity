@@ -79,7 +79,9 @@ class Frontier:
         self.been_stuck = [False]*env_nums
         self.stuck_cnt = [0]*env_nums
         self.stuck_goal = [None]*env_nums
-    
+
+        self.invalid_goal = [False]*env_nums
+        self.invalid_goal_loc = [[]]*env_nums
     def get_actions(self, vis_inputs):
         
         actions = []
@@ -99,22 +101,31 @@ class Frontier:
             
             # update replan
             x2, y2, _ = self.curr_loc[e]
+            r, c = y2, x2     # 转化为格子坐标
+            start = [int(r * 100.0 / self.args.map_resolution),
+                    int(c * 100.0 / self.args.map_resolution)]
+            map_pred = np.rint(p_input['map_pred_full'])
+            start = pu.threshold_poses(start, map_pred.shape)
             if self.goals[e] is None:
                 self.replan[e] = True
                 self.counts[e] = 0
             else:
                 # replan if get close to goal
                 goal_r, goal_c = self.goals[e][0], self.goals[e][1]
-                if abs(goal_c - x2) < 10 and abs(goal_r - y2) < 10:     # for grid distance
+                if abs(goal_c - start[1]) < 10 and abs(goal_r - start[0]) < 10:     # for grid distance
                     self.replan[e] = True
+                    print(f"get in goal {self.replan[e]}")
                 else:
-                    self.replan[e] = False
-                # replan if long time or get in goal
-                self.replan[e] = self.counts[e] == 50 or self.replan[e]
+                    self.replan[e] = self.counts[e] >= 50       # if long time
+                    
                 if self.replan[e]:
                     self.counts[e] = 0 
                 else:
                     self.counts[e] += 1
+                
+                if self.invalid_goal[e]:
+                    self.replan[e] = True
+                    self.invalid_goal[e] = False
                 
             
             if self.replan[e]:  # compute goal on full map
@@ -128,10 +139,17 @@ class Frontier:
                 goal = self.goals[e]
 
             self.last_goal[e] = goal
-            action, short_time_goal = self.get_determine_action(p_input, goal, e)
-            print(f"goal: {goal}, short_time_goal: {short_time_goal}, action: {action}")
+            action, short_time_goal, get_in_goal, get_in_stg = self.get_determine_action(p_input, goal, e)
+            print(f"goal: {goal}, short_time_goal: {short_time_goal}, loc: {start}, action: {action}")
             actions.append(action)
             self.short_time_goals[e] = short_time_goal
+            
+            if get_in_goal:
+                self.invalid_goal[e] = True
+                # self.invalid_goal_loc[e].append(goal)
+                print(f"frontier goal is invalid, it has been here!")
+            if get_in_stg:
+                print(f"get in short time goal")
         return np.array(actions), self.goals, self.short_time_goals
     
     def get_determine_action(self, p_input, goal, env_idx):
@@ -140,11 +158,11 @@ class Frontier:
             goal: r, c
         '''
         # convert goal to goal map            
-        goal_map = np.zeros((self.map_shape[1], self.map_shape[0]))
-        goal_map[goal[0], goal[1]] = 1
+        # goal_map = np.zeros((self.map_shape[1], self.map_shape[0]))
+        # goal_map[goal[0], goal[1]] = 1
             
-        action, short_time_goal = self._plan(p_input, goal_map, env_idx)
-        return action, short_time_goal
+        action, short_time_goal, get_in_goal, get_in_stg = self._plan(p_input, goal, env_idx)
+        return action, short_time_goal, get_in_goal, get_in_stg
         
     def _plan(self, planner_inputs, goal, env_idx):
         """Function responsible for planning
@@ -204,6 +222,7 @@ class Frontier:
                 self.col_width[env_idx] = 1
                 self.been_stuck[env_idx] = False
                 self.stuck_cnt[env_idx] = 0
+                self.stuck_goal[env_idx] = None
 
             dist = pu.get_l2_distance(x1, x2, y1, y2)
             if dist < args.collision_threshold:  # Collision
@@ -223,9 +242,13 @@ class Frontier:
                                                     self.collision_map[env_idx].shape)
                         self.collision_map[env_idx, r, c] = 1
 
-        stg, stop = self._get_stg(map_pred, start, np.copy(goal),
+        exp_pred = np.rint(planner_inputs['exp_pred_full'])
+        
+        
+        stg, stop, get_in_goal = self._get_stg(exp_pred, map_pred, start, goal,
                                   planning_window, env_idx)
 
+        # 被环境stuck
         if self.been_stuck[env_idx] and self.stuck_cnt[env_idx] >= 40:
             if self.stuck_goal[env_idx] is None:     # 卡住后，寻找新的目标点
 
@@ -234,13 +257,15 @@ class Frontier:
                 for _ in range(100):    # 随机从探索过的地图中找新的目标点goal
                     random_index = np.random.choice(len(navigable_indices))
                     goal_ = navigable_indices[random_index]
-                    if pu.get_l2_distance(goal_[0], start[0], goal_[1], start[1]) > 16:   # 在lcoal map上找一个较远距离的目标点
-                        goal_ = pu.threshold_poses(goal_, map_pred.shape)                
-                        self.stuck_goal[env_idx] = [int(goal_[0]), int(goal_[1])]      # 在全局地图的位置
+                    if pu.get_l2_distance(goal_[0], start[0], goal_[1], start[1]) > 16:   # 在map上找一个较远距离的目标点
+                        break
+                goal_ = pu.threshold_poses(goal_, map_pred.shape)                
+                self.stuck_goal[env_idx] = [int(goal_[0]), int(goal_[1])]      # 在全局地图的位置
             else:
                 goal_ = np.array([self.stuck_goal[env_idx][0], self.stuck_goal[env_idx][1]])
                 goal_ = pu.threshold_poses(goal_, map_pred.shape)
             stg = goal_
+            print(f"get stuck , stg is {stg}")
         # Deterministic Local Policy
         (stg_x, stg_y) = stg
         angle_st_goal = math.degrees(math.atan2(stg_x - start[0],
@@ -262,16 +287,18 @@ class Frontier:
             
         # check stuck
         self.last_actions[env_idx] = action
-        return action, stg
+        return action, stg, get_in_goal, stop
 
     
-    def _get_stg(self, grid, start, goal, planning_window, env_idx):
+    def _get_stg(self, exp_map, obs_map, start, goal, planning_window, env_idx):
         """Get short-term goal"""
-
+        '''
+            
+        '''
         [gx1, gx2, gy1, gy2] = planning_window
 
         x1, y1, = 0, 0
-        x2, y2 = grid.shape
+        x2, y2 = exp_map.shape
 
         def add_boundary(mat, value=1):
             
@@ -280,9 +307,19 @@ class Frontier:
             new_mat[1:h + 1, 1:w + 1] = mat
             return new_mat
 
-        traversible = skimage.morphology.binary_dilation(
-            grid[x1:x2, y1:y2],
-            self.selem) != True
+        # obs_map = skimage.morphology.binary_dilation(
+        #     obs_map[x1:x2, y1:y2],
+        #     self.selem)
+        # free_map = (1 - obs_map) * exp_map
+        
+        # traversible = skimage.morphology.binary_dilation(
+        #     obs_map[x1:x2, y1:y2],
+        #     self.selem) != True
+        traversible = obs_map[x1:x2, y1:y2] != True
+        
+        # 仅在explore map上
+        # traversible= free_map
+        
         # traversible[self.collision_map[env_idx][gx1:gx2, gy1:gy2]
         #             [x1:x2, y1:y2] == 1] = 0
         # traversible[self.visited[env_idx][gx1:gx2, gy1:gy2][x1:x2, y1:y2] == 1] = 1
@@ -293,22 +330,23 @@ class Frontier:
         traversible[int(start[0] - x1) - 1:int(start[0] - x1) + 2,
                     int(start[1] - y1) - 1:int(start[1] - y1) + 2] = 1      # 现在agent位置的周围
 
-        traversible = add_boundary(traversible)
-        goal = add_boundary(goal, value=0)
+        traversible = add_boundary(traversible, value=0)
+        # goal = add_boundary(goal, value=0)
 
         planner = FMMPlanner(traversible)
-        selem = skimage.morphology.disk(10)
-        goal = skimage.morphology.binary_dilation(
-            goal, selem) != True
-        goal = 1 - goal * 1.
-        planner.set_multi_goal(goal)
+        # selem = skimage.morphology.disk(10)
+        # goal = skimage.morphology.binary_dilation(
+        #     goal, selem) != True
+        # goal = 1 - goal * 1.
+        planner.set_goal(goal, auto_improve=True)
+        # planner.set_multi_goal(goal)
 
         state = [start[0] - x1 + 1, start[1] - y1 + 1]
-        stg_x, stg_y, _, stop = planner.get_short_term_goal(state)
+        stg_x, stg_y, get_in_goal, stop = planner.get_short_term_goal(state)
 
         stg_x, stg_y = stg_x + x1 - 1, stg_y + y1 - 1
 
-        return (stg_x, stg_y), stop
+        return (stg_x, stg_y), stop, get_in_goal
     
     def sample_frontier(self, gains_fmap, env_idx):
         '''
@@ -320,14 +358,21 @@ class Frontier:
         # flat_indices = np.where(gfmap.flatten() > 1)[0]
         # random_index = random.choice(flat_indices)
         # max_idx = np.unravel_index(random_index, gfmap.shape)
-        while True:
-            max_idx = np.argmax(gfmap)
-            max_idx = np.unravel_index(max_idx, gfmap.shape)    # max_idx: r, c
-            if max_idx[0] == self.last_goal[env_idx][0] and max_idx[1] == self.last_goal[env_idx][1]:
-                gfmap[max_idx[0], max_idx[1]] = 0. 
-                continue
-            else:
-                break
+        
+        # while True:
+        max_idx = np.argmax(gfmap)
+        max_idx = np.unravel_index(max_idx, gfmap.shape)    # max_idx: r, c
+            # if max_idx in self.invalid_goal_loc[env_idx]:
+            #     gfmap[max_idx[0], max_idx[1]] = 0.
+            #     continue
+            # else:
+            #     break
+            
+            # if max_idx[0] == self.last_goal[env_idx][0] and max_idx[1] == self.last_goal[env_idx][1]:
+            #     gfmap[max_idx[0], max_idx[1]] = 0. 
+            #     continue
+            # else:
+            #     break
             
         return max_idx
         

@@ -242,30 +242,48 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             if inputs['frontier_goal'] is not None:
                 goal = inputs['frontier_goal']
                 goal_r, goal_c = goal   # r,c
-                print(f"goal: {goal}")
+                goal_x = goal_r
+                goal_y = goal_c
+                print(f"goal: {goal_x}, {goal_y}")
                 
                 st_goal = inputs['short_time_goal']
                 st_goal_r, st_goal_c = st_goal
                 st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
-                print(f"short time goal: {st_goal}")
+                st_goal_x = st_goal_r
+                st_goal_y = st_goal_c
+                print(f"short time goal: {st_goal_x, st_goal_y}")
 
                 size = self.visited_vis.shape[0]
                 square_size = 20
                 half_size = square_size // 2
-                for i in range(goal_r - half_size, goal_r + half_size + 1):
-                    for j in range(goal_c - half_size, goal_c + half_size + 1):
+                for i in range(goal_x - half_size, goal_x + half_size + 1):
+                    for j in range(goal_y - half_size, goal_y + half_size + 1):
                         i = min(i, size-1)
                         j = min(j, size-1)
                         sem_map_full[i, j] = 12
                         
                 square_size = 10
                 half_size = square_size // 2
-                for i in range(st_goal_r - half_size, st_goal_r + half_size + 1):
-                    for j in range(st_goal_c - half_size, st_goal_c + half_size + 1):
+                for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
+                    for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
                         i = min(i, size-1)
                         j = min(j, size-1)
                         sem_map_full[i, j] = 12
-                            
+                        
+        # pos
+        # size = map_pred_full.shape[0]
+        # square_size = 10
+        # r, c = start_y, start_x     # 转化为格子坐标
+        # start = [int(r * 100.0 / args.map_resolution),
+        #         int(c * 100.0 / args.map_resolution)]
+        # # start[1] = map_pred_full.shape[0] - start[1] 
+        # start = pu.threshold_poses(start, map_pred_full.shape)
+        # half_size = square_size // 2
+        # for i in range(start[0] - half_size, start[0] + half_size + 1):
+        #     for j in range(start[1] - half_size, start[1] + half_size + 1):
+        #         i = min(i, size-1)
+        #         j = min(j, size-1)
+        #         sem_map_full[i, j] = 17
         # 绘制语义地图
         color_pal = [int(x * 255.) for x in color_palette]
         if mode == "local":
@@ -320,7 +338,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             # Displaying the image
             cv2.imshow("Thread {}".format(self.rank), self.vis_image)
             cv2.waitKey(1)
-            # pass
+            pass
 
         if args.print_images:
             fn = '{}/episodes/thread_{}/eps_{}/{}-{}-Vis-{}.png'.format(

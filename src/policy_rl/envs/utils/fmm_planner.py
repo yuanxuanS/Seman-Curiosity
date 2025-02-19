@@ -3,7 +3,7 @@ import numpy as np
 import skfmm
 import skimage
 from numpy import ma
-
+import random
 
 def get_mask(sx, sy, scale, step_size):
     size = int(step_size // scale) * 2 + 1
@@ -61,20 +61,20 @@ class FMMPlanner():
             goal_x, goal_y = self._find_nearest_goal([goal_x, goal_y])
 
         traversible_ma[goal_x, goal_y] = 0
-        dd = skfmm.distance(traversible_ma, dx=1)
-        dd = ma.filled(dd, np.max(dd) + 1)
+        dd = skfmm.distance(traversible_ma, dx=1)   # 计算等高线，值为距离
+        dd = ma.filled(dd, np.max(dd) + 1)      # 将False区域都赋值为最大值
         self.fmm_dist = dd
         return
 
     def set_multi_goal(self, goal_map):
-        traversible_ma = ma.masked_values(self.traversible * 1, 0)  # 可通行1
+        traversible_ma = ma.masked_values(self.traversible * 1, 0)  # 可通行1, 其他0
         traversible_ma[goal_map == 1] = 0
-        dd = skfmm.distance(traversible_ma, dx=1)   # 计算距离场，到目标篇区域的最短路径距离
+        dd = skfmm.distance(traversible_ma, dx=1)   # 计算等高线，值为距离，到目标的最短路径距离
         dd = ma.filled(dd, np.max(dd) + 1)  # mask的区域比如障碍物填充大值
         self.fmm_dist = dd
         return
 
-    def get_short_term_goal(self, state):
+    def get_short_term_goal(self, state):   # state位置点，找到state周围成本最低的可行点
         scale = self.scale * 1.
         state = [x / scale for x in state]      # 缩放位置坐标
         dx, dy = state[0] - int(state[0]), state[1] - int(state[1]) 
@@ -84,8 +84,8 @@ class FMMPlanner():
         state = [int(x) for x in state]
 
         dist = np.pad(self.fmm_dist, self.du,
-                      'constant', constant_values=self.fmm_dist.shape[0] ** 2)  # 间隔du，填充距离场
-        subset = dist[state[0]:state[0] + 2 * self.du + 1,
+                      'constant', constant_values=self.fmm_dist.shape[0] ** 2)  # 填充不可达区域
+        subset = dist[state[0]:state[0] + 2 * self.du + 1,     # 截取当前state周围
                       state[1]:state[1] + 2 * self.du + 1]
 
         assert subset.shape[0] == 2 * self.du + 1 and \
@@ -93,21 +93,30 @@ class FMMPlanner():
             "Planning error: unexpected subset shape {}".format(subset.shape)
 
         subset *= mask
-        subset += (1 - mask) * self.fmm_dist.shape[0] ** 2
+        subset += (1 - mask) * self.fmm_dist.shape[0] ** 2      # mask区域*大数，设被掩码区域的值很高
 
-        if subset[self.du, self.du] < 0.25 * 100 / 5.:  # 25cm
-            stop = True
+        if subset[self.du, self.du] < 0.25 * 100 / 5.:  # 25cm  中心点的值是否小于25cm
+            stop = True     # 到达目标点
         else:
             stop = False
 
-        subset -= subset[self.du, self.du]
-        ratio1 = subset / dist_mask
-        subset[ratio1 < -1.5] = 1
+        subset -= subset[self.du, self.du]      # 减去中心值，小于0的负数，越小代表距离目标越近/等高图上距离goal越近
+        ratio1 = subset / dist_mask     # 计算成本？
+        subset[ratio1 < -1.5] = 1   # 成本小于-1.5， 作为可行区域
 
-        (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)
-
+        # (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)      # 最小
+        min_values = np.min(subset)
+        indices = np.where(subset == min_values)
+        if len(indices) >0:
+            if len(indices[0]) > 1: # 多个最小值
+                idx = random.choice([i for i in range(len(indices[0]))])
+                stg_x, stg_y = indices[0][idx], indices[1][idx]
+            else:
+                stg_x, stg_y = indices
+            
+        
         if subset[stg_x, stg_y] > -0.0001:
-            replan = True
+            replan = True       # 选择的stg就是目标点
         else:
             replan = False
 
