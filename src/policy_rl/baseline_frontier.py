@@ -140,16 +140,17 @@ class Frontier:
 
             self.last_goal[e] = goal
             action, short_time_goal, get_in_goal, get_in_stg = self.get_determine_action(p_input, goal, e)
-            print(f"goal: {goal}, short_time_goal: {short_time_goal}, loc: {start}, action: {action}")
+            # print(f"goal: {goal}, short_time_goal: {short_time_goal}, loc: {start}, action: {action}")
             actions.append(action)
             self.short_time_goals[e] = short_time_goal
             
             if get_in_goal:
                 self.invalid_goal[e] = True
                 # self.invalid_goal_loc[e].append(goal)
-                print(f"frontier goal is invalid, it has been here!")
+                # print(f"frontier goal is invalid, it has been here!")
             if get_in_stg:
-                print(f"get in short time goal")
+                # print(f"get in short time goal")
+                pass
         return np.array(actions), self.goals, self.short_time_goals
     
     def get_determine_action(self, p_input, goal, env_idx):
