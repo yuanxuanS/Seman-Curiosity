@@ -13,6 +13,7 @@ import copy
 from src.finetune.utils.matching import get_objects_ids
 from src.finetune.utils import projection_utils as pu
 from src.finetune.sensors_data import BBSense
+from src.policy_rl.agents.utils.semantic_prediction import ImageSegmentation
 from detectron2.utils.visualizer import Visualizer
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
@@ -111,11 +112,98 @@ class SemanticConsensusLabeler(ConsensusLabeler):
         self.solution = solution
         
         self.img_pth = ""
+
+        self.args = 
+    
+        self.obns_model = ImageSegmentation(self.args)
         
     def reinit(self, model):
         super().reinit(model)
         self.global_pcds = {}
 
+    def get_obns_prediction(self, 
+                            img, 
+                            idx: int, 
+                            depth,
+                            rcnn_instance: Instances, save=False):
+        args = self.args
+        image_list = []
+        # img = img[:, :, ::-1]
+        image_list.append(img)
+        obns_instance, vis_output = self.obns_model.get_predictions(
+            image_list, visualize=True, specify_cls=True
+        )
+        
+        # find potential one
+            
+        device = None
+        
+        obns_instance = obns_instance[0]['instances'].to("cpu")
+        
+        cnt = 0
+        
+        width, height = obns_instance.image_size
+        pot_mp = np.zeros((height, width, 1))
+        v = Visualizer(pot_mp)
+        
+        # pot_surro_mask = np.zeros((height, width))
+        
+        objectness_boxes = obns_instance.pred_boxes
+        
+        # no objectness prediction
+        if not len(objectness_boxes):  
+            # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
+            return 
+            
+        for j in range(len(objectness_boxes)):
+            boxes_ = v._convert_boxes(objectness_boxes[j]).reshape(4,) # convert from 1*4 to 4*1
+            
+            # remove close boxes
+            depth_patch = self.get_patch_from_depth(depth, boxes_)
+            if depth_patch.max() < 0.1:  # 
+                continue
+                
+            # remove box that detected by maskrcnn as well
+            maskrcnn_boxes = rcnn_instance.pred_boxes
+            if len(maskrcnn_boxes):
+                # recurse every maskrcnn's boxes to filter IoU > thes:
+                device = rcnn_instance.pred_boxes.device
+                rcnn_instance = rcnn_instance.to("cpu")
+                maskrcnn_boxes = rcnn_instance.pred_boxes
+                
+                obns_ = v._convert_boxes(objectness_boxes[j])
+                msk_ = v._convert_boxes(maskrcnn_boxes)     # all maskrcnn box 
+                iou = box_iou_calc(obns_, msk_) # 1*num_maskbox
+                if (iou > 0.5).any():   # detected by maskrcnn as well, remove it
+                    continue
+            print("has far object")
+            cnt += 1
+            if save:
+                cv2.imwrite(self.img_pth + "/obns_imgs/img_"+str(idx)+".png", vis_output.get_image())
+            # pot_mp = v.draw_patch(box_coord=boxes_, color='white')
+            # mask_ = obns_instance.pred_masks[j]
+            # pot_surro_mask[mask_.cpu().numpy() >0] = 1.
+        
+        # resize to 128*128
+        # if isinstance(pot_mp, np.ndarray):
+        #     pot_mp = pot_mp.squeeze(-1) if len(pot_mp.shape) == 3 else pot_mp
+        # else:
+        #     pot_mp = pot_mp.get_image()
+        
+        # pot_mp[pot_mp > 0] = 1.
+        # pot_mp= (pot_mp.astype('float32')*depth)[..., np.newaxis]    # multiply depth
+        
+        # pot_surro_mask = pot_surro_mask[..., np.newaxis]
+        # cv2.imwrite(f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/t_potential_d.png", pot_mp.transpose(1,2,0))
+        
+        # if device is not None:
+        #     self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to(device)
+        # return pot_mp, cnt, pot_surro_mask
+        
+        
+        
+        
+        
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         '''
             构建pcd
@@ -242,6 +330,9 @@ class SemanticConsensusLabeler(ConsensusLabeler):
                 
                 self.save_image(data, t, n)
                 n+= 1
+                
+                # obns prediction
+                self.get_obns_prediction(data['rgb'], n, data['depth'], t)
         gc.collect()
         return labels
 
@@ -252,7 +343,7 @@ class SemanticConsensusLabeler(ConsensusLabeler):
         instances_mapped = map_to_original_cls(instance.to("cpu"), cls_id_map)
         v = v.draw_instance_predictions(instances_mapped)
         img = cv2.cvtColor(v.get_image(), cv2.COLOR_BGR2RGB)
-        cv2.imwrite(self.img_pth + "/img_"+str(idx)+".png")
+        cv2.imwrite(self.img_pth + "/rcnn_imgs/img_"+str(idx)+".png")
 
 class LogitsConsensusLabeler(ConsensusLabeler):
     def __init__(self, temperature=1, model=None,*args, **kwargs):
