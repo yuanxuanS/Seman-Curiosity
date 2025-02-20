@@ -10,12 +10,17 @@ import time
 import logging
 import cv2
 import copy
+import os
 from src.finetune.utils.matching import get_objects_ids
 from src.finetune.utils import projection_utils as pu
 from src.finetune.sensors_data import BBSense
 from src.policy_rl.agents.utils.semantic_prediction import ImageSegmentation
+from src.policy_rl.agents.utils.detect_utils import box_iou_calc
+from src.policy_rl.arguments import get_args
+
 from detectron2.utils.visualizer import Visualizer
 from detectron2.data import DatasetCatalog, MetadataCatalog
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +108,6 @@ class VanillaConsensusLabeler(ConsensusLabeler):
                 result.append(target)
         return result
 
-
 class SemanticConsensusLabeler(ConsensusLabeler):
     def __init__(
         self, model=None, solution="ours", *args, **kwargs
@@ -112,8 +116,11 @@ class SemanticConsensusLabeler(ConsensusLabeler):
         self.solution = solution
         
         self.img_pth = ""
-
-        self.args = 
+        if os.path.exists(self.img_pth + "/rcnn_imgs/"):
+            os.mkdir(self.img_pth + "/rcnn_imgs/")
+        if os.path.exists(self.img_pth + "/obns_imgs/"):
+            os.mkdir(self.img_pth + "/obns_imgs/")
+        # self.args = get_args()
     
         self.obns_model = ImageSegmentation(self.args)
         
@@ -126,7 +133,7 @@ class SemanticConsensusLabeler(ConsensusLabeler):
                             idx: int, 
                             depth,
                             rcnn_instance: Instances, save=False):
-        args = self.args
+        # args = self.args
         image_list = []
         # img = img[:, :, ::-1]
         image_list.append(img)
