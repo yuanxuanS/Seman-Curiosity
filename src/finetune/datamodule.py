@@ -36,6 +36,8 @@ class HabitatDataModule(pl.LightningDataModule):
         
         self.num_workers = 0    # TODO?
         
+        self.gpus = kwargs['gpus']
+        
         
     
     def prepare_data(self):
@@ -75,7 +77,8 @@ class HabitatDataModule(pl.LightningDataModule):
             collate_fn=dict_helper_collate,
         )
         
-        pseudolabel_trainer = pl.Trainer(gpus=1)
+        pseudolabel_trainer = pl.Trainer(gpus=self.gpus)
+        
         model_outs = pseudolabel_trainer.predict(
             self.pseudo_labeler, pseudolabel_loader
         )

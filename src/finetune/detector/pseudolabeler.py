@@ -9,11 +9,26 @@ import tqdm
 import time
 import logging
 import cv2
+import copy
 from src.finetune.utils.matching import get_objects_ids
 from src.finetune.utils import projection_utils as pu
 from src.finetune.sensors_data import BBSense
+from detectron2.utils.visualizer import Visualizer
+from detectron2.data import DatasetCatalog, MetadataCatalog
 
 log = logging.getLogger(__name__)
+
+def map_to_original_cls(instance, cls):
+    '''
+    cls: {0: 57, 1:58, ...}
+    '''
+    new_instance = copy.deepcopy(instance)
+
+    for i in range(len(instance.pred_classes)):
+        new_idx = cls[int(instance.pred_classes[i])]
+        new_instance.pred_classes[i] = new_idx
+    new_instance.pred_classes = torch.tensor(new_instance.pred_classes)
+    return new_instance
 
 class ConsensusLabeler(pl.LightningModule):
     def __init__(self, 
@@ -88,13 +103,14 @@ class VanillaConsensusLabeler(ConsensusLabeler):
         return result
 
 
-class SemanticMapConsensusLabeler(ConsensusLabeler):
+class SemanticConsensusLabeler(ConsensusLabeler):
     def __init__(
         self, model=None, solution="ours", *args, **kwargs
     ):
         super().__init__(model=model, *args, **kwargs)
         self.solution = solution
-
+        
+        self.img_pth = ""
         
     def reinit(self, model):
         super().reinit(model)
@@ -105,27 +121,35 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
             构建pcd
         '''
         self.model.eval()
-        instances, infos = self(batch)
+        instances, infos = self(batch)      # infos: instance ids per image
 
         for b, prediction, info in zip(batch, instances, infos):
+            env = b['env']
             episode = b['episode']
-            if episode in self.global_pcds:
-
-                episode_pcd = self.global_pcds[episode]
+            if env in self.global_pcds:
+                if episode in self.global_pcds[env]:
+                    episode_pcd = self.global_pcds[env][episode]
+                else:
+                    episode_pcd = pu.SemanticPointCloud(
+                    episode=episode, env=env, solution=self.solution
+                )
+                    self.global_pcds[env][episode] = episode_pcd
             else:
                 episode_pcd = pu.SemanticPointCloud(
                     episode=episode, solution=self.solution
                 )
-                self.global_pcds[episode] = episode_pcd
+                self.global_pcds[env] = {}
+                self.global_pcds[env][episode] = episode_pcd
 
             _pcd = pu.project_semantic_masks_to_3d(
-                b['depth'].squeeze(0),
-                b['location'],
+                b['depth'].squeeze(0),      
+                b['location'],      
                 prediction.to(b['depth'].device),
                 info,
                 update_logits=False # do not update logits locally, only per episode
             )
             _pcd._episode = episode
+            _pcd._env = env
 
             episode_pcd += _pcd
 
@@ -141,13 +165,14 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
 
         labels = []
 
-        for k in self.global_pcds.keys():
-            self.global_pcds[k].preprocess()        # 同一所有pcd的标签
-
+        for env in self.global_pcds.keys():
+            for k in self.global_pcds[env].keys():
+                self.global_pcds[env][k].preprocess()        # 统一点云的所有标签和类别
+        n = 0
         for batch in tqdm.tqdm(dataloader):
-
+            
             for data in batch:
-                pcd = self.global_pcds[data['episode']]
+                pcd = self.global_pcds[data['env']][data['episode']]
 
                 # Compute the ray intersections.
                 _time = time.time()
@@ -170,7 +195,7 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
                 resolved_classes = []
                 ids = []
 
-                for mask, object_id, cls, l in zip(
+                for mask, object_id, cls_, l in zip(
                     semantic_masks, object_ids, classes, r_logits
                 ):
                     bb = cv2.boundingRect(mask.numpy().astype('uint8'))
@@ -178,18 +203,17 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
                     x, y, w, h = bb
                     if w == 0 or h == 0:
                         continue
-                    if cls >= len(BBSense.CLASSES):
+                    if cls_ >= len(BBSense.CLASSES):        # class的范围？
                         continue  # Background or overflowd class
+                    
                     logits.append(l)        # TODO : l/ temperature
-
-                    resolved_class = cls
-
+                    resolved_class = cls_
                     ids.append(object_id)
+                    
                     bounding_boxes.append(
                         torch.tensor([x, y, x + w, y + h]).unsqueeze(0)
                     )
                     resolved_classes.append(resolved_class)
-
                     resolved_masks.append(mask)
 
                 t.gt_classes = (
@@ -215,9 +239,20 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
                     else Boxes(torch.Tensor())
                 )
                 labels.append(t)
+                
+                self.save_image(data, t, n)
+                n+= 1
         gc.collect()
         return labels
 
+    def save_image(self, img, instance: Instances, idx: int):
+        v = Visualizer(
+                img, MetadataCatalog.get('coco_2017_val'))
+        cls_id_map = {0: 56, 1:57, 2:58, 3:59, 4:61}
+        instances_mapped = map_to_original_cls(instance.to("cpu"), cls_id_map)
+        v = v.draw_instance_predictions(instances_mapped)
+        img = cv2.cvtColor(v.get_image(), cv2.COLOR_BGR2RGB)
+        cv2.imwrite(self.img_pth + "/img_"+str(idx)+".png")
 
 class LogitsConsensusLabeler(ConsensusLabeler):
     def __init__(self, temperature=1, model=None,*args, **kwargs):

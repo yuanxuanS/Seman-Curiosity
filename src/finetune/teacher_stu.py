@@ -2,7 +2,7 @@ import pytorch_lightning as pl
 from src.finetune.detector import multi_stage_models as models
 from src.finetune.detector.pseudolabeler import (
     ConsensusLabeler,
-    SemanticMapConsensusLabeler,
+    SemanticConsensusLabeler,
     LogitsConsensusLabeler,
     VanillaConsensusLabeler
 )
@@ -48,13 +48,14 @@ class TeacherStudent(pl.LightningModule):
         switch = {
             "logits": LogitsConsensusLabeler,
             "vanilla": VanillaConsensusLabeler,
-            "semantic_map": SemanticMapConsensusLabeler,
+            "semantic": SemanticConsensusLabeler,
         }
         self.teacher_model: ConsensusLabeler = switch[consensus](
             model=models.MultiStageModel(detectron_args, prune=True, **kwargs),
+            solution=solution,
             temperature=temperature,
             thr=teacher_pred_thr,
-            solution=solution,
+            
         )
         self.use_teacher = use_teacher
         
@@ -63,14 +64,14 @@ class TeacherStudent(pl.LightningModule):
         self.online_val_map_metric = MAP(class_metrics=True)
         self.test_map_metric = MAP(class_metrics=True)
         
+        self.teacher_val_map_metric = MAP(class_metrics=True)
+        
         self.kwargs = kwargs
         
         self.init_student()
         
         self.save_hyperparameters()
         
-        
-    
     def init_student(self):
         self.student_model = self.student_model_cls(self.detectron_args, **self.kwargs)
         self.student_model.model.roi_heads.box_predictor.box_predictor.test_score_thresh = (
@@ -88,6 +89,7 @@ class TeacherStudent(pl.LightningModule):
         # log
         if batch_idx % 50 == 0:
             self.log_batch(batch, batch_idx)
+                    
             
         # train
         self.student_model.train()
@@ -120,9 +122,52 @@ class TeacherStudent(pl.LightningModule):
             self.tch_validation_step(batch, batch_idx)
         self.stu_validation_step(batch, batch_idx)
         
-    def tch_validation_step(self):
-        pass
+    def tch_validation_step(self, batch, batch_idx):
+        self.teacher_model.eval()
+        losses, predictions = self.teacher_model.validation_step(batch, batch_idx)
+        
+        loss = sum(losses.values())
+        for k in losses.keys():
+
+            self.log(
+                f"val_{k}_teacher",
+                losses[k],
+                on_step=True,
+                on_epoch=True,
+                sync_dist=True,
+                batch_size=self.batch_size,
+            )
+            
+        self.log(
+            'val_loss_teacher',
+            loss,
+            on_step=True,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=self.batch_size,
+        )
+        
+        self._val_map_teacher(batch, predictions)
     
+    def _val_map_teacher(self, batch, predictions):
+
+        gt = [
+            {
+                'boxes': b['instances'].gt_boxes.tensor,
+                'labels': b['instances'].gt_classes.int(),
+            }
+            for b in batch
+        ]
+        pred = [
+            {
+                'boxes': b['instances'].pred_boxes.tensor,
+                'labels': b['instances'].pred_classes,
+                'scores': b['instances'].scores,
+            }
+            for b in predictions
+        ]
+        self.teacher_val_map_metric.update(pred, gt)
+        
     def stu_validation_step(self, batch, batch_idx):
         self.student_model.eval()
         losses, predictions = self.student_model.validation_step(batch, batch_idx)
@@ -182,6 +227,20 @@ class TeacherStudent(pl.LightningModule):
             )
         self.online_val_map_metric = MAP(class_metrics=True)
         self.online_val_map_metric.to(self.device)
+        
+        if self.use_teacher:        # TODO, debug
+            results_tch = self.teacher_val_map_metric.compute()
+            for k in results_tch.keys():
+                self.log(
+                    f"val_teacher_{k}_epoch",
+                    results_tch[k],
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=True,
+                    batch_size=self.batch_size,
+                )
+            self.teacher_val_map_metric = MAP(class_metrics=True)
+            self.teacher_val_map_metric.to(self.device)
     
     def test_step(self, batch, batch_idx):
         self.student_model.eval()
