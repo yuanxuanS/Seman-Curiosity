@@ -78,9 +78,11 @@ class Seman_Curio_Env(habitat.RLEnv):
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
-        self.last_sim_location = self.get_sim_location()
-        print(f"initial pose: {self.last_sim_location[0]}, {self.last_sim_location[1]}, {self.last_sim_location[2]}")
-
+        self.last_sim_location = None
+        self.this_sim_location = self.get_sim_location()
+        print(f"initial pose: {self.this_sim_location[0]}, {self.this_sim_location[1]}, {self.this_sim_location[2]}")
+        self.last_sim_location_z = None
+        self.this_sim_location_z, self.this_sim_rot = self.get_sim_location_z()
         # Set info
         self.info['time'] = self.timestep
         self.info['sensor_pose'] = [0., 0., 0.]
@@ -230,9 +232,27 @@ class Seman_Curio_Env(habitat.RLEnv):
         # step
         obs, _, done, _ = super().step(action)
 
-        dx, dy, do = self.get_pose_change()
-        self.info['sensor_pose'] = [dx, dy, do]
+        # reset location if on floor
+        last_sim_location_z = self.this_sim_location_z
+        this_sim_location_z, this_sim_rot = self.get_sim_location_z()
+        self.info['on_floor'] = (abs(this_sim_location_z - last_sim_location_z) > 0.1)
+        if self.info['on_floor']:
+            x, y, o = self.this_sim_location    # not update, thus 'this_sim_'
+            z = self.this_sim_location_z
+            pos = np.array([-y, z, -x])
+            self._env.sim.set_agent_state(pos, self.this_sim_rot)
+            obs = self._env.sim.get_observations_at(pos, self.this_sim_rot)
 
+        # get newest pose( especially after checking if on floor)
+        # self.last_sim_location = self.this_sim_location
+        # self.this_sim_location = self.get_sim_location()
+        self.last_sim_location_z = self.this_sim_location_z
+        self.last_sim_rot = self.this_sim_rot
+        self.this_sim_location_z, self.this_sim_rot = self.get_sim_location_z()
+        
+        dx, dy, do = self.get_pose_change()     # update last_sim_location and this_sim_location
+        self.info['sensor_pose'] = [dx, dy, do]
+        
         # save samples(before resize)
         if self.args.save_samples:
             paths = self.save_data(obs)
@@ -281,8 +301,12 @@ class Seman_Curio_Env(habitat.RLEnv):
         timestep."""
         curr_sim_pose = self.get_sim_location()
         dx, dy, do = pu.get_rel_pose_change(
-            curr_sim_pose, self.last_sim_location)
-        self.last_sim_location = curr_sim_pose
+            curr_sim_pose, self.this_sim_location)  
+            # curr_sim_pose, self.last_sim_location)
+        # self.last_sim_location = curr_sim_pose
+        
+        self.last_sim_location = self.this_sim_location
+        self.this_sim_location = curr_sim_pose
         return dx, dy, do
     
     def get_sim_location(self):
@@ -301,6 +325,12 @@ class Seman_Curio_Env(habitat.RLEnv):
             o -= 2 * np.pi
         
         return x, y, o
+    
+    def get_sim_location_z(self):
+        agent_state = super().habitat_env.sim.get_agent_state(0)
+        z = agent_state.position[1]
+        rotation = agent_state.rotation
+        return z, rotation
     
     def get_action_space(self):
         return self.action_space

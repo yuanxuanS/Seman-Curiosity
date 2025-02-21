@@ -194,6 +194,23 @@ class Maps_Env:
         _, local_map, _, local_pose = \
             self.semantic_map(obs, poses, self.local_map, self.local_pose)
         
+        # check floor
+        locs = local_pose.cpu().numpy()
+        for e in range(self.num_scenes):
+            r, c = locs[e, 1], locs[e, 0]
+            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                            int(c * 100.0 / self.args.map_resolution)]
+            if 'on_floor' in infos[e] and infos[e]['on_floor']:
+                # set obstacle on map to avoid go to floor
+                square_size = 20
+                size = local_map[e].shape[-1]
+                r_start = loc_r
+                r_end = min(loc_r + square_size, size)
+                c_start = loc_c
+                c_end = min(loc_c + square_size, size)
+                local_map[e, 0, r_start:r_end, c_start:c_end] = 1.
+                
+                infos[e]['on_floor'] = False
         # update 2-3: curr and past maps
         locs = local_pose.cpu().numpy()
         self.pose_inputs[:, :3] = locs + self.origins
