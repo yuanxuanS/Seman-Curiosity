@@ -244,14 +244,12 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                 goal_r, goal_c = goal   # r,c
                 goal_x = goal_r
                 goal_y = goal_c
-                print(f"goal: {goal_x}, {goal_y}")
                 
                 st_goal = inputs['short_time_goal']
                 st_goal_r, st_goal_c = st_goal
                 st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
                 st_goal_x = st_goal_r
                 st_goal_y = st_goal_c
-                print(f"short time goal: {st_goal_x, st_goal_y}")
 
                 size = self.visited_vis.shape[0]
                 square_size = 20
