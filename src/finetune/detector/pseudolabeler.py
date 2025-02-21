@@ -36,6 +36,18 @@ def map_to_original_cls(instance, cls):
     new_instance.pred_classes = torch.tensor(new_instance.pred_classes)
     return new_instance
 
+def map_to_original_cls_gt(instance, cls):
+    '''
+    cls: {0: 57, 1:58, ...}
+    '''
+    new_instance = copy.deepcopy(instance)
+
+    for i in range(len(instance.gt_classes)):
+        new_idx = cls[int(instance.gt_classes[i])]
+        new_instance.gt_classes[i] = new_idx
+    new_instance.gt_classes = torch.tensor(new_instance.gt_classes)
+    return new_instance
+
 class ConsensusLabeler(pl.LightningModule):
     def __init__(self, 
                  model=None, 
@@ -115,14 +127,17 @@ class SemanticConsensusLabeler(ConsensusLabeler):
         super().__init__(model=model, *args, **kwargs)
         self.solution = solution
         
-        self.img_pth = ""
-        if os.path.exists(self.img_pth + "/rcnn_imgs/"):
+        img_pth = kwargs['sample_path']
+        idx = img_pth.rfind("/")
+        self.img_pth = img_pth[:idx]
+        if not os.path.exists(self.img_pth + "/rcnn_imgs/"):
             os.mkdir(self.img_pth + "/rcnn_imgs/")
-        if os.path.exists(self.img_pth + "/obns_imgs/"):
+        if not os.path.exists(self.img_pth + "/obns_imgs/"):
             os.mkdir(self.img_pth + "/obns_imgs/")
+            
         # self.args = get_args()
-    
-        self.obns_model = ImageSegmentation(self.args)
+        # self.args.config_file = 'detectron2://'+self.args.config_file
+        # self.obns_model = ImageSegmentation(self.args)
         
     def reinit(self, model):
         super().reinit(model)
@@ -335,11 +350,11 @@ class SemanticConsensusLabeler(ConsensusLabeler):
                 )
                 labels.append(t)
                 
-                self.save_image(data, t, n)
+                self.save_image(data['image'].permute(1, 2, 0), t, n)
                 n+= 1
                 
                 # obns prediction
-                self.get_obns_prediction(data['rgb'], n, data['depth'], t)
+                # self.get_obns_prediction(data['image'], n, data['depth'], t)
         gc.collect()
         return labels
 
@@ -347,10 +362,10 @@ class SemanticConsensusLabeler(ConsensusLabeler):
         v = Visualizer(
                 img, MetadataCatalog.get('coco_2017_val'))
         cls_id_map = {0: 56, 1:57, 2:58, 3:59, 4:61}
-        instances_mapped = map_to_original_cls(instance.to("cpu"), cls_id_map)
-        v = v.draw_instance_predictions(instances_mapped)
-        img = cv2.cvtColor(v.get_image(), cv2.COLOR_BGR2RGB)
-        cv2.imwrite(self.img_pth + "/rcnn_imgs/img_"+str(idx)+".png")
+        instances_mapped = map_to_original_cls_gt(instance.to("cpu"), cls_id_map)
+        v = v.draw_instance_gt(instances_mapped)
+        # img = cv2.cvtColor(v.get_image(), cv2.COLOR_BGR2RGB)
+        cv2.imwrite(self.img_pth + "/rcnn_imgs/img_"+str(idx)+".png", v.get_image())
 
 class LogitsConsensusLabeler(ConsensusLabeler):
     def __init__(self, temperature=1, model=None,*args, **kwargs):

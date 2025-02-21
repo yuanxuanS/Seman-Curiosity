@@ -55,7 +55,7 @@ class TeacherStudent(pl.LightningModule):
             solution=solution,
             temperature=temperature,
             thr=teacher_pred_thr,
-            
+            **kwargs,
         )
         self.use_teacher = use_teacher
         
