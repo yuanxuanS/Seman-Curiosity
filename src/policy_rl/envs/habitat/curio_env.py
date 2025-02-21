@@ -242,7 +242,13 @@ class Seman_Curio_Env(habitat.RLEnv):
             pos = np.array([-y, z, -x])
             self._env.sim.set_agent_state(pos, self.this_sim_rot)
             obs = self._env.sim.get_observations_at(pos, self.this_sim_rot)
-
+            obs.update(
+                self._env.task.sensor_suite.get_observations(
+                    observations=obs,
+                    episode=self._env.current_episode,
+                    action={'action': 0, 'action_args':{}},
+                    task=self._env.task,
+            ))
         # get newest pose( especially after checking if on floor)
         # self.last_sim_location = self.this_sim_location
         # self.this_sim_location = self.get_sim_location()
