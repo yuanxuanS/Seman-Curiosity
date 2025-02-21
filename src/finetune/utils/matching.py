@@ -5,6 +5,8 @@ def get_objects_ids(batch, predictions: List[Instances], overlap_thr=0.5):
     """
     batch: dictionary containing field "instances" for ground-truth instances and "episode" for current episode
     predictions: Instances object containing model prediction
+    return:
+        gt_labels: List[[instance ids for every image]]
     """
 
     gt_labels = []
@@ -23,6 +25,7 @@ def get_objects_ids(batch, predictions: List[Instances], overlap_thr=0.5):
             device='cpu',
             thr=overlap_thr,
             episode=batch[idx]['episode'],
+            env=batch[idx]['env']
         )
 
         gt_labels.append(ids)
@@ -30,19 +33,20 @@ def get_objects_ids(batch, predictions: List[Instances], overlap_thr=0.5):
     return gt_labels
 
 
-def _get_objects_unique_ids_impl(predictions, gt, device="cuda", thr=0.3, episode=-1):
+def _get_objects_unique_ids_impl(predictions, gt, device="cuda", thr=0.3, episode=-1, env=-1):
     """
     Given N predictions and M ground-truth, returns list of length N of unique instance ids given for each prediction. If no ground-truth / prediction matching occurs, id is -1
+        called when start for loop in get_objects_ids()
     """
     if not hasattr(get_objects_ids, "current_unique_id"):
-        get_objects_ids.current_unique_id = 5000000
+        get_objects_ids.current_unique_id = 10000
     results = []
     # Use masks IOU for matching gt and preds
 
     dummy_ids = []
     for _ in range(len(predictions)):
         dummy_ids.append(
-            {"id_object": get_objects_ids.current_unique_id, "episode": episode}
+            {"id_object": get_objects_ids.current_unique_id, "episode": episode, "env": env}
         )
         get_objects_ids.current_unique_id += 1
     return dummy_ids

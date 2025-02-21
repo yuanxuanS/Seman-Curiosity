@@ -223,11 +223,11 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         sem_map += 5        # 语义id，从5开始
         sem_map_full += 5        # 语义id，从5开始
         
-        # lcoal map
+        # local map
         no_cat_mask = sem_map == 10     # =最后一个通道，代表没有object
-        map_mask = np.rint(map_pred) == 1
-        exp_mask = np.rint(exp_pred) == 1
-        vis_mask = self.visited_vis[gx1:gx2, gy1:gy2] == 1
+        map_mask = np.rint(map_pred) == 1       # obstacle地图
+        exp_mask = np.rint(exp_pred) == 1       # explore地图
+        vis_mask = self.visited_vis[gx1:gx2, gy1:gy2] == 1      # agent在地图上的位置
 
         sem_map[no_cat_mask] = 0
         m1 = np.logical_and(no_cat_mask, exp_mask)
@@ -235,9 +235,13 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         m2 = np.logical_and(no_cat_mask, map_mask)
         sem_map[m2] = 1     # obstacle区域赋值1
-
+        
         sem_map[vis_mask] = 3       # 可视化区域赋值3
-
+        
+        # add goal
+        
+        
+        
         # full map
         map_pred_full = inputs['map_pred_full']
         exp_pred_full = inputs['exp_pred_full']
@@ -253,8 +257,52 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         m2_full = np.logical_and(no_cat_mask_full, map_mask_full)
         sem_map_full[m2_full] = 1     # obstacle区域赋值1
 
-        sem_map_full[vis_mask_full] = 3       # 可视化区域赋值3
+        sem_map_full[vis_mask_full] = 3       # agent位置区域赋值3
 
+        if 'frontier_goal' in inputs:
+            if inputs['frontier_goal'] is not None:
+                goal = inputs['frontier_goal']
+                goal_r, goal_c = goal   # r,c
+                goal_x = goal_r
+                goal_y = goal_c
+                
+                st_goal = inputs['short_time_goal']
+                st_goal_r, st_goal_c = st_goal
+                st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
+                st_goal_x = st_goal_r
+                st_goal_y = st_goal_c
+
+                size = self.visited_vis.shape[0]
+                square_size = 20
+                half_size = square_size // 2
+                for i in range(goal_x - half_size, goal_x + half_size + 1):
+                    for j in range(goal_y - half_size, goal_y + half_size + 1):
+                        i = min(i, size-1)
+                        j = min(j, size-1)
+                        sem_map_full[i, j] = 12
+                        
+                square_size = 10
+                half_size = square_size // 2
+                for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
+                    for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
+                        i = min(i, size-1)
+                        j = min(j, size-1)
+                        sem_map_full[i, j] = 12
+                        
+        # pos
+        # size = map_pred_full.shape[0]
+        # square_size = 10
+        # r, c = start_y, start_x     # 转化为格子坐标
+        # start = [int(r * 100.0 / args.map_resolution),
+        #         int(c * 100.0 / args.map_resolution)]
+        # # start[1] = map_pred_full.shape[0] - start[1] 
+        # start = pu.threshold_poses(start, map_pred_full.shape)
+        # half_size = square_size // 2
+        # for i in range(start[0] - half_size, start[0] + half_size + 1):
+        #     for j in range(start[1] - half_size, start[1] + half_size + 1):
+        #         i = min(i, size-1)
+        #         j = min(j, size-1)
+        #         sem_map_full[i, j] = 17
         # 绘制语义地图
         color_pal = [int(x * 255.) for x in color_palette]
         if mode == "local":
@@ -299,6 +347,8 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                 np.deg2rad(-start_o)
             )
             
+            
+            
         origin = (670, 50)  
         agent_arrow = vu.get_contour_points(pos, origin)
         color = (int(color_palette[11] * 255),
@@ -310,6 +360,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             # Displaying the image
             cv2.imshow("Thread {}".format(self.rank), self.vis_image)
             cv2.waitKey(1)
+            pass
 
         if args.print_images:
             fn = '{}/episodes/thread_{}/eps_{}/{}-{}-Vis-{}.png'.format(

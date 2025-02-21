@@ -9,11 +9,44 @@ import tqdm
 import time
 import logging
 import cv2
+import copy
+import os
 from src.finetune.utils.matching import get_objects_ids
 from src.finetune.utils import projection_utils as pu
 from src.finetune.sensors_data import BBSense
+from src.policy_rl.agents.utils.semantic_prediction import ImageSegmentation
+from src.policy_rl.agents.utils.detect_utils import box_iou_calc
+from src.policy_rl.arguments import get_args
+
+from detectron2.utils.visualizer import Visualizer
+from detectron2.data import DatasetCatalog, MetadataCatalog
+import numpy as np
 
 log = logging.getLogger(__name__)
+
+def map_to_original_cls(instance, cls):
+    '''
+    cls: {0: 57, 1:58, ...}
+    '''
+    new_instance = copy.deepcopy(instance)
+
+    for i in range(len(instance.pred_classes)):
+        new_idx = cls[int(instance.pred_classes[i])]
+        new_instance.pred_classes[i] = new_idx
+    new_instance.pred_classes = torch.tensor(new_instance.pred_classes)
+    return new_instance
+
+def map_to_original_cls_gt(instance, cls):
+    '''
+    cls: {0: 57, 1:58, ...}
+    '''
+    new_instance = copy.deepcopy(instance)
+
+    for i in range(len(instance.gt_classes)):
+        new_idx = cls[int(instance.gt_classes[i])]
+        new_instance.gt_classes[i] = new_idx
+    new_instance.gt_classes = torch.tensor(new_instance.gt_classes)
+    return new_instance
 
 class ConsensusLabeler(pl.LightningModule):
     def __init__(self, 
@@ -87,45 +120,146 @@ class VanillaConsensusLabeler(ConsensusLabeler):
                 result.append(target)
         return result
 
-
-class SemanticMapConsensusLabeler(ConsensusLabeler):
+class SemanticConsensusLabeler(ConsensusLabeler):
     def __init__(
         self, model=None, solution="ours", *args, **kwargs
     ):
         super().__init__(model=model, *args, **kwargs)
         self.solution = solution
-
+        
+        img_pth = kwargs['sample_path']
+        idx = img_pth.rfind("/")
+        self.img_pth = img_pth[:idx]
+        if not os.path.exists(self.img_pth + "/rcnn_imgs/"):
+            os.mkdir(self.img_pth + "/rcnn_imgs/")
+        if not os.path.exists(self.img_pth + "/obns_imgs/"):
+            os.mkdir(self.img_pth + "/obns_imgs/")
+            
+        # self.args = get_args()
+        # self.args.config_file = 'detectron2://'+self.args.config_file
+        # self.obns_model = ImageSegmentation(self.args)
         
     def reinit(self, model):
         super().reinit(model)
         self.global_pcds = {}
 
+    def get_obns_prediction(self, 
+                            img, 
+                            idx: int, 
+                            depth,
+                            rcnn_instance: Instances, save=False):
+        # args = self.args
+        image_list = []
+        # img = img[:, :, ::-1]
+        image_list.append(img)
+        obns_instance, vis_output = self.obns_model.get_predictions(
+            image_list, visualize=True, specify_cls=True
+        )
+        
+        # find potential one
+            
+        device = None
+        
+        obns_instance = obns_instance[0]['instances'].to("cpu")
+        
+        cnt = 0
+        
+        width, height = obns_instance.image_size
+        pot_mp = np.zeros((height, width, 1))
+        v = Visualizer(pot_mp)
+        
+        # pot_surro_mask = np.zeros((height, width))
+        
+        objectness_boxes = obns_instance.pred_boxes
+        
+        # no objectness prediction
+        if not len(objectness_boxes):  
+            # pot_mp = cv2.resize(pot_mp, (self.args.frame_height, self.args.frame_width))[..., np.newaxis]   # TODO
+            return 
+            
+        for j in range(len(objectness_boxes)):
+            boxes_ = v._convert_boxes(objectness_boxes[j]).reshape(4,) # convert from 1*4 to 4*1
+            
+            # remove close boxes
+            depth_patch = self.get_patch_from_depth(depth, boxes_)
+            if depth_patch.max() < 0.1:  # 
+                continue
+                
+            # remove box that detected by maskrcnn as well
+            maskrcnn_boxes = rcnn_instance.pred_boxes
+            if len(maskrcnn_boxes):
+                # recurse every maskrcnn's boxes to filter IoU > thes:
+                device = rcnn_instance.pred_boxes.device
+                rcnn_instance = rcnn_instance.to("cpu")
+                maskrcnn_boxes = rcnn_instance.pred_boxes
+                
+                obns_ = v._convert_boxes(objectness_boxes[j])
+                msk_ = v._convert_boxes(maskrcnn_boxes)     # all maskrcnn box 
+                iou = box_iou_calc(obns_, msk_) # 1*num_maskbox
+                if (iou > 0.5).any():   # detected by maskrcnn as well, remove it
+                    continue
+            print("has far object")
+            cnt += 1
+            if save:
+                cv2.imwrite(self.img_pth + "/obns_imgs/img_"+str(idx)+".png", vis_output.get_image())
+            # pot_mp = v.draw_patch(box_coord=boxes_, color='white')
+            # mask_ = obns_instance.pred_masks[j]
+            # pot_surro_mask[mask_.cpu().numpy() >0] = 1.
+        
+        # resize to 128*128
+        # if isinstance(pot_mp, np.ndarray):
+        #     pot_mp = pot_mp.squeeze(-1) if len(pot_mp.shape) == 3 else pot_mp
+        # else:
+        #     pot_mp = pot_mp.get_image()
+        
+        # pot_mp[pot_mp > 0] = 1.
+        # pot_mp= (pot_mp.astype('float32')*depth)[..., np.newaxis]    # multiply depth
+        
+        # pot_surro_mask = pot_surro_mask[..., np.newaxis]
+        # cv2.imwrite(f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/t_potential_d.png", pot_mp.transpose(1,2,0))
+        
+        # if device is not None:
+        #     self.seg_instances[0]['instances'] = self.seg_instances[0]['instances'].to(device)
+        # return pot_mp, cnt, pot_surro_mask
+        
+        
+        
+        
+        
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         '''
             构建pcd
         '''
         self.model.eval()
-        instances, infos = self(batch)
+        instances, infos = self(batch)      # infos: instance ids per image
 
         for b, prediction, info in zip(batch, instances, infos):
+            env = b['env']
             episode = b['episode']
-            if episode in self.global_pcds:
-
-                episode_pcd = self.global_pcds[episode]
+            if env in self.global_pcds:
+                if episode in self.global_pcds[env]:
+                    episode_pcd = self.global_pcds[env][episode]
+                else:
+                    episode_pcd = pu.SemanticPointCloud(
+                    episode=episode, env=env, solution=self.solution
+                )
+                    self.global_pcds[env][episode] = episode_pcd
             else:
                 episode_pcd = pu.SemanticPointCloud(
                     episode=episode, solution=self.solution
                 )
-                self.global_pcds[episode] = episode_pcd
+                self.global_pcds[env] = {}
+                self.global_pcds[env][episode] = episode_pcd
 
             _pcd = pu.project_semantic_masks_to_3d(
-                b['depth'].squeeze(0),
-                b['location'],
+                b['depth'].squeeze(0),      
+                b['location'],      
                 prediction.to(b['depth'].device),
                 info,
                 update_logits=False # do not update logits locally, only per episode
             )
             _pcd._episode = episode
+            _pcd._env = env
 
             episode_pcd += _pcd
 
@@ -141,13 +275,14 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
 
         labels = []
 
-        for k in self.global_pcds.keys():
-            self.global_pcds[k].preprocess()        # 同一所有pcd的标签
-
+        for env in self.global_pcds.keys():
+            for k in self.global_pcds[env].keys():
+                self.global_pcds[env][k].preprocess()        # 统一点云的所有标签和类别
+        n = 0
         for batch in tqdm.tqdm(dataloader):
-
+            
             for data in batch:
-                pcd = self.global_pcds[data['episode']]
+                pcd = self.global_pcds[data['env']][data['episode']]
 
                 # Compute the ray intersections.
                 _time = time.time()
@@ -170,7 +305,7 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
                 resolved_classes = []
                 ids = []
 
-                for mask, object_id, cls, l in zip(
+                for mask, object_id, cls_, l in zip(
                     semantic_masks, object_ids, classes, r_logits
                 ):
                     bb = cv2.boundingRect(mask.numpy().astype('uint8'))
@@ -178,18 +313,17 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
                     x, y, w, h = bb
                     if w == 0 or h == 0:
                         continue
-                    if cls >= len(BBSense.CLASSES):
+                    if cls_ >= len(BBSense.CLASSES):        # class的范围？
                         continue  # Background or overflowd class
+                    
                     logits.append(l)        # TODO : l/ temperature
-
-                    resolved_class = cls
-
+                    resolved_class = cls_
                     ids.append(object_id)
+                    
                     bounding_boxes.append(
                         torch.tensor([x, y, x + w, y + h]).unsqueeze(0)
                     )
                     resolved_classes.append(resolved_class)
-
                     resolved_masks.append(mask)
 
                 t.gt_classes = (
@@ -215,9 +349,23 @@ class SemanticMapConsensusLabeler(ConsensusLabeler):
                     else Boxes(torch.Tensor())
                 )
                 labels.append(t)
+                
+                self.save_image(data['image'].permute(1, 2, 0), t, n)
+                n+= 1
+                
+                # obns prediction
+                # self.get_obns_prediction(data['image'], n, data['depth'], t)
         gc.collect()
         return labels
 
+    def save_image(self, img, instance: Instances, idx: int):
+        v = Visualizer(
+                img, MetadataCatalog.get('coco_2017_val'))
+        cls_id_map = {0: 56, 1:57, 2:58, 3:59, 4:61}
+        instances_mapped = map_to_original_cls_gt(instance.to("cpu"), cls_id_map)
+        v = v.draw_instance_gt(instances_mapped)
+        # img = cv2.cvtColor(v.get_image(), cv2.COLOR_BGR2RGB)
+        cv2.imwrite(self.img_pth + "/rcnn_imgs/img_"+str(idx)+".png", v.get_image())
 
 class LogitsConsensusLabeler(ConsensusLabeler):
     def __init__(self, temperature=1, model=None,*args, **kwargs):

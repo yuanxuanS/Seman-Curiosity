@@ -4,8 +4,10 @@ from albumentations.pytorch import ToTensorV2
 from detectron2.structures.boxes import Boxes, BoxMode
 from detectron2.structures.instances import Instances
 from detectron2.structures.masks import BitMasks
-from .dataset_utils import SampleLoader
-from .sensors_data import BBSense
+from src.finetune.dataset_utils import SampleLoader
+from src.finetune.sensors_data import BBSense
+from detectron2.data import detection_utils as du
+import cv2
 import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
@@ -235,11 +237,12 @@ class PseudoFullDataset(BbsgtDataset):
         if len(episode_list) > len(pseudo_labels):      # TODO? 这里应该怎么改？
             mask += [False] * (len(episode_list) - len(pseudo_labels))
 
+        env_list = env_list[mask]
         steps_list = steps_list[mask]
         episode_list = episode_list[mask]
         pseudo_list = self.pseudo_labels
         
-        inputs = np.array([x for x in zip(episode_list, steps_list, pseudo_list)])
+        inputs = np.array([x for x in zip(env_list, episode_list, steps_list, pseudo_list)])
 
         super().__init__(
             data_path=data_path,
@@ -250,15 +253,11 @@ class PseudoFullDataset(BbsgtDataset):
         )
     
     def __getitem__(self, idx):
-        """
-        """
 
-        result = []
-        episode, step, pseudo_label = self.inputs[self.index[idx]]
+        env, episode, step, pseudo_label = self.inputs[self.index[idx]]
 
-        camera_id = 0
         data = self.sampler.get_sample_multimodality(
-            episode, camera_id, self.modalities, step
+            env, episode, step, self.modalities
         )
         
         x = data['rgb'].data
@@ -273,7 +272,7 @@ class PseudoFullDataset(BbsgtDataset):
             y.gt_masks = y.gt_masks.tensor
             
         
-        x, y = self._transform_batch_with_logits(x, y)   # TODO
+        x, y = self._transform_batch_with_logits(x, y) 
         
         gt = data['bbsgt'].get_bbs_as_gt()
         
@@ -308,7 +307,7 @@ class PseudoFullDataset(BbsgtDataset):
                 gt_logits=[l for l in y.gt_logits],     # TODO：
             )
 
-            x = transformed_image
+            x = transformed
 
             min_area = -1  # transform._to_dict()['bbox_params']['min_area']
 
@@ -348,10 +347,14 @@ class PseudoFullDataset(BbsgtDataset):
 
 if __name__ == "__main__":
     exp_p = '/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test'+ "/episodes_data"
-    dataset = BbsgtDataset(data_path=exp_p)
-    print(dataset[4])
-    dataset.get_coco_item_dict(4)
+    # dataset = BbsgtDataset(data_path=exp_p)
+    # print(dataset[4])
+    # dataset.get_coco_item_dict(4)
     
-    dataset_full = FullDataset(data_path=exp_p)
-    print(len(dataset_full))
-    print(dataset_full[1])
+    # dataset_full = FullDataset(data_path=exp_p)
+    # print(len(dataset_full))
+    # print(dataset_full[1])
+    
+    dataset_pseudo = PseudoFullDataset(data_path=exp_p)
+    print(len(dataset_pseudo))
+    print(dataset_pseudo[2])

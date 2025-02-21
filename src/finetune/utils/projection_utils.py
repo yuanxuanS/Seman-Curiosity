@@ -18,7 +18,7 @@ from torch.nn import functional as F
 
 from ..sensors_data import AgentPoseSense, BBSense, DepthSense
 import src.finetune.utils.inconsistencies as inc
-
+from .consistency_utils import resolve_consistency3
 from line_profiler import profile
 
 log = logging.getLogger(__name__)
@@ -166,14 +166,17 @@ def project_semantic_masks_to_3d(
         pose = pose.get_cam_pose().get_T()
 
     if len(infos):
+        env = infos[0]['env']
         episode = infos[0]['episode']
-    else:
-        episode = 0
+    # else:
+    #     env = 0
+    #     episode = 0
+    
     if n_instances == 0:
-
-        return SemanticPointCloud(-1, torch.Tensor(), torch.Tensor())
+        return SemanticPointCloud(-1, -1, torch.Tensor(), torch.Tensor())
+    
     observation_pcd = SemanticPointCloud(
-        episode, torch.Tensor(), torch.Tensor()
+        episode, env, torch.Tensor(), torch.Tensor()
     )
 
     for i in range(n_instances):
@@ -183,7 +186,7 @@ def project_semantic_masks_to_3d(
             else instances[i].pred_masks
         ).squeeze()
 
-        cls = (
+        cls_ = (
             instances[i].gt_classes
             if hasattr(instances, "gt_classes")
             else instances[i].pred_classes
@@ -199,12 +202,12 @@ def project_semantic_masks_to_3d(
 
         points = project_instance_segmentation(depth, pose, mask.squeeze()).cpu()
 
-        points_cls = np.ones((points.shape[0], 1)) * cls.cpu().numpy()
+        points_cls = np.ones((points.shape[0], 1)) * cls_.cpu().numpy()
 
-        points_obj_ids = np.ones((points.shape[0], 1)) * infos[i]['id_object']
+        points_obj_ids = np.ones((points.shape[0], 1)) * infos[i]['id_object']      # TODO?
         points_obj_episodes = np.ones((points.shape[0], 1)) * infos[i]['episode']
         points_infos = np.hstack((points_cls, points_obj_episodes, points_obj_ids))
-        _pcd = SemanticPointCloud(infos[i]['episode'], points, points_infos)
+        _pcd = SemanticPointCloud(infos[i]['episode'], infos[i]['env'], points, points_infos)
 
         observation_pcd = observation_pcd + _pcd
 
@@ -319,7 +322,7 @@ def _outlier_removal(points: torch.Tensor, max_deviations=1):
 
 
 class SemanticPointCloud:
-    def __init__(self, episode: int = -1, points=None, infos=None, distance_f=None, solution="max"):
+    def __init__(self, episode: int = -1, env: int=-1, points=None, infos=None, distance_f=None, solution="max"):
         """
         sem_pcd_points: Array of Nx6 elements. Each element is (x,y,z,class,episode,object_id)
         object_id_to_logits (dict): for each object id, list of logits
@@ -333,12 +336,13 @@ class SemanticPointCloud:
             distance_f = _cosine_distance
         self.distance_f = distance_f
         self.infos = np.asarray(infos).reshape(
-            -1, 3
+            -1, 3       # 3
         )  # N x 3 (class, episode_id, object_id)
 
         self._init_pcd()
-        self.thr = 0.05
+        self.thr = 0.05     # voxel resolution
         self._episode = episode
+        self._env = env
         self.scene = None
         self.object_id_to_logits: Dict = dict()
 
@@ -365,7 +369,7 @@ class SemanticPointCloud:
         self._kdtree = None
         self.invalid_index = len(self.points)
         self.classes = self.infos[:, 0].astype(int)
-        self.episodes = self.infos[:, 1].astype(int)
+        self.episodes = self.infos[:, 1].astype(int)        # not used
         self.object_ids = self.infos[:, 2].astype(int)
 
     def __add__(self, x: "SemanticPointCloud"):
@@ -447,12 +451,10 @@ class SemanticPointCloud:
         self._pcd = _pcd
         if lower_bound is None:
             lower_bound = np.asarray(_pcd.points.min(0))
-
         self.lower_bound = lower_bound
 
         if upper_bound is None:
             upper_bound = np.asarray(_pcd.points.max(0))
-
         self.upper_bound = upper_bound
 
         d_x = int((upper_bound[0] - lower_bound[0]) // vox_size)
@@ -483,10 +485,8 @@ class SemanticPointCloud:
         self.coords = np.stack([x_cords, y_cords, z_cords], 1)
 
         # # Use consistency_solution only for updated voxels, keep same class,logits tuple for the others
-        
         update_voxels = np.setdiff1d(voxel_ids, self.current_voxel_ids)
         self.current_voxel_ids = np.unique(voxel_ids)
-
 
         cpu_counts = 20
         n_chunks = len(update_voxels) // cpu_counts
@@ -496,199 +496,50 @@ class SemanticPointCloud:
             ]
             for i in range(cpu_counts)
         ]
-        def resolve_consistency1():
         
-            consistency_solution = partial(
-                inc.solve_inconsistency3,  # main inconsistency solution function
-                solve_function=self.solve,  # `solve_function` is used in solve_inconsistency
-                voxel_ids=voxel_ids,
-                object_ids=self.object_ids,
-                object_id_to_logits=self.object_id_to_logits,
-            )
-            return consistency_solution
-
-        def resolve_consistency2(update_voxels):
-            '''
-            time improved func. First compute all composition of object id. Record and Search
-            Reduce the repeated computation of consistency of voxel
-            '''
-            def get_ids(vox_ids, object_ids, voxel_ids):
-            
-                part_len = len(vox_ids)
-                all_len = len(voxel_ids)
-                vox_ids = vox_ids[np.newaxis,...].T.repeat(all_len, 1)  # len(vox_ids), len(voxel_ids)
-                voxel_ids = voxel_ids[np.newaxis,...].repeat(part_len, 0)
-                object_ids = object_ids[np.newaxis, ...].repeat(part_len, 0)
-                mask = voxel_ids == vox_ids     # lid_cpuen(vox_ids), len(voxel_ids)
-
-
-                id_couples = []
-                for i in range(part_len):
-                    objects = object_ids[i, :][mask[i, :]]
-                    ids = tuple(np.unique(objects, return_counts=True)[0])
-                    key = tuple(sorted(ids)) 
-                    id_couples.append(key)  
-                return id_couples
-        
-            id_couples = get_ids(update_voxels, self.object_ids, voxel_ids)
-            unique_id_cps = set(id_couples)
-
-            solve_function=self.solve   #_ours_impl
-            
-            computed_dict = {}
-            for uic in unique_id_cps:
-                logits = []
-                for i in uic:
-                    obj_logits = self.object_id_to_logits[i].cpu()
-                    if len(obj_logits.shape) == 1:
-                        obj_logits = obj_logits.unsqueeze(0)
-                    logits.append(obj_logits)
-                logits = torch.cat(logits)
-                resolved_class, _ = solve_function(logits)
-                computed_dict[uic]=(resolved_class, logits)
-
-            def get_inconsistency(
-                vox_ids, object_ids, voxel_ids, inconsis_dict
-            ):
-                results = []
-                for vox_id in vox_ids:
-                    objects = object_ids[voxel_ids == vox_id]
-                    if len(objects) == 0:
-                        return None, None
-                    ids = tuple(np.unique(objects, return_counts=True)[0])
-
-                    key = tuple(sorted(ids))
-                    resolved_class, logits = inconsis_dict[key]
-                    results.append((vox_id, (resolved_class, logits)))
-
-                return results
-            
-            consistency_solution = partial(
-                    get_inconsistency,  # main inconsistency solution function
-                    # solve_function=_ours_impl,  # `solve_function` is used in solve_inconsistency
-                    voxel_ids=voxel_ids,
-                    object_ids=self.object_ids,
-                    # object_id_to_logits=object_id_to_logits,
-                    inconsis_dict=computed_dict
-                )
-            return consistency_solution
-        
-        def resolve_consistency3(update_voxels):
-            '''
-            '''
-            def get_object_ids(
-                vox_ids, object_ids, voxel_ids
-            ):
-                # computed_dict = {}  # 记录voxel里点云的object id一样的计算结果，减少计算时间
-                results = []
-                for vox_id in vox_ids:
-                    objects = object_ids[voxel_ids == vox_id]
-                    if len(objects) == 0:
-                        continue
-                    ids = tuple(np.unique(objects, return_counts=True)[0])
-                    results.append(tuple(sorted(ids)))
-
-                return results
-            
-            get_objid_func = partial(
-                get_object_ids,  # main inconsistency solution function
-                # solve_function=_ours_impl,  # `solve_function` is used in solve_inconsistency
-                voxel_ids=voxel_ids,
-                object_ids=self.object_ids,
-                # object_id_to_logits=object_id_to_logits,
-            )
-
-            id_couples = []
-
-            for i in inputs:
-                res = get_objid_func(i)
-                for r in res:
-                    id_couples.append(r)
-            # print(id_couples)
-            unique_id_cps = set(id_couples)
-
-            solve_function=self.solve   #_ours_impl
-            
-            computed_dict = {}
-            for uic in unique_id_cps:
-                logits = []
-                for i in uic:
-                    obj_logits = self.object_id_to_logits[i].cpu()
-                    if len(obj_logits.shape) == 1:
-                        obj_logits = obj_logits.unsqueeze(0)
-                    logits.append(obj_logits)
-                logits = torch.cat(logits)
-                resolved_class, _ = solve_function(logits)
-                computed_dict[uic]=(resolved_class, logits)
-
-            def get_inconsistency(
-                vox_ids, object_ids, voxel_ids, inconsis_dict
-            ):
-                results = []
-                for vox_id in vox_ids:
-                    objects = object_ids[voxel_ids == vox_id]
-                    if len(objects) == 0:
-                        return None, None
-                    ids = tuple(np.unique(objects, return_counts=True)[0])
-
-                    key = tuple(sorted(ids))
-                    resolved_class, logits = inconsis_dict[key]
-                    results.append((vox_id, (resolved_class, logits)))
-
-                return results
-            
-            consistency_solution = partial(
-                    get_inconsistency,  # main inconsistency solution function
-                    # solve_function=_ours_impl,  # `solve_function` is used in solve_inconsistency
-                    voxel_ids=voxel_ids,
-                    object_ids=self.object_ids,
-                    # object_id_to_logits=object_id_to_logits,
-                    inconsis_dict=computed_dict
-                )
-            return consistency_solution
-        
-        consistency_solution3 = resolve_consistency3(update_voxels)
+        consistency_solution3 = resolve_consistency3(update_voxels,
+                                                    self.solve,
+                                                     voxel_ids,
+                                                     self.object_ids,
+                                                     self.object_id_to_logits,
+                                                     inputs)
         solutions = []
 
         for i in inputs:
-            res = consistency_solution3(i)
+            res = consistency_solution3(i)  # List[ (voxel_id, (resolved_class, logits)), ...]
             solutions.append(res)
 
         solutions = reduce(add, solutions)
-
         for sol in solutions:
             self.results[sol[0]] = sol[1]
 
+        # 更新class到所有的voxel grid上
         for vox_id, result in self.results.items():
-            voxelize_pcd[vox_id] = result[0] + 1
-
-
+            voxelize_pcd[vox_id] = result[0] + 1        # 类别+1,初始化为0，为了计算连通域， 类别id从1开始
         voxelize_pcd = voxelize_pcd.reshape((d_x, d_y, d_z))
-
+        
+        # 根据class，找到连通域
         connected_pcd = cc3d.connected_components(voxelize_pcd, connectivity=26)
         self.current_connected_pcd = connected_pcd
 
-
         unique_voxels = np.stack(np.where(connected_pcd > 0)).T
         # unique_voxels = np.unique(self.coords, axis=0)
-        self.points = voxelgrid.voxel_centers[connected_pcd.flatten() != 0]
-
+        self.points = voxelgrid.voxel_centers[connected_pcd.flatten() != 0] # 仅保留连通部分的点, 更新points为voxel中心
         classes = (
             voxelize_pcd[unique_voxels[:, 0], unique_voxels[:, 1], unique_voxels[:, 2]]
             - 1
-        )  # taking classes for points after dust
+        )  # 类别恢复从0开始，taking classes for points after dust
 
-        # taking unique object ids starting from 0 by using "unique(..., return_inverse=True)"
+        # 更新object id从0开始：taking unique object ids starting from 0 by using "unique(..., return_inverse=True)"
         objects_to_update = np.unique(
             connected_pcd[
                 unique_voxels[:, 0], unique_voxels[:, 1], unique_voxels[:, 2]
             ],
         )
         objects = connected_pcd[np.where(connected_pcd > 0)]
-
+        
+        # 重新计算每个object的logit： object包括的voxel的所有logits  concatenating logits for each object
         resolved_logits = dict()
-
-        # concatenating logits for each object
         for k in objects_to_update:
 
             voxels_to_use = np.where(connected_pcd.flatten() == k)[0]
@@ -702,14 +553,14 @@ class SemanticPointCloud:
 
                 resolved_logits[k] = acc_logits
 
+        # update 
+        envs = np.zeros_like(unique_voxels[:, 0])
         episodes = np.zeros_like(unique_voxels[:, 0])
-
 
         self.infos = np.vstack([classes, episodes, objects]).T
         assert len(self.infos) == len(self.points)
 
         self.object_id_to_logits = resolved_logits
-
         self.voxelize_pcd = voxelgrid
         self._init_pcd()
 
@@ -994,9 +845,8 @@ class SemanticPointCloud:
         for _, obj_id in enumerate(np.unique(object_ids)):
 
             segm = object_ids == obj_id # 该物体的分割
+            
             mask = np.zeros_like(keep)
-
-
             mask[keep] = segm
 
             cls_id = int(self.classes[founds[1][mask]][0])

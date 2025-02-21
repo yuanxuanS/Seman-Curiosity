@@ -13,6 +13,7 @@ from src.policy_rl.maps import Maps_Env
 from src.policy_rl.utils.storage import GlobalRolloutStorage
 from src.policy_rl.model import RL_Policy
 from  src.policy_rl import algo 
+from src.policy_rl.baseline_frontier import Frontier
 import cv2
 import json
 
@@ -93,6 +94,25 @@ def main():
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
     
+    # for visualize
+    full_map = maps.full_map
+    vis_inputs = [{} for e in range(num_scenes)]
+    for e, p_input in enumerate(vis_inputs):
+        p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
+        p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
+        p_input['pose_pred'] = maps.get_all_pose()[e]
+        
+        p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
+        p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
+        p_input['pose_pred'] = maps.get_all_pose()[e]
+        if args.visualize or args.print_images:
+            local_map[e, -1, :, :] = 1e-5       # 有物体时，为了argmax时不选最后通道
+            p_input['sem_map_pred'] = local_map[e, 4:, :, :
+                                                ].argmax(0).cpu().numpy()   # 如果无object，选最后一个通道
+            full_map[e, -1, :, :] = 1e-5
+            p_input['sem_map_pred_full'] = full_map[e, 4:, :, :].argmax(0).cpu().numpy()
+
+
     if args.agent == "rl":
         # Local policy observation space
         es = 3      # extra size: x, y, orientation
@@ -166,24 +186,14 @@ def main():
     
     elif args.agent == "random":
         l_action = np.random.randint(0, 3, num_scenes)
-    
-    # for visualize
-    full_map = maps.full_map
-    vis_inputs = [{} for e in range(num_scenes)]
-    for e, p_input in enumerate(vis_inputs):
-        p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
-        p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
-        p_input['pose_pred'] = maps.get_all_pose()[e]
-        
-        p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
-        p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
-        p_input['pose_pred'] = maps.get_all_pose()[e]
-        if args.visualize or args.print_images:
-            local_map[e, -1, :, :] = 1e-5       # 有物体时，为了argmax时不选最后通道
-            p_input['sem_map_pred'] = local_map[e, 4:, :, :
-                                                ].argmax(0).cpu().numpy()   # 如果无object，选最后一个通道
-            full_map[e, -1, :, :] = 1e-5
-            p_input['sem_map_pred_full'] = full_map[e, 4:, :, :].argmax(0).cpu().numpy()
+    elif args.agent == "frontier":
+        l_policy = Frontier(args)
+        l_policy.reset(num_scenes)
+        l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
+        for e, p_input in enumerate(vis_inputs):
+            if args.visualize or args.print_images:
+                p_input["frontier_goal"] = goals[e]
+                p_input["short_time_goal"] = short_time_goals[e]
     # transition:
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
@@ -286,6 +296,9 @@ def main():
                         if len(episode_done[e]) == num_episodes:
                             finished[e] = 1
 
+            if args.agent == "frontier":
+                l_policy.reset(num_scenes)
+                
         # Sample next action
         if args.agent == "rl":
             l_value, l_action, l_action_log_prob, l_rec_states = \
@@ -299,10 +312,11 @@ def main():
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
             l_action = np.random.randint(0, 3, num_scenes)
-        # print(f"action {l_action}")
+
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
+                
             p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
             p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
             p_input['pose_pred'] = maps.get_all_pose()[e]
@@ -310,14 +324,23 @@ def main():
             p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
             p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
             p_input['pose_pred'] = maps.get_all_pose()[e]
+            
+
             if args.visualize or args.print_images:
                 local_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred'] = local_map[e, 4:, :, :
                                                     ].argmax(0).cpu().numpy()
                 full_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred_full'] = full_map[e, 4:, :, :
-                                                        ].argmax(0).cpu().numpy()
-
+                                                        ].argmax(0).cpu().numpy()                    
+        
+        if args.agent == "frontier":  # must be after updating vis_inputs
+            l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
+            if args.visualize or args.print_images:
+                for e, p_input in enumerate(vis_inputs):
+                    p_input["frontier_goal"] = goals[e]
+                    p_input["short_time_goal"] = short_time_goals[e]
+        
         # transition: next state
         # pred instance, get semantic masks and step env
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset

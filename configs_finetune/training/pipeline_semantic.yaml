@@ -1,6 +1,11 @@
+defaults: 
+  - base_params
 
 
+
+exp_name_training: semantic3D
+
+use_teacher: True
 consensus: semantic
-
-exp_name_training: semantic
+teacher_pred_thr: 0.7
 solution: ours

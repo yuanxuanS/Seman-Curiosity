@@ -95,7 +95,7 @@ class SampleLoader:
         self.steps_list = np.array(steps_list)
         
     def __len__(self):
-        pass
+        return len(self.get_env_episode_and_steps_dense_list()[0])
     
     @staticmethod
     def _load_data(path: str):
