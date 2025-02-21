@@ -369,10 +369,10 @@ class Semantic_Mapping(nn.Module):
         translated = F.grid_sample(rotated, trans_mat, align_corners=True)
 
         # update map with last map
-        # maps2 = torch.cat((maps_last.unsqueeze(1), translated.unsqueeze(1)), 1)
+        maps2 = torch.cat((maps_last.unsqueeze(1), translated.unsqueeze(1)), 1)
 
-        # map_pred, _ = torch.max(maps2, 1)
-        map_pred = translated
+        map_pred, _ = torch.max(maps2, 1)
+        # map_pred = translated
 
         return fp_map_pred, map_pred, pose_pred, current_poses
     

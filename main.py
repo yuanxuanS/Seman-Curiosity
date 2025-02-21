@@ -217,7 +217,7 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            l_reward = args.reward_coeff* maps.get_semantic_difference()
+            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
             poten_reward = torch.tensor([info["potential_num"] for info in infos], dtype=torch.float, device=l_reward.device)
             # poten_reward = args.poten_reward_coeff *obs[:, 4, ...].sum(-1).sum(-1) / (args.frame_height * args.frame_width)  # obs size: 128*128
 
