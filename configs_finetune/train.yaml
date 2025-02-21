@@ -7,7 +7,7 @@ notes:
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
 
 # data
-sample_path:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier/episodes_data
+sample_path:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_3_sample/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/episodes_data
 
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_zone_eval_best/episodes_data
@@ -26,7 +26,7 @@ checkpoint_path:
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-01-29/01-29-16-33-01_gt_consensus_vanilla_bs_16_notes_In640/checkpoints/epoch=09.ckpt
 
 # training device
-gpus: [2,]   # 指定gpu: [1,2,3] 多gpu训练  
+gpus: [1,]   # 指定gpu: [1,2,3] 多gpu训练  
 
 base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
 

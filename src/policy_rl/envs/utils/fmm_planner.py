@@ -104,15 +104,15 @@ class FMMPlanner():
         ratio1 = subset / dist_mask     # 计算成本？
         subset[ratio1 < -1.5] = 1   # 成本小于-1.5， 作为可行区域
 
-        # (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)      # 最小
-        min_values = np.min(subset)
-        indices = np.where(subset == min_values)
-        if len(indices) >0:
-            if len(indices[0]) > 1: # 多个最小值
-                idx = random.choice([i for i in range(len(indices[0]))])
-                stg_x, stg_y = indices[0][idx], indices[1][idx]
-            else:
-                stg_x, stg_y = indices
+        (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)      # 最小
+        # min_values = np.min(subset)
+        # indices = np.where(subset == min_values)
+        # if len(indices) >0:
+        #     if len(indices[0]) > 1: # 多个最小值
+        #         idx = random.choice([i for i in range(len(indices[0]))])
+        #         stg_x, stg_y = indices[0][idx], indices[1][idx]
+        #     else:
+        #         stg_x, stg_y = indices
             
         
         if subset[stg_x, stg_y] > -0.0001:
