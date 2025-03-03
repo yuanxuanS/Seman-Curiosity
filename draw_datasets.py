@@ -84,11 +84,11 @@ def play_imgs(path):
         cv2.waitKey(100)
     
 if __name__ == "__main__":   
-    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/"
+    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v3_eval_best_2_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/"
     save_pth = base_dir + "episodes_data_imgs"
     dataset_path = base_dir + "episodes_data"
 
-    # save_data_imgs(dataset_path, save_pth)
+    save_data_imgs(dataset_path, save_pth)
     
-    play_imgs(save_pth)
+    # play_imgs(save_pth)
