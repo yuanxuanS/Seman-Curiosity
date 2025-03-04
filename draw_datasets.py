@@ -12,7 +12,7 @@ from torch import Tensor
 import cv2
 import os
 
-def save_data_imgs(dataset_path, save_pth):
+def save_data_imgs(dataset_path, save_pth, with_label=False):
     if not os.path.exists(save_pth):
         os.mkdir(save_pth)
 
@@ -68,11 +68,16 @@ def save_data_imgs(dataset_path, save_pth):
                     y.pred_masks = y.gt_masks
                 else:
                     y.pred_masks = y.gt_masks.tensor
-            frame = visualizer.draw_instance_predictions(
-                predictions=y.to('cpu')
-            ).get_image()
-            cv2.imwrite(save_pth + )
-            # cv2.imwrite(save_pth + "/batch_"+str(batch_idx)+"_img_"+str(idx)+".png", frame)
+                    
+            if with_label:
+                frame = visualizer.draw_instance_predictions(
+                    predictions=y.to('cpu')
+                ).get_image()
+                # cv2.imwrite(save_pth + "/batch_"+str(batch_idx)+"_img_"+str(idx)+".png", frame)
+            else:
+                frame = visualizer.img
+            cv2.imwrite(save_pth + "/epi"+str(x['episode'])+"_env"+str(x['env']) + "_step"+str(x['step'])+".png", frame)
+            # 
             
     # break
 
@@ -85,11 +90,15 @@ def play_imgs(path):
         cv2.waitKey(100)
     
 if __name__ == "__main__":   
-    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/"
+    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v3_eval_best_2_sample/"
+    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/"
+    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/"
-    save_pth = base_dir + "episodes_data_imgs"
-    dataset_path = base_dir + "episodes_data"
+    save_pth = base_dir + "/episodes_data_orig_imgs"
+    if not os.path.exists(save_pth):
+        os.mkdir(save_pth)
+    dataset_path = base_dir + "/episodes_data"
 
-    # save_data_imgs(dataset_path, save_pth)
+    save_data_imgs(dataset_path, save_pth)
     
-    play_imgs(save_pth)
+    # play_imgs(save_pth)
