@@ -1,0 +1,40 @@
+defaults:
+  - detectron_args: maskrcnn
+  - training: visualize_labels  #pipeline_semantic
+  - hydra: default
+
+notes: visualize
+exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_bs_${training.batch_size}_notes_${notes}
+
+# data
+sample_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v3_eval_best_2_sample/episodes_data
+
+# 
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/episodes_data
+
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_zone_eval_best/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random_init_sample/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random_sample/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/episodes_data
+
+testset_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/fix_test640/data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v3_eval_best_2_sample/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/fix_test640/data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/episodes_data
+# 
+
+# training params
+update_target: False   # TODO
+n_iterations: 1
+checkpoint_path: 
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-01-29/01-29-16-33-01_gt_consensus_vanilla_bs_16_notes_In640/checkpoints/epoch=09.ckpt
+
+# training device
+gpus: [1,]   # 指定gpu: [1,2,3] 多gpu训练  
+
+base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
+
+

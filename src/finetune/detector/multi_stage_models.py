@@ -4,7 +4,13 @@ from ..sensors_data import BBSense
 import torch
 from ..utils import triplet
 from typing import Dict, List, Optional, Tuple
-
+from detectron2.data import MetadataCatalog
+from detectron2.utils.visualizer import ColorMode, Visualizer
+from detectron2.structures import Instances, Boxes
+from copy import deepcopy
+from torch import Tensor
+import cv2
+import os
 
 class MultiStageModel(Predictor):
     def __init__(
@@ -49,6 +55,10 @@ class MultiStageModel(Predictor):
         self.model.roi_heads.mask_on = mask_on      # TODO 原来就是mask on
         self.save_hyperparameters()
         
+        self.visualize = False
+        if "visualize" in kwargs and kwargs['visualize']:
+            self.visualize = True
+            self.save_path = kwargs['sample_path']
     def configure_optimizers(self, *args, **kwargs):
         optimizer = getattr(torch.optim, self.optimizer)(
             params=self.parameters(),
@@ -59,15 +69,15 @@ class MultiStageModel(Predictor):
         return optimizer
     
     def training_step(self, batch, batch_idx):
-        losses, predictions = self._common_step(batch)
+        losses, predictions = self._common_step(batch, stage="train")
         return losses, predictions
     
     def validation_step(self, batch, batch_idx):
         # always use gt for validation
-        losses, predictions = self._common_step(batch,)  
+        losses, predictions = self._common_step(batch)  
         return losses, predictions
     
-    def _common_step(self, batch):
+    def _common_step(self, batch, stage=None):
         (
             predictions,
             pred_loss,
@@ -94,9 +104,68 @@ class MultiStageModel(Predictor):
             for key, _ in pred_loss.items():
                 pred_loss[key] *= self.loss_weights.get(key, 1.0)
             result = {**result, **pred_loss}
-            
+        
+        # visualize imgs
+        if self.visualize and stage == "train":
+            self.visualize_and_save(batch, predictions)
         return result, predictions
     
+    def visualize_and_save(self, batch, predictions):
+        strs=self.save_path.split("/")[:-1]
+        save_pth = "/"
+        for s in strs:
+            save_pth = save_pth + s + "/"
+        
+        self.pth_gt = save_pth + "/episode_data_GT"
+        if not os.path.exists(self.pth_gt):
+            os.mkdir(self.pth_gt)
+        
+        self.pth_pred = save_pth + "/episode_data_Pred"
+        if not os.path.exists(self.pth_pred):
+            os.mkdir(self.pth_pred)
+            
+        for idx, x in enumerate(batch):
+            remap = BBSense.REMAP
+            metadata = MetadataCatalog.get('coco_2017_val')
+            
+            # GT
+            visualizer = Visualizer(
+                deepcopy(x['image'].permute(1, 2, 0).cpu()),
+                metadata,
+                instance_mode=ColorMode.IMAGE,
+            )
+            y = deepcopy(x['gt'])
+
+            # y.gt_classes = torch.tensor([remap[p.item()] for p in y.gt_classes])
+            # if hasattr(y, "gt_boxes"):
+            #     y.pred_boxes = y.gt_boxes
+            # if hasattr(y, "gt_masks"):
+            #     if isinstance(y.gt_masks, Tensor):
+            #         y.pred_masks = y.gt_masks
+            #     else:
+            #         y.pred_masks = y.gt_masks.tensor
+            frame = visualizer.draw_instance_gt(
+                predictions=y.to('cpu')
+            ).get_image()
+            
+            
+            cv2.imwrite(self.pth_gt + "/epi"+str(x['episode'])+"_env"+str(x['env']) + "_step"+str(x['step'])+"_GT.png", frame)
+            
+            # prediction
+            visualizer2 = Visualizer(
+                deepcopy(x['image'].permute(1, 2, 0).cpu()),
+                metadata,
+                instance_mode=ColorMode.IMAGE,
+            )
+            pred = deepcopy(predictions[idx]['instances'])
+            
+            pred.pred_classes = torch.tensor([remap[p.item()] for p in pred.pred_classes])
+            frame2 = visualizer2.draw_instance_predictions(
+                predictions=pred.to('cpu')
+            ).get_image()
+            cv2.imwrite(self.pth_pred + "/epi"+str(x['episode'])+"_env"+str(x['env']) + "_step"+str(x['step'])+"_Pred.png", frame2)
+
+        
     def _compute_contrastive_loss(self, features, y):
         if self.compute_projector_loss:
 
