@@ -1,15 +1,11 @@
 data/
 data
 exps/
-<<<<<<< HEAD
-# third_parties/
-=======
 exps_finetune/
 third_parties/
 third_parties/detectron2/build/
 outputs/
->>>>>>> curiosity
-
+images/
 # type
 *.pyc
 *.png
