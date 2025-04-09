@@ -50,11 +50,13 @@ class TeacherStudent(pl.LightningModule):
             "vanilla": VanillaConsensusLabeler,
             "semantic": SemanticConsensusLabeler,
         }
+        self.lckp = True if kwargs['checkpoint_path'] is None else False
         self.teacher_model: ConsensusLabeler = switch[consensus](
-            model=models.MultiStageModel(detectron_args, prune=True, **kwargs),
+            model=models.MultiStageModel(detectron_args, prune=True, load_checkpoint=self.lckp, **kwargs),
             solution=solution,
             temperature=temperature,
             thr=teacher_pred_thr,
+            
             **kwargs,
         )
         self.use_teacher = use_teacher
@@ -73,7 +75,7 @@ class TeacherStudent(pl.LightningModule):
         self.save_hyperparameters()
         
     def init_student(self):
-        self.student_model = self.student_model_cls(self.detectron_args, **self.kwargs)
+        self.student_model = self.student_model_cls(self.detectron_args, load_checkpoint=self.lckp, **self.kwargs)
         self.student_model.model.roi_heads.box_predictor.box_predictor.test_score_thresh = (
             self.student_test_thr
         )

@@ -59,7 +59,14 @@ class ConsensusLabeler(pl.LightningModule):
         self.thr = thr
         self.reinit(model)
         
-        
+        img_pth = kwargs['sample_path']
+        idx = img_pth.rfind("/")
+        self.img_pth = img_pth[:idx]
+        if not os.path.exists(self.img_pth + "/rcnn_imgs/"):
+            os.mkdir(self.img_pth + "/rcnn_imgs/")
+        if not os.path.exists(self.img_pth + "/obns_imgs/"):
+            os.mkdir(self.img_pth + "/obns_imgs/")
+            
     def reinit(self, model=None):
         self.update_model(model)
         self.test_map_metric = MAP(class_metrics=True)
@@ -88,6 +95,15 @@ class ConsensusLabeler(pl.LightningModule):
     def get_pseudo_labels(self, *args, **kwargs):
         pass
     
+    def save_image(self, img, instance: Instances, idx: int):
+        v = Visualizer(
+                img, MetadataCatalog.get('coco_2017_val'))
+        cls_id_map = {0: 56, 1:57, 2:58, 3:59, 4:61}
+        instances_mapped = map_to_original_cls_gt(instance.to("cpu"), cls_id_map)
+        v = v.draw_instance_gt(instances_mapped)
+        # img = cv2.cvtColor(v.get_image(), cv2.COLOR_BGR2RGB)
+        cv2.imwrite(self.img_pth + "/rcnn_imgs/img_"+str(idx)+".png", v.get_image())
+
 class VanillaConsensusLabeler(ConsensusLabeler):
     '''
         直接用预测的类别作为 目标类别
@@ -95,11 +111,16 @@ class VanillaConsensusLabeler(ConsensusLabeler):
     def __init__(self, model=None, *args, **kwargs):
         super().__init__(model, *args, **kwargs)
         
-    def get_pseudo_labels(self, model_outs, *args, **kwargs):   # TODO
+    def get_pseudo_labels(self, model_outs, dataloader):   # TODO
         """
         Returns predictions as pseudo ground-truth
         """
+        data = iter(dataloader)
         result = []
+        n = 0
+        imgs = next(data)
+        length = len(imgs)
+        
         for out in model_outs:
             for pred, infos in zip(out[0], out[1]):
 
@@ -118,6 +139,12 @@ class VanillaConsensusLabeler(ConsensusLabeler):
 
                 target.infos = [info for idx, info in enumerate(infos) if mask[idx]]
                 result.append(target)
+                
+                img = imgs[n%length]['image'].permute(1, 2, 0)
+                self.save_image(img, target, n)
+                if n % length == length - 1:
+                    imgs = next(data)
+                n+= 1
         return result
 
 class SemanticConsensusLabeler(ConsensusLabeler):
@@ -127,13 +154,13 @@ class SemanticConsensusLabeler(ConsensusLabeler):
         super().__init__(model=model, *args, **kwargs)
         self.solution = solution
         
-        img_pth = kwargs['sample_path']
-        idx = img_pth.rfind("/")
-        self.img_pth = img_pth[:idx]
-        if not os.path.exists(self.img_pth + "/rcnn_imgs/"):
-            os.mkdir(self.img_pth + "/rcnn_imgs/")
-        if not os.path.exists(self.img_pth + "/obns_imgs/"):
-            os.mkdir(self.img_pth + "/obns_imgs/")
+        # img_pth = kwargs['sample_path']
+        # idx = img_pth.rfind("/")
+        # self.img_pth = img_pth[:idx]
+        # if not os.path.exists(self.img_pth + "/rcnn_imgs/"):
+        #     os.mkdir(self.img_pth + "/rcnn_imgs/")
+        # if not os.path.exists(self.img_pth + "/obns_imgs/"):
+        #     os.mkdir(self.img_pth + "/obns_imgs/")
             
         # self.args = get_args()
         # self.args.config_file = 'detectron2://'+self.args.config_file
@@ -358,14 +385,6 @@ class SemanticConsensusLabeler(ConsensusLabeler):
         gc.collect()
         return labels
 
-    def save_image(self, img, instance: Instances, idx: int):
-        v = Visualizer(
-                img, MetadataCatalog.get('coco_2017_val'))
-        cls_id_map = {0: 56, 1:57, 2:58, 3:59, 4:61}
-        instances_mapped = map_to_original_cls_gt(instance.to("cpu"), cls_id_map)
-        v = v.draw_instance_gt(instances_mapped)
-        # img = cv2.cvtColor(v.get_image(), cv2.COLOR_BGR2RGB)
-        cv2.imwrite(self.img_pth + "/rcnn_imgs/img_"+str(idx)+".png", v.get_image())
 
 class LogitsConsensusLabeler(ConsensusLabeler):
     def __init__(self, temperature=1, model=None,*args, **kwargs):

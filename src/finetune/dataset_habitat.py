@@ -73,7 +73,7 @@ class BbsgtDataset(Dataset):
                 y = Instances(
                     image_size=x.shape[1:],
                     gt_boxes=Boxes(transformed['bboxes']),
-                    gt_classes=torch.stack(transformed['class_labels']),
+                    gt_classes=torch.Tensor(transformed['class_labels']),
                     gt_masks=BitMasks(
                         torch.stack([torch.tensor(x) for x in transformed['masks']])),
                     infos=transformed['infos'],
@@ -181,7 +181,7 @@ class FullDataset(BbsgtDataset):
         location = data['position'].get_T()
         y = data['bbsgt'].get_bbs_as_gt()
 
-        rgbd = np.concatenate((x, depth), -1)
+        rgbd = np.concatenate((x, depth[..., None]), -1)
         transformed_rgbd, y = self._transform_batch(rgbd, y)
         x = transformed_rgbd[:3]
         depth = transformed_rgbd[-1].unsqueeze(0)
@@ -212,6 +212,8 @@ class PseudoFullDataset(BbsgtDataset):
         sampler=None,
         # consecutive_obs=1,
         subsample_factor=1,
+        filter_envs=None, 
+        filter_episodes=None,
         *args,
         **kwargs,
     ):
@@ -222,7 +224,7 @@ class PseudoFullDataset(BbsgtDataset):
             env_list,
             episode_list,
             steps_list,
-        ) = sampler.get_env_episode_and_steps_dense_list(*args, **kwargs)
+        ) = sampler.get_env_episode_and_steps_dense_list(filter_envs, filter_episodes)
         
         # remove empty labels
         self.pseudo_labels = []

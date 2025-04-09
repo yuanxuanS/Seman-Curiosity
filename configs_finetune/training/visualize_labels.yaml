@@ -1,4 +1,4 @@
-epochs: 1
+epochs: 0
 batch_size: 8   # train, pseudo labeler predict
 val_batch_size: 1
 

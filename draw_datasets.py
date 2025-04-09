@@ -90,7 +90,7 @@ def play_imgs(path):
         cv2.waitKey(100)
     
 if __name__ == "__main__":   
-    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v3_eval_best_2_sample/"
+    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_6_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/"

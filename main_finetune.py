@@ -6,6 +6,7 @@ from src.finetune.pipelines import Pipeline
 from src.finetune.dataset_utils import get_loader
 from src.finetune.utils.train_helpers import dict_helper_collate
 from src.finetune.dataset_utils import get_coco_item_dict, SampleLoader
+from detectron2.checkpoint import DetectionCheckpointer
 
 from detectron2.utils.events import EventStorage
 
@@ -35,8 +36,24 @@ def main(cfg):
         
         if os.path.exists(ckpt_path):
             print(f"load from {ckpt_path}")
-            pipeline.teacher_student = pipeline.teacher_student.load_from_checkpoint(ckpt_path)
-                
+            data = torch.load(ckpt_path)
+            
+            
+            # from iter0.ckpt
+            model = pipeline.teacher_student.teacher_model.model.model
+            for k, v in model.state_dict().items():
+                layer_name = 'student_model.model.' + k
+                if layer_name in data['state_dict'].keys():
+                    model.state_dict()[k].copy_(data['state_dict'][layer_name])
+                    print(f"layer is {layer_name}")
+            
+            # for detector.ckpt
+            # model = pipeline.teacher_student.teacher_model.model.model
+            # for k, v in model.state_dict().items():
+            #     if k in data.keys():
+            #         model.state_dict()[k].copy_(data[k])
+            #         print(f"layer is {k}")
+
     for id_iteration in range(cfg.n_iterations):
         # dataset
         dataset_path = cfg.sample_path
@@ -90,7 +107,11 @@ def main(cfg):
     with EventStorage():
         with torch.no_grad():
             trainer.test(pipeline.teacher_student, test_loader)
-    
+
+            # save detector
+            model = pipeline.teacher_student.student_model.model
+            pth = "./detector.pth"
+            torch.save(model.state_dict(), pth)
 
 if __name__ == "__main__":
     main()

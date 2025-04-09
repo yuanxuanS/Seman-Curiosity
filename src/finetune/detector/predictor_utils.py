@@ -35,7 +35,7 @@ class Predictor(pl.LightningModule):
     def __init__(self, cfg=None, 
                  input_format=None, 
                  load_checkpoint=True, 
-                 metadata=None, 
+                 metadata=None,
                  ):
         super().__init__()
         
@@ -44,8 +44,9 @@ class Predictor(pl.LightningModule):
         
         self.model = build_model(self.cfg)
         self.model.eval()
-        checkpointer = DetectionCheckpointer(self.model)
-        checkpointer.load(cfg.MODEL.WEIGHTS)
+        if load_checkpoint:
+            checkpointer = DetectionCheckpointer(self.model)
+            checkpointer.load(cfg.MODEL.WEIGHTS)
         
         self.test_map_metric = MAP(class_metrics=True)
     
