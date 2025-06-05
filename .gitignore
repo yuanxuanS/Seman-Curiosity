@@ -18,4 +18,5 @@ images/
 *.o
 *.out
 *.zip
+*.npz
 

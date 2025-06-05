@@ -27,6 +27,11 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         self.last_loc = None
         self.curr_loc = None
         
+        # collision check
+        self.last_action = None
+        self.col_width= None
+        self.been_stuck = None
+        
         # initialize transform for RGB observations
         self.res = transforms.Compose(
             [transforms.ToPILImage(),
@@ -65,6 +70,9 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
         
+        # collision
+        self.col_width = 1
+        self.been_stuck = False
         return obs, info
     
     def step_and_preprocess(self, action, inputs):
@@ -106,11 +114,51 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                              self.visited_vis[gx1:gx2, gy1:gy2])
             self._visualize(inputs)
 
+        if self.args.agent == "forward":
+            # # Collision check
+            if self.last_action == 0:
+                x1, y1, t1 = self.last_loc
+                x2, y2, _ = self.curr_loc
+                # buf = 4
+                # length = 2
+
+                if abs(x1 - x2) < 0.05 and abs(y1 - y2) < 0.05:
+                    self.col_width += 2
+                    if self.col_width == 7:
+                        length =2 # 4
+                        buf = 2 #3
+                    self.been_stuck = True
+                    # rotation
+                    action += np.ones_like(action) * np.random.randint(1, 3, 1)
+                    self.col_width = min(self.col_width, 5)
+                else:
+                    self.col_width = 1
+                    self.been_stuck = False
+
+            # dist = pu.get_l2_distance(x1, x2, y1, y2)
+            # if dist < self.args.collision_threshold:  # Collision
+            #     self.been_stuck = True
+                # width = self.col_width
+                # for i in range(length):
+                #     for j in range(width):
+                #         wx = x1 + 0.05 * \
+                #             ((i + buf) * np.cos(np.deg2rad(t1))
+                #              + (j - width // 2) * np.sin(np.deg2rad(t1)))
+                #         wy = y1 + 0.05 * \
+                #             ((i + buf) * np.sin(np.deg2rad(t1))
+                #              - (j - width // 2) * np.cos(np.deg2rad(t1)))
+                #         r, c = wy, wx
+                #         r, c = int(r * 100 / self.args.map_resolution), \
+                #             int(c * 100 / self.args.map_resolution)
+                #         [r, c] = pu.threshold_poses([r, c],
+                #                                     self.collision_map[env_idx].shape)
+                #         self.collision_map[env_idx, r, c] = 1
         # act and step
+        self.last_action = action       # record 0-2
         action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         action = {'action': action}
         obs, _, done, info = super().step(action)       # 4,256,256
-
+         
         
         
         # preprocess obs

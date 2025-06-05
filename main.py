@@ -194,6 +194,8 @@ def main():
             if args.visualize or args.print_images:
                 p_input["frontier_goal"] = goals[e]
                 p_input["short_time_goal"] = short_time_goals[e]
+    elif args.agent == "forward":
+        l_action = np.zeros(num_scenes)
     # transition:
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
@@ -312,7 +314,9 @@ def main():
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
             l_action = np.random.randint(0, 3, num_scenes)
-
+        elif args.agent == "forward":
+            l_action = np.zeros(num_scenes)
+            
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
@@ -374,8 +378,9 @@ def main():
                 l_dist_entropies.append(l_dist_entropy)
             if args.agent == "rl":
                 l_rollouts.after_update()       # rollout的最后一个state是下一次initial state
-            elif args.agent == "random":
+            elif args.agent == "random" or args.agent == "forward":
                 pass
+            
         torch.set_grad_enabled(False)
 
         # ------------------------------------------------------------------
