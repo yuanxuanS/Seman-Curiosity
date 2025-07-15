@@ -26,7 +26,7 @@ class SemanticPredMaskRCNN():
         self.segmentation_model = ImageSegmentation(args)
         self.args = args
 
-    def get_prediction(self, img):
+    def get_prediction(self, img, return_instance=True):
         args = self.args
         image_list = []
         img = img[:, :, ::-1]
@@ -45,11 +45,21 @@ class SemanticPredMaskRCNN():
                 idx = coco_categories_mapping[class_idx]
                 obj_mask = seg_predictions[0]['instances'].pred_masks[j] * 1.
                 semantic_input[:, :, idx] += obj_mask.cpu().numpy()
-
-        return semantic_input, img
-
-
+        if not return_instance:
+            return semantic_input, img
+        else:
+            all_scores = seg_predictions[0]['instances'].scores
+            return semantic_input, img, all_scores
 def compress_sem_map(sem_map):
+    """
+    Compresses a semantic map into a single channel map by assigning each class to a unique integer.
+    
+    Args:
+        sem_map (np.ndarray): 3D semantic map with shape (num_classes, height, width)
+    
+    Returns:
+        np.ndarray: 2D compressed map where each pixel value represents the class index + 1
+    """
     c_map = np.zeros((sem_map.shape[1], sem_map.shape[2]))
     for i in range(sem_map.shape[0]):
         c_map[sem_map[i] > 0.] = i + 1

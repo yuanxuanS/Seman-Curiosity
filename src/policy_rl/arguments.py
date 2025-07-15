@@ -167,7 +167,7 @@ def get_args():
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     if args.cuda:
         if args.auto_gpu_config:
-            num_gpus = 2    #torch.cuda.device_count()
+            num_gpus = torch.cuda.device_count()
             if args.total_num_scenes != "auto":
                 args.total_num_scenes = int(args.total_num_scenes)
             elif "objectnav_gibson" in args.task_config and \

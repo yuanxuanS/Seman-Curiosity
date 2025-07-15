@@ -48,7 +48,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         args = self.args
         
         obs, info = super().reset()
-        obs = self._preprocess_obs(obs)
+        obs, info = self._preprocess_obs(obs, info)
 
         self.obs_shape = obs.shape
 
@@ -112,7 +112,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         
         
         # preprocess obs
-        obs = self._preprocess_obs(obs) 
+        obs, info = self._preprocess_obs(obs, info) 
         self.last_action = action['action']     
         self.obs = obs
         self.info = info
@@ -122,7 +122,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
     
     
     
-    def _preprocess_obs(self, obs, use_seg=True):
+    def _preprocess_obs(self, obs, info, use_seg=True):
         args = self.args
         obs = obs.transpose(1, 2, 0)
         
@@ -141,8 +141,8 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         del rgb_
         del depth_
     
-        sem_seg_pred = self._get_sem_pred(
-            rgb.astype(np.uint8), use_seg=use_seg)
+        sem_seg_pred, all_scores = self._get_sem_pred(
+            rgb.astype(np.uint8), use_seg=use_seg, return_instance=True)
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
         ds = args.det_frame_width // args.frame_width  # Downscaling factor
@@ -155,7 +155,9 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         state = np.concatenate((rgb, depth, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)
 
-        return state
+        reward = min(all_scores) if len(all_scores) > 0 else -0.01
+        info['reward'] = torch.exp(2*torch.tensor(1 - reward)) - 1 if reward > 0. else reward
+        return state, info
     
     def _preprocess_depth(self, depth, min_d, max_d):
         depth = depth[:, :, 0] * 1
@@ -171,15 +173,19 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         depth = min_d * 100.0 + depth * max_d * 100.0
         return depth
     
-    def _get_sem_pred(self, rgb, use_seg=True):
+    def _get_sem_pred(self, rgb, use_seg=True, return_instance=False):
         if use_seg:
-            semantic_pred, self.rgb_vis = self.sem_pred.get_prediction(rgb)
+            semantic_pred, self.rgb_vis, all_scores = self.sem_pred.get_prediction(rgb, return_instance=return_instance)
             semantic_pred = semantic_pred.astype(np.float32)
         else:
             semantic_pred = np.zeros((rgb.shape[0], rgb.shape[1], 6))
             self.rgb_vis = rgb[:, :, ::-1]
-        return semantic_pred
-    
+        if not return_instance:
+            return semantic_pred
+        else:
+            return semantic_pred, all_scores
+        
+        
     def _visualize(self, inputs, mode="full"):
         
         args = self.args
