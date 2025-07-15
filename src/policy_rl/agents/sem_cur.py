@@ -11,6 +11,8 @@ from ..envs.habitat.curio_env import Seman_Curio_Env
 from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
 from src.finetune.dataset_utils import save_obs
 import quaternion
+from .utils.detect_utils import box_iou_calc
+from detectron2.utils.visualizer import ColorMode, Visualizer
 
 class Sem_Cur_Env_Agent(Seman_Curio_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -140,9 +142,13 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             depth = depth_
         del rgb_
         del depth_
-    
-        sem_seg_pred, all_scores = self._get_sem_pred(
-            rgb.astype(np.uint8), use_seg=use_seg, return_instance=True)
+
+        return_score, return_instance = False, True
+        assert not (return_score and return_instance), \
+            "Cannot return both score and instance at the same time."
+        sem_seg_pred, obj = self._get_sem_pred(
+            rgb.astype(np.uint8), use_seg=use_seg, return_score=return_score, return_instance=return_instance)
+
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
         ds = args.det_frame_width // args.frame_width  # Downscaling factor
@@ -152,12 +158,64 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
 
         depth = np.expand_dims(depth, axis=2)
+
+        if return_score:
+            reward = min(obj) if len(obj) > 0 else -0.01
+            info['reward'] = torch.exp(2*torch.tensor(1 - reward)) - 1 if reward > 0. else reward
+        elif return_instance:
+            if info['semantic_gt'] is None:
+                info['reward'] = 0.
+            else:
+                instance_gt = info['semantic_gt']['instances']
+                instance_pred = obj
+                if len(instance_gt) > 0:
+                    if len(instance_pred) == 0:
+                        info['reward'] = len(instance_gt)       # 漏检个数
+                    else:
+                        is_exist = self.obj_exist(instance_gt, instance_pred)
+                        info['reward'] = is_exist.sum()                        
+                else:
+                    info['reward'] = 0.
+        
+        if not info['reward'] > 0.:
+            info['reward'] = -0.01 
+        else:
+            info['reward'] = info['reward'] / 3.
+        
         state = np.concatenate((rgb, depth, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)
-
-        reward = min(all_scores) if len(all_scores) > 0 else -0.01
-        info['reward'] = torch.exp(2*torch.tensor(1 - reward)) - 1 if reward > 0. else reward
         return state, info
+    
+    def obj_exist(self, instances_1, instances_2):
+        """
+        Check if instances from instances_1 exist in instances_2 by comparing their bounding boxes.
+        
+        Args:
+            instances_1: First set of instances (Instances object) to check.
+            instances_2: Second set of instances (Instances object) to compare against.
+        
+        Returns:
+            A boolean array indicating whether each instance in instances_1 exists in instances_2 (IoU > 0.5).
+        """
+        '''
+        instances_1: Instances(n), n is the number of instances
+        check if every instances_1 exists in instances_2
+        return [bool, bool, ...] of length n
+        '''
+        
+        width, height = instances_1.image_size
+        pot_mp = np.zeros((height, width, 1))
+        v = Visualizer(pot_mp)
+        
+        boxes_1 = instances_1.pred_boxes
+        boxes_1 = v._convert_boxes(boxes_1)
+                
+        boxes_2 = instances_2.pred_boxes
+        boxes_2 = v._convert_boxes(boxes_2)
+        iou = box_iou_calc(boxes_1, boxes_2) # 1*num_maskbox
+        is_exists = iou > 0.5
+        
+        return is_exists
     
     def _preprocess_depth(self, depth, min_d, max_d):
         depth = depth[:, :, 0] * 1
@@ -173,17 +231,19 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         depth = min_d * 100.0 + depth * max_d * 100.0
         return depth
     
-    def _get_sem_pred(self, rgb, use_seg=True, return_instance=False):
+    def _get_sem_pred(self, rgb, use_seg=True, return_score=False, return_instance=False):
         if use_seg:
-            semantic_pred, self.rgb_vis, all_scores = self.sem_pred.get_prediction(rgb, return_instance=return_instance)
+            semantic_pred, self.rgb_vis, obj = self.sem_pred.get_prediction(rgb, 
+                                                                            return_score=return_score, 
+                                                                            return_instance=return_instance)
             semantic_pred = semantic_pred.astype(np.float32)
         else:
             semantic_pred = np.zeros((rgb.shape[0], rgb.shape[1], 6))
             self.rgb_vis = rgb[:, :, ::-1]
-        if not return_instance:
+        if not (return_instance or return_score):
             return semantic_pred
         else:
-            return semantic_pred, all_scores
+            return semantic_pred, obj
         
         
     def _visualize(self, inputs, mode="full"):

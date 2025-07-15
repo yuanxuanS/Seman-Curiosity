@@ -86,7 +86,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         # Set info
         self.info['time'] = self.timestep
         self.info['sensor_pose'] = [0., 0., 0.]
-
+        self.info['semantic_gt'] = None
 
         return state, self.info
     
@@ -269,6 +269,7 @@ class Seman_Curio_Env(habitat.RLEnv):
 
         self.timestep += 1
         self.info['time'] = self.timestep
+        self.info['semantic_gt'] = obs['bbsgt']
 
         return state, 0., done, self.info
     
