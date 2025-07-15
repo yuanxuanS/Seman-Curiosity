@@ -73,7 +73,7 @@ class SampleLoader:
         env_list = [int(_get_info_from_string(s, "env")) for s in samples_paths]
         episode_list = [int(_get_info_from_string(s, "episode")) for s in samples_paths]
         steps_list = [int(_get_info_from_string(s, "step")) for s in samples_paths]
-        mod_list = [_get_info_from_string(s, "modality") for s in samples_paths]
+        mod_list = [_get_info_from_string_withend(s, "modality", next_str="") for s in samples_paths]
 
         for sample_path, env_id, episode_id, step, mod in zip(
             samples_paths, env_list, episode_list, steps_list, mod_list
@@ -99,7 +99,7 @@ class SampleLoader:
     
     @staticmethod
     def _load_data(path: str):
-        mod = _get_info_from_string(path, "modality")
+        mod = _get_info_from_string_withend(path, "modality", next_str="")
         return MODALITY_SENSE[mod].load(path)
     
     def get_sample(self, env, episode, step, mod):

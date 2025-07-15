@@ -90,14 +90,15 @@ def play_imgs(path):
         cv2.waitKey(100)
     
 if __name__ == "__main__":   
-    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_6_sample/"
+    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/multiSens_test_ft_train5_final"
+    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_6_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/"
-    save_pth = base_dir + "/episodes_data_orig_imgs"
+    save_pth = base_dir + "/imgs0"
     if not os.path.exists(save_pth):
         os.mkdir(save_pth)
-    dataset_path = base_dir + "/episodes_data"
+    dataset_path = base_dir + "/data"
 
     save_data_imgs(dataset_path, save_pth)
     

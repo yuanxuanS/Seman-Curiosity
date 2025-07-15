@@ -7,7 +7,8 @@ notes: reproduce_2
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
 
 # data
-sample_path:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data
+sample_path:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/no_pose_obnsv2_val/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/episodes_data
 

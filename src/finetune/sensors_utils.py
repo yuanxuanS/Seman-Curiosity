@@ -9,11 +9,17 @@ def _get_info_from_string(path, info, split_symbol="_"):
 
 def _get_info_from_string_withend(path, info, next_str="", split_symbol="_"):
 
+    '''
+    next_str: if next str is  "", slice to the end 
+    '''
     filename = os.path.split(os.path.splitext(path)[0])[1]
     start = filename[filename.find(info) :]
     start_pos = len(start.split(split_symbol)[0])
-    end_pos = start.find(next_str)
-    result = start[start_pos+1:end_pos-1]
+    if next_str != "":
+        end_pos = start.find(next_str)
+        result = start[start_pos+1:end_pos-1]
+    else:       # to the end
+        result = start[start_pos+1:]
     return result
 
 @dataclass

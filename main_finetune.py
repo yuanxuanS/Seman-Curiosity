@@ -18,7 +18,7 @@ import random
 import numpy as np
 
 os.environ["WANDB_MODE"]="offline"
-@hydra.main(config_path='./configs_finetune/', config_name='visualize.yaml')
+@hydra.main(config_path='./configs_finetune/', config_name='train.yaml')
 def main(cfg):
     seed = 1234
     pl.seed_everything(seed, workers=True)
