@@ -40,7 +40,7 @@ def main(cfg):
             
             
             # from iter0.ckpt
-            model = pipeline.teacher_student.teacher_model.model.model
+            model = pipeline.teacher_student.student_model.model
             for k, v in model.state_dict().items():
                 layer_name = 'student_model.model.' + k
                 if layer_name in data['state_dict'].keys():
