@@ -143,7 +143,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         del rgb_
         del depth_
 
-        return_score, return_instance = False, True
+        return_score, return_instance = False, True     # return_score: use pred score as reward; 
         assert not (return_score and return_instance), \
             "Cannot return both score and instance at the same time."
         sem_seg_pred, obj = self._get_sem_pred(
@@ -163,6 +163,10 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             reward = min(obj) if len(obj) > 0 else -0.01
             info['reward'] = torch.exp(2*torch.tensor(1 - reward)) - 1 if reward > 0. else reward
         elif return_instance:
+            save_pred_ins = True
+            if save_pred_ins:
+                self.save_data({'bbs': {'instances': obj}})
+            
             if info['semantic_gt'] is None:
                 info['reward'] = 0.
             else:
