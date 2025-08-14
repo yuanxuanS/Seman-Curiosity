@@ -194,6 +194,9 @@ def main():
                 p_input["short_time_goal"] = short_time_goals[e]
     # transition:
     # pred instance, get semantic masks and step env: 
+    actions = []
+    actions.append(l_action)
+    # print(f"action is {l_action}")
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
     # update map
@@ -326,6 +329,8 @@ def main():
         
         # transition: next state
         # pred instance, get semantic masks and step env
+        actions.append(l_action)
+        # print(f"action is {l_action}")
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
         # if episode over, reset maps
@@ -439,6 +444,7 @@ def main():
     np.savez('{}/{}_episode_rewards.npz'.format(
             dump_dir, args.split), episode_reward=l_episode_rewards)
     
+    np.savez('actions.npz', actions=np.array(actions))
     if args.eval:
         print("Dumping eval details...")
         

@@ -39,8 +39,8 @@ def rename_and_move_files(source_dir, target_dir, env_num):
     print(f"conut:", cnt)
 # 使用示例
 if __name__ == "__main__":
-    source_folder = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/active_valext/episodes_data"  # 替换为你的源文件夹路径
-    target_folder = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/active_val4/episodes_data"  # 替换为目标文件夹路径
+    source_folder = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random_re_ext/episodes_data"  # 替换为你的源文件夹路径
+    target_folder = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random_re/episodes_data"  # 替换为目标文件夹路径
     new_env_number = 4  # 要替换为的环境编号
     
     rename_and_move_files(source_folder, target_folder, new_env_number)

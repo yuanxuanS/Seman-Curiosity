@@ -13,8 +13,6 @@ import cv2
 import os
 from detectron2.structures.instances import Instances
 from src.constants import coco_categories_mapping
-import numpy as np
-
 def load_data_imgs(dataset_path, save_pth):
     if not os.path.exists(save_pth):
         os.mkdir(save_pth)
@@ -56,7 +54,6 @@ def load_data_imgs(dataset_path, save_pth):
 
 def save_data_imgs(dataset_path, save_pth, with_label=False, with_mask=False):
     
-    multi_lst = []
     test_loader = load_data_imgs(dataset_path, save_pth)
     for batch_idx, batch in enumerate(test_loader):
         for idx, x in enumerate(batch):
@@ -101,10 +98,7 @@ def save_data_imgs(dataset_path, save_pth, with_label=False, with_mask=False):
                         y.pred_masks = y.gt_masks
                     else:
                         y.pred_masks = y.gt_masks.tensor
-                
-                if len(y.pred_classes) > 1:
-                    img_id = [x['env'], x['episode'], x['step']]
-                    multi_lst.append(img_id)
+                        
                 if with_label:
                     frame = visualizer.draw_instance_predictions(
                         predictions=y.to('cpu')
@@ -114,8 +108,7 @@ def save_data_imgs(dataset_path, save_pth, with_label=False, with_mask=False):
                     frame = visualizer.img
                 cv2.imwrite(save_pth + "/epi"+str(x['episode'])+"_env"+str(x['env']) + "_step"+str(x['step'])+".png", frame)
 
-    # 统计多物体图像
-    # np.savez(save_pth + "/multiobj.npz", data=np.array(multi_lst))
+            
     # break
 
 def play_imgs(path):
@@ -135,19 +128,15 @@ if __name__ == "__main__":
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/"
     
-    with_mask = False  # 仅留下物体
-    with_label = False  # 绘制物体mask和类别标签
+    with_mask = False
     if with_mask:
         save_pth = base_dir + "/imgs_mask"
     else:
-        if with_label:
-            save_pth = base_dir + "/imgs_gt"
-        else:
-            save_pth = base_dir + "/imgs"
+        save_pth = base_dir + "/imgs_pred"
     if not os.path.exists(save_pth):
         os.mkdir(save_pth)
     dataset_path = base_dir + "/episodes_data"
 
-    save_data_imgs(dataset_path, save_pth, with_label=with_label, with_mask=with_mask)
+    save_data_imgs(dataset_path, save_pth, with_mask=with_mask)
     
     # play_imgs(save_pth)

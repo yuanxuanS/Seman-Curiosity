@@ -6,6 +6,7 @@ third_parties/
 third_parties/detectron2/build/
 outputs/
 images/
+env_orients/
 
 # type
 *.pyc

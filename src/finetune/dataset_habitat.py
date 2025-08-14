@@ -105,6 +105,8 @@ class BbsgtDataset(Dataset):
         y = data['bbsgt'].get_bbs_as_gt()       # instance，gt前缀
         x, y = self._transform_batch(x, y)      # TODO: 不需要remap class吗
         
+        
+        y_pred =  None if 'bbs' not in data else data['bbs'].get_bbs_as_gt()
         size = x.shape[1:]
         return {        # TODO; 需要这么多吗
             'env': env,
@@ -115,6 +117,7 @@ class BbsgtDataset(Dataset):
             'instances': y,
             'width': size[1],
             'height': size[0],
+            'instance_pred': y_pred,
         }
 
     def get_coco_item_dict(self, idx):
