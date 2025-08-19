@@ -8,7 +8,7 @@ from huggingface_hub import hf_hub_download
 # 文件路径（假设文件名为 example.json.gz）
 file_path = "/home/users/wpp/.objaverse/object-paths.json.gz"
 annos = "/home/users/wpp/.objaverse/lvis-annotations.json.gz"
-class_name = "refrigerator"
+class_name = "television_set"
 # 读取并解压文件
 with gzip.open(file_path, 'rt', encoding='utf-8') as f:
     paths = json.load(f)  # 解析JSON数据

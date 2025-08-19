@@ -1,7 +1,7 @@
 import os
 import shutil
 
-tgt = "/data2/wpp_data/objaverse/refrigerator"
+tgt = "/data2/wpp_data/objaverse/tv"
 src = "/data2/wpp_data/objaverse/glbs"
 all_dirs = os.listdir(src)
 
