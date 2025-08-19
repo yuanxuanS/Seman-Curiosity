@@ -57,40 +57,51 @@ def load_dataset(dir, gt_file, angle_interval, preprocess):
     test_unseen_dataset = None
     test_seen_dataset = None
     
+    classes = ['refrigerator', 'chair',]        #  'couch', 'toilet', 'bed']
     datas = []
-    objects = {}
-    for obj_dir in os.listdir(dir):
-        objects[obj_dir] = []
-        for distance in os.listdir(dir + "/"+obj_dir):
-            for azimuth in range(360): 
-                # img_pth = dir + "/"+ obj_dir+"/"+distance+f"/render_{azimuth:03d}.png"
-                
-                datas.append((obj_dir, distance, azimuth))
-                # img_ = Image.open(img_pth)
-                # images.append(img_)
+    cls_objects = {}
     
-    objects_all = list(objects.keys())
-    train_objs = objects_all[:int(len(objects_all) * 0.8)]  # 每物体划分4/1 seen/unseen object
-    test_unseen_objs = objects_all[int(len(objects_all) * 0.8):]
+    for cls_ in classes:
+        cls_objects[cls_] = {}
+        for obj_dir in os.listdir(dir+"/"+cls_):
+            cls_objects[cls_][obj_dir] = []
+            for distance in os.listdir(dir + "/"+cls_+"/"+obj_dir):
+                for azimuth in range(360): 
+                    # img_pth = dir + "/"+ obj_dir+"/"+distance+f"/render_{azimuth:03d}.png"
+                    
+                    datas.append((cls_, obj_dir, distance, azimuth))
+                    # img_ = Image.open(img_pth)
+                    # images.append(img_)
+    objects_all = {}
+    for cls_ in classes:
+        objects_all[cls_] = list(cls_objects[cls_].keys())
+    
+    train_objs = {}
+    test_unseen_objs = {}
+    for cls_ in classes:
+        train_objs[cls_] = objects_all[cls_][:int(len(objects_all[cls_]) * 0.8)]  # 每物体划分4/1 seen/unseen object
+        test_unseen_objs[cls_] = objects_all[cls_][int(len(objects_all[cls_]) * 0.8):]
     
     train_dataset = []     #  该类别物体, 每个物体多个角度划分 3/1 
     test_seen_dataset = []
-    for obj_dir in train_objs:
-        all_data = []
-        for distance in os.listdir(dir + "/"+obj_dir):
-            random_idxs = [idx for idx in range(360)]
-            random.shuffle(random_idxs)
-            all_data_ = [(obj_dir, distance, azimuth) for azimuth in random_idxs]
-            all_data.extend(all_data_)
-        train_dataset.extend(all_data[:int(len(all_data)*0.75)])
-        test_seen_dataset.extend(all_data[int(len(all_data)*0.75):])
+    for cls_ in classes:
+        for obj_dir in train_objs[cls_]:
+            all_data = []
+            for distance in os.listdir(dir + "/"+cls_+"/" + obj_dir):
+                random_idxs = [idx for idx in range(360)]
+                random.shuffle(random_idxs)
+                all_data_ = [(cls_, obj_dir, distance, azimuth) for azimuth in random_idxs]
+                all_data.extend(all_data_)
+            train_dataset.extend(all_data[:int(len(all_data)*0.75)])
+            test_seen_dataset.extend(all_data[int(len(all_data)*0.75):])
         
     
     test_unseen_dataset = []
-    for obj_dir in test_unseen_objs:
-        for distance in os.listdir(dir + "/"+obj_dir):
-            for azimuth in range(360): 
-                test_unseen_dataset.append((obj_dir, distance, azimuth))
+    for cls_ in classes:
+        for obj_dir in test_unseen_objs[cls_]:
+            for distance in os.listdir(dir + "/"+cls_+"/" +obj_dir):
+                for azimuth in range(360): 
+                    test_unseen_dataset.append((cls_, obj_dir, distance, azimuth))
 
     # gt
     with open(gt_file, "rb") as f:
@@ -124,9 +135,9 @@ class AzimuthDataset(Dataset):
         
         
     def __getitem__(self, idx):
-        obj_dir, distance, azimuth = self.datas[idx]
+        cls_, obj_dir, distance, azimuth = self.datas[idx]
         
-        img_pth = self.data_dir + "/"+ obj_dir+"/"+distance+f"/render_{azimuth:03d}.png"
+        img_pth = self.data_dir + "/" + cls_ + "/"+ obj_dir+"/"+distance+f"/render_{azimuth:03d}.png"
         x = Image.open(img_pth)
         x = self.preprocess(x)
         # gt: 0-360, 2-5.5m矩阵
@@ -222,7 +233,7 @@ if __name__ == "__main__":
     
     ### load dataset
     class_name = "refrigerator"
-    dir = '/data2/wpp_data/obj_azimuth/'+class_name
+    dir = '/data2/wpp_data/obj_azimuth/'
     gt_file = class_name+"_clip.pkl"
     train_dataset, test_seen_dataset, test_unseen_dataset = load_dataset(dir, gt_file, angle_interval, preprocess=model.preprocess)
     

@@ -11,8 +11,11 @@ class_range_min = {cls_: 1e4 for cls_ in class_map_coco.keys()}
 class_range_max = {cls_: -1e4 for cls_ in class_map_coco.keys()}
 
 # 读取数据集
-base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/multiSens_test_ft_train5_final"
-data_pth = base_dir + "/data"
+base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_6_sample"
+# "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/fix_test640"
+# "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/multiSens_test_val5"
+# "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/multiSens_test_ft_train5_final"
+data_pth = base_dir + "/episodes_data"
 sampler = SampleLoader(data_pth)
 inputs = sampler.get_env_episode_and_steps_dense_list()  
 
