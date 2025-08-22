@@ -155,7 +155,9 @@ def get_args():
     # samples
     parser.add_argument('--save_samples', default=False,
                         help='save observations')
-    
+    # sample obj data 
+    parser.add_argument('--num_sample_pts', type=int, default=50000)
+    parser.add_argument('--sample_pt_distance_interval', type=float, default=0.1)
     # parse arguments
     args = parser.parse_args()
 
