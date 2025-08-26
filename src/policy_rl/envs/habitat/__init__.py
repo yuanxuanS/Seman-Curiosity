@@ -8,6 +8,7 @@ from habitat.datasets.pointnav.pointnav_dataset import PointNavDatasetV1
 from habitat import Config, Env, RLEnv, VectorEnv, make_dataset
 
 from src.policy_rl.agents.sem_cur import Sem_Cur_Env_Agent
+from src.policy_rl.agents.vqf import VQF_Agent
 from .curio_env import Seman_Curio_Env
 from .sample_obj_env import Sample_Obj_Env
 from .utils.vector_env import VectorEnv, ThreadedVectorEnv
@@ -26,6 +27,14 @@ def make_env_fn(args, config_env, rank):
                                 )
     elif args.env == "sample_obj":
         env = Sample_Obj_Env( args=args, rank=rank,
+                         config_env=config_env,
+                         dataset=dataset)
+    elif args.env == "vqf_exp":
+        env = VQF_Agent(args=args, rank=rank,
+                         config_env=config_env,
+                         dataset=dataset)
+    elif args.env == "frontier_vqf":
+        env = VQF_Frontier_Agent(args=args, rank=rank,
                          config_env=config_env,
                          dataset=dataset)
     else:

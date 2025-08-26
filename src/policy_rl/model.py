@@ -273,7 +273,7 @@ class Semantic_Mapping(nn.Module):
         XYZ_cm_std = agent_view_centered_t.float()      # 每个像素点的xyz坐标。env, h,w,3 
         XYZ_cm_std[..., :2] = (XYZ_cm_std[..., :2] / xy_resolution)
         XYZ_cm_std[..., :2] = (XYZ_cm_std[..., :2] -
-                               vision_range // 2.) / vision_range * 2.
+                               vision_range // 2.) / vision_range * 2.      # 放缩到 [-1,1]
         XYZ_cm_std[..., 2] = XYZ_cm_std[..., 2] / z_resolution
         XYZ_cm_std[..., 2] = (XYZ_cm_std[..., 2] -
                               (max_h + min_h) // 2.) / (max_h - min_h) * 2.

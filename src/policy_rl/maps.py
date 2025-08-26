@@ -229,6 +229,55 @@ class Maps_Env:
 
         return local_map, local_pose
     
+    def update_local_semantic_map(self, obs, infos):
+
+        poses = torch.from_numpy(np.asarray(
+                [infos[env_idx]['sensor_pose'] for env_idx
+                in range(self.num_scenes)])
+            ).float().to(self.device)
+        
+        # update 0: obstacle 1: explored 4...: semantic
+        # agent当前观察到的自我中心的map
+        _, local_map, _, local_pose = \
+            self.semantic_map(obs, poses, self.local_map, self.local_pose)
+        
+        # check floor
+        locs = local_pose.cpu().numpy()
+        for e in range(self.num_scenes):
+            r, c = locs[e, 1], locs[e, 0]
+            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                            int(c * 100.0 / self.args.map_resolution)]
+            if 'on_floor' in infos[e] and infos[e]['on_floor']:
+                # set obstacle on map to avoid go to floor
+                square_size = 20
+                size = local_map[e].shape[-1]
+                r_start = loc_r
+                r_end = min(loc_r + square_size, size)
+                c_start = loc_c
+                c_end = min(loc_c + square_size, size)
+                local_map[e, 0, r_start:r_end, c_start:c_end] = 1.
+                
+                infos[e]['on_floor'] = False
+        # update 2-3: curr and past maps
+        locs = local_pose.cpu().numpy()
+        self.pose_inputs[:, :3] = locs + self.origins
+        local_map[:, 2, :, :].fill_(0.)
+        for e in range(self.num_scenes):
+            r, c = locs[e, 1], locs[e, 0]
+            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                            int(c * 100.0 / self.args.map_resolution)]
+            local_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.
+        
+        return local_map, local_pose
+    def update_full_semantic_map(self, local_map, local_pose):
+        local_map, local_pose = self._update_next_view_local(local_map, local_pose)
+
+        # update 
+        self.local_map = local_map
+        self.local_pose = local_pose
+
+        return local_map, local_pose
+    
     def sum_of_semantic_map(self):
         # get semantic channels: 4:
         semantic_maps = self.full_map[:, 4:9, ...]   # num_scenes, num_semantic, size_w, size_h

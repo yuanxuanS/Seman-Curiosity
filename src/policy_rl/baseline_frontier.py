@@ -87,7 +87,7 @@ class Frontier:
         actions = []
         for e, p_input in enumerate(vis_inputs):
             
-            # update loc: real distance (m)
+            # update current location: real distance (m)
             start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
                 p_input['pose_pred']
             self.last_loc[e] = self.curr_loc[e]
@@ -99,7 +99,7 @@ class Frontier:
                 self.rotation_counts[e] += 1
                 continue
             
-            # update replan
+            # check if need replan (arrive goal or no goal)
             x2, y2, _ = self.curr_loc[e]
             r, c = y2, x2     # 转化为格子坐标
             start = [int(r * 100.0 / self.args.map_resolution),
@@ -127,8 +127,8 @@ class Frontier:
                     self.replan[e] = True
                     self.invalid_goal[e] = False
                 
-            
-            if self.replan[e]:  # compute goal on full map
+            # compute goal on full map if does replan
+            if self.replan[e]:  
 
                 fmap, lagst_contrs = self.get_frontier_map(p_input, e)
                 gain_fmap = self.get_frontier_gains(fmap, p_input, lagst_contrs)
@@ -138,6 +138,7 @@ class Frontier:
             else:
                 goal = self.goals[e]
 
+            # return action according to current goal
             self.last_goal[e] = goal
             action, short_time_goal, get_in_goal, get_in_stg = self.get_determine_action(p_input, goal, e)
             # print(f"goal: {goal}, short_time_goal: {short_time_goal}, loc: {start}, action: {action}")

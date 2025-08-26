@@ -140,7 +140,7 @@ def get_point_cloud_from_z_t(Y_t, camera_matrix, device, scale=1):
             |
             \/
         XYZ is ...xHxWx3
-        返回depth图的点云的xyz坐标
+        返回像素坐标系下点云的xyz坐标
     """
     grid_x, grid_z = torch.meshgrid(torch.arange(Y_t.shape[-1]),
                                     torch.arange(Y_t.shape[-2] - 1, -1, -1))        # 从 Y_t.shape[-2] - 1 到 -1). ， 步进-1
@@ -164,15 +164,15 @@ def get_point_cloud_from_z_t(Y_t, camera_matrix, device, scale=1):
 def transform_camera_view_t(
         XYZ, sensor_height, camera_elevation_degree, device):
     """
-    Transforms the point cloud into geocentric frame to account for
-    camera elevation and angle
+    Transforms the point cloud (相机坐标系)into geocentric frame to account for
+    camera elevation and angle； 
     Input:
         XYZ                     : ...x3
         sensor_height           : height of the sensor
         camera_elevation_degree : camera elevation to rectify. 相机仰角
     Output:
         XYZ : ...x3
-        点云在相机坐标系的坐标
+        点云在相机坐标系（+世界坐标系的高度）的坐标
     """
     R = ru.get_r_matrix(
         [1., 0., 0.], angle=np.deg2rad(camera_elevation_degree))
@@ -215,7 +215,7 @@ def splat_feat_nd(init_grid, feat, coords):
         grid: B X nF X W X H X D X ..       返回每个特征/语义通道的voxel值, 值为整数
     
     点云特征到规则网格 grid 的稀疏映射：
-        归一化点云坐标：将点云坐标映射到网格范围。
+        归一化点云坐标：将范围在[-1,1]的点云坐标映射到网格范围。
         双线性/三线性插值：基于坐标计算插值位置和对应权重。
         累加特征：使用插值位置和权重，将点云特征分布到网格中。
         高效实现：通过张量操作和 scatter_add_ 函数实现并行化，避免逐点循环计算。

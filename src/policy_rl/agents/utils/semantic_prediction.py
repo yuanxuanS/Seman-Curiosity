@@ -18,6 +18,7 @@ from detectron2.structures.instances import Instances
 import detectron2.data.transforms as T
 
 from src.constants import coco_categories_mapping
+from src.vqf_constants import target_coco_categories_mapping
 
 
 class SemanticPredMaskRCNN():
@@ -41,8 +42,8 @@ class SemanticPredMaskRCNN():
 
         for j, class_idx in enumerate(
                 seg_predictions[0]['instances'].pred_classes.cpu().numpy()):
-            if class_idx in list(coco_categories_mapping.keys()):
-                idx = coco_categories_mapping[class_idx]
+            if class_idx in list(target_coco_categories_mapping.keys()):
+                idx = target_coco_categories_mapping[class_idx]
                 obj_mask = seg_predictions[0]['instances'].pred_masks[j] * 1.
                 semantic_input[:, :, idx] += obj_mask.cpu().numpy()
         if not return_instance and not return_score:
