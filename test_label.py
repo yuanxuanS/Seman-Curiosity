@@ -70,9 +70,9 @@ def manual_bin_count(data, bin_size=0.1):
 
 if __name__ == "__main__":
 
-    mode = "predict"  # "read"   #
+    mode = "predict"    # "read"   #
     predict_mode = "clip"       # "maskrcnn"
-    class_names = ["chair", "bed", "couch", "refrigerator", "toilet"]
+    class_names = ["couch", ]        # -ok, , "toilet", "bed", "chair", "refrigerator", 
     save_dir = "/data2/wpp_data/obj_azimuth/"
     preds = {}
     values = {}
@@ -139,9 +139,15 @@ if __name__ == "__main__":
                                 preds[obj_dir][distance].append(float(instance.scores.mean().cpu().numpy()))
                         elif predict_mode == "clip":
                             # 预处理图像用于CLIP模型（仍使用PIL预处理）
-                            pil_img = Image.open(img_pth)
-                            image = preprocess(pil_img).unsqueeze(0).to(device)
-
+                            try:
+                                pil_img = Image.open(img_pth)
+                            except:
+                                print(f"error in obj:{obj_dir}, dis:{distance}, angle:{angle}, pth: {img_pth}")
+                                continue
+                            try:
+                                image = preprocess(pil_img).unsqueeze(0).to(device)
+                            except:
+                                print(f"error in obj:{obj_dir}, dis:{distance}, angle:{angle}")
                             with torch.no_grad():
                                 image_features = model.encode_image(image)
                                 text_features = model.encode_text(text)
@@ -177,7 +183,7 @@ if __name__ == "__main__":
                 
         if mode == "read":
             if predict_mode == "maskrcnn":
-                with open(class_name+".pkl", "rb") as f:
+                with open(save_dir+class_name+".pkl", "rb") as f:
                     pred_instances = pickle.load(f)
             
                 for obj, obj_dict in pred_instances.items():
@@ -225,7 +231,7 @@ if __name__ == "__main__":
                 print(f"检测错误数： {cnt_false_all}")
         
             elif predict_mode == "clip":
-                with open(class_name+"_clip.pkl", "rb") as f:
+                with open(save_dir+class_name+"_clip.pkl", "rb") as f:
                     values = pickle.load(f)
                 
                 max_, min_ = 0,  1e4

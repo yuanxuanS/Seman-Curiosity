@@ -14,7 +14,7 @@ from PIL import Image
 from test_gt_orient import OriAny_pred
 from third_parties.Orient_Anything.inference import get_3angle, get_3angle_infer_aug
 from third_parties.Orient_Anything.utils import background_preprocess
-from vqf_main import visualize
+from train_vqf import visualize
 from src.vqf_constants import category_maps, category_id_maps, target_cls_id_in_scene
 
 gt_angle = {"Collierville": {
@@ -89,7 +89,7 @@ scenes = ["Collierville", "Corozal", "Darden", "Markleeville", "Wiconisco"]
 metadata = MetadataCatalog.get('coco_2017_val')
 pth = "/data1/wpp_data/data/obj_samples/"
 
-mode =   "label" #"origScore"  #   "pred_orient" # 
+mode =   "get_idx" # "label" #"origScore"  #   "pred_orient" # 
 
 # oriAny
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -134,7 +134,12 @@ for scene in scenes:
         cls_range_max = {i: -1 for i in target_cls_id_in_scene}
         with open(pth+f"/{scene}_objects_withorigscore.pkl", 'rb') as f:
             orig_pred = pickle.load(f)
-
+    elif mode == "get_idx":
+        distances = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]
+        angles = [i for i in range(360)]
+        angle_interval = 10
+        angle_bins  =angles[::10]
+        indexs = {}
 
             
     obj_cnt = 0
@@ -147,6 +152,8 @@ for scene in scenes:
             object_label_clip[(env, epi)] = {}
         elif mode == "pred_orient":
             object_orient[(env, epi)] = {}
+        elif mode == "get_idx":
+            indexs[(env, epi)] = {}
             
         for cat, cat_value in data[key].items():
             print(f"class : {cat}")
@@ -164,6 +171,8 @@ for scene in scenes:
             elif mode == "pred_orient":
                 # object_orient[(env, epi)][cat] = {}
                 pass
+            elif mode == "get_idx":
+                indexs[(env, epi)][cat] = {}
                 
             for obj, obj_value in data[key][cat].items():
                 object_sample_info, scene_obj_id = data[key][cat][obj][1], data[key][cat][obj][0]
@@ -192,6 +201,8 @@ for scene in scenes:
                     elif mode == "pred_orient":
                         # object_orient[(env, epi)][cat][obj] = {}
                         pass
+                    elif mode == "get_idx":
+                        indexs[(env, epi)][cat][scene_obj_id] = {}
                         
                     for dis_range, yaw_info in object_sample_info.items():
                         dis_min, dis_max = dis_range
@@ -283,7 +294,19 @@ for scene in scenes:
                                 cnt_maskrcnn[dis_idx, azimuth_idx] += 1
                                 score_arr_clip[dis_idx, azimuth_idx] = value_clip
                                 cnt_clip[dis_idx, azimuth_idx] += 1
-                                       
+                            elif mode == "get_idx":
+                                # 计算对应距离索引，yaw索引
+                                dis_idx = return_bin_idx(depth_mean, distances, 0.25)
+                                azimuth_ = gt_angle[scene][cat][obj] if (cat in list(gt_angle[scene].keys())) and (obj in list(gt_angle[scene][cat].keys())) else None
+                                if azimuth_ == None:
+                                    continue
+                                azimuth_yaw_start, azimuth_yaw_step = azimuth_
+                                
+                                azimuth = yaw_idx * azimuth_yaw_step + azimuth_yaw_start
+                                azimuth = azimuth % 360
+                                azimuth_idx = return_bin_idx(azimuth, angle_bins, angle_interval/ 2)
+
+                                indexs[(env, epi)][cat][scene_obj_id][step] = [dis_idx, azimuth_idx]
                             elif mode == "pred_orient":
                                 rgb_img = Image.fromarray(rgb_obj).convert('RGB')
                                 rm_bkg_img = background_preprocess(rgb_img, True)
@@ -345,4 +368,7 @@ for scene in scenes:
         with open(pth+f"/{scene}_objects_value_clip.pkl", 'wb') as f:
             pickle.dump(object_label_clip, f)
         print(f"clip min: {cls_range_min}, max: {cls_range_max}")
+    elif mode == "get_idx":
+        with open(pth+f"/{scene}_objects_index.pkl", 'wb') as f:
+            pickle.dump(indexs, f)
     print(f"finish {scene}")
