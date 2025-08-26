@@ -31,7 +31,7 @@ from GroundingDINO.groundingdino.util.utils import clean_state_dict, get_phrases
 
 
 # segment anything
-from segment_anything.src import (
+from segment_anything import (
     sam_model_registry,
     sam_hq_model_registry,
     SamPredictor
@@ -380,21 +380,23 @@ def main():
     with open(gsam_config, 'r') as f:
         seg_args = yaml.load(f, Loader=yaml.FullLoader)
 
-    dataset_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data"
-    sampler = SampleLoader(dataset_path)
+    # dataset_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data"
+    # sampler = SampleLoader(dataset_path)
 
     seg_args['output_dir'] = "./outputs_v2_2/"
     model, predictor = init_segment(seg_args)
 
     sample_lst = [[0, 1, 10]]   # env, epi, step
-    for idx in sample_lst:
-        env, episode, step = idx
+    # for idx in sample_lst:
+    #     env, episode, step = idx
         # rgb = sampler.get_sample(env, episode, step, "rgb").data
 
-        img_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data_orig_imgs/epi1_env0_step0.png"
-        rgb = cv2.imread(img_pth)
+    img_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data_vqf/bed/0a5652c16e1a4575903dfc1696382502/0.5m/render_000.png"
+    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data_orig_imgs/epi1_env0_step0.png"
+    rgb = cv2.imread(img_pth)
 
-        annos = pred_segment(seg_args, rgb, model, predictor, [env, episode, step])
-        break
+    env, episode, step = 0, 0, 0
+    annos = pred_segment(seg_args, rgb, model, predictor, [env, episode, step])
+        # break
 if __name__ == "__main__":
     main()
