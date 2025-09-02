@@ -9,13 +9,16 @@ def get_l2_distance(x1, x2, y1, y2):
 
 
 def get_rel_pose_change(pos2, pos1):
+    '''
+    pos2在pos1坐标系中的位置
+    '''
     x1, y1, o1 = pos1
     x2, y2, o2 = pos2
 
-    theta = np.arctan2(y2 - y1, x2 - x1) - o1
+    theta = np.arctan2(y2 - y1, x2 - x1) - o1       # 从 pos1指向 pos2的向量在 pos1局部坐标系中的方向角
     dist = get_l2_distance(x1, x2, y1, y2)
-    dx = dist * np.cos(theta)
-    dy = dist * np.sin(theta)
+    dx = dist * np.cos(theta)   # 沿着pos1的前进方向的偏移
+    dy = dist * np.sin(theta)   # 沿着pos1的垂直方向的偏移
     do = o2 - o1
 
     return dx, dy, do
