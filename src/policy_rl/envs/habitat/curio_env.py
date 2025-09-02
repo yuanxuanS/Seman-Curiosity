@@ -329,7 +329,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         else:
             o = 2 * np.pi - quaternion.as_euler_angles(agent_state.rotation)[1]
         if o > np.pi:
-            o -= 2 * np.pi
+            o -= 2 * np.pi      # 范围放缩到 []
         
         return x, y, o
     

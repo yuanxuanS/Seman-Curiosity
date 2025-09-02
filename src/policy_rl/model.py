@@ -315,43 +315,49 @@ class Semantic_Mapping(nn.Module):
                                  self.map_size_cm // self.resolution
                                  ).to(self.device)
 
-        x1 = self.map_size_cm // (self.resolution * 2) - self.vision_range // 2
+        # 地图中心，向左偏移视野的一半，得到视野左边界的地图坐标
+        x1 = self.map_size_cm // (self.resolution * 2) - self.vision_range // 2     
         x2 = x1 + self.vision_range
         y1 = self.map_size_cm // (self.resolution * 2)
         y2 = y1 + self.vision_range
+        # 以中心为agent位置，地图
         agent_view[:, 0:1, y1:y2, x1:x2] = fp_map_pred
         agent_view[:, 1:2, y1:y2, x1:x2] = fp_exp_pred
         agent_view[:, 4:, y1:y2, x1:x2] = torch.clamp(
             agent_height_proj[:, 1:, :, :] / self.cat_pred_threshold,
             min=0.0, max=1.0)
 
-        corrected_pose = pose_obs
+        corrected_pose = pose_obs       # 相对t-1的pose1的改变, dx, dy, do (在psoe1坐标系)
 
         def get_new_pose_batch(pose, rel_pose_change):
-
+            '''
+                返回世界坐标系下新的pose
+            '''
             pose[:, 1] += rel_pose_change[:, 0] * \
                 torch.sin(pose[:, 2] / 57.29577951308232) \
                 + rel_pose_change[:, 1] * \
-                torch.cos(pose[:, 2] / 57.29577951308232)
+                torch.cos(pose[:, 2] / 57.29577951308232)       # 局部位移 (dx, dy)通过旋转矩阵转换到世界坐标系， dy_world
             pose[:, 0] += rel_pose_change[:, 0] * \
                 torch.cos(pose[:, 2] / 57.29577951308232) \
                 - rel_pose_change[:, 1] * \
                 torch.sin(pose[:, 2] / 57.29577951308232)
-            pose[:, 2] += rel_pose_change[:, 2] * 57.29577951308232
+            pose[:, 2] += rel_pose_change[:, 2] * 57.29577951308232     # do_world
 
             pose[:, 2] = torch.fmod(pose[:, 2] - 180.0, 360.0) + 180.0
-            pose[:, 2] = torch.fmod(pose[:, 2] + 180.0, 360.0) - 180.0
+            pose[:, 2] = torch.fmod(pose[:, 2] + 180.0, 360.0) - 180.0      # -180, 180范围
 
             return pose
 
         current_poses = get_new_pose_batch(poses_last, corrected_pose)
         st_pose = current_poses.clone().detach()
 
+        # 坐标方向 x向右y向下；移动到地图中心，并归一化到 [-1, 1], 坐标系正向反转（affine函数的坐标为 x向左y向上）
         st_pose[:, :2] = - (st_pose[:, :2]
                             * 100.0 / self.resolution
                             - self.map_size_cm // (self.resolution * 2)) /\
             (self.map_size_cm // (self.resolution * 2))
-        st_pose[:, 2] = 90. - (st_pose[:, 2])
+        st_pose[:, 2] = 90. - (st_pose[:, 2])       # 向上，顺时针角度增加, 
+        
 
         rot_mat, trans_mat = get_grid(st_pose, agent_view.size(),
                                       self.device)

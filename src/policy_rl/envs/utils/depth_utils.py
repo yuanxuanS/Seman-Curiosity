@@ -140,7 +140,7 @@ def get_point_cloud_from_z_t(Y_t, camera_matrix, device, scale=1):
             |
             \/
         XYZ is ...xHxWx3
-        返回像素坐标系下点云的xyz坐标
+        返回相机坐标系下点云的xyz坐标
     """
     grid_x, grid_z = torch.meshgrid(torch.arange(Y_t.shape[-1]),
                                     torch.arange(Y_t.shape[-2] - 1, -1, -1))        # 从 Y_t.shape[-2] - 1 到 -1). ， 步进-1
@@ -172,7 +172,7 @@ def transform_camera_view_t(
         camera_elevation_degree : camera elevation to rectify. 相机仰角
     Output:
         XYZ : ...x3
-        点云在相机坐标系（+世界坐标系的高度）的坐标
+        点云在世界坐标系（考虑世界坐标系的高度、相机旋转）的坐标
     """
     R = ru.get_r_matrix(
         [1., 0., 0.], angle=np.deg2rad(camera_elevation_degree))

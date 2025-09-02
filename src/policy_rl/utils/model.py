@@ -6,6 +6,7 @@ from torch.nn import functional as F
 
 def get_grid(pose, grid_size, device):
     """
+    fanhu
     Input:
         `pose` FloatTensor(bs, 3)
         `grid_size` 4-tuple (bs, _, grid_h, grid_w)
@@ -25,19 +26,21 @@ def get_grid(pose, grid_size, device):
     cos_t = t.cos()
     sin_t = t.sin()
 
+    # 二维旋转矩阵： 向量和x轴(向右)的夹角为t
     theta11 = torch.stack([cos_t, -sin_t,
                            torch.zeros(cos_t.shape).float().to(device)], 1)
     theta12 = torch.stack([sin_t, cos_t,
                            torch.zeros(cos_t.shape).float().to(device)], 1)
     theta1 = torch.stack([theta11, theta12], 1)
 
+    # 平移矩阵
     theta21 = torch.stack([torch.ones(x.shape).to(device),
                            -torch.zeros(x.shape).to(device), x], 1)
     theta22 = torch.stack([torch.zeros(x.shape).to(device),
                            torch.ones(x.shape).to(device), y], 1)
     theta2 = torch.stack([theta21, theta22], 1)
 
-    rot_grid = F.affine_grid(theta1, torch.Size(grid_size))
+    rot_grid = F.affine_grid(theta1, torch.Size(grid_size))     # 目标图像的像素在原图像中的采样位
     trans_grid = F.affine_grid(theta2, torch.Size(grid_size))
 
     return rot_grid, trans_grid
