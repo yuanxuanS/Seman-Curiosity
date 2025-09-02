@@ -89,7 +89,7 @@ scenes = ["Collierville", "Corozal", "Darden", "Markleeville", "Wiconisco"]
 metadata = MetadataCatalog.get('coco_2017_val')
 pth = "/data1/wpp_data/data/obj_samples/"
 
-mode =   "get_idx" # "label" #"origScore"  #   "pred_orient" # 
+mode =    "label" #"origScore"  #   "pred_orient" # "get_idx" #
 
 # oriAny
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -292,7 +292,7 @@ for scene in scenes:
                                 
                                 score_arr_maskrcnn[dis_idx, azimuth_idx] = value_maskrcnn
                                 cnt_maskrcnn[dis_idx, azimuth_idx] += 1
-                                score_arr_clip[dis_idx, azimuth_idx] = value_clip
+                                score_arr_clip[dis_idx, azimuth_idx] = value_clip if cnt_clip[dis_idx, azimuth_idx] < 1e-5 else score_arr_clip[dis_idx, azimuth_idx] + value_clip
                                 cnt_clip[dis_idx, azimuth_idx] += 1
                             elif mode == "get_idx":
                                 # 计算对应距离索引，yaw索引
@@ -333,23 +333,29 @@ for scene in scenes:
                         print(f"has {(cnt_maskrcnn > 0).sum()} prediction with maskrcnn ")
                         print(f"has {(cnt_clip > 0).sum()} prediction with clip ")
                         score_arr_maskrcnn[score_arr_maskrcnn> 1e3] = 0.
-                        score_arr_clip[score_arr_clip> 1e3] = 0.
                         
+                        # 先求平均值，再去掉无值的元素
                         score_arr_maskrcnn[cnt_maskrcnn > 0] = score_arr_maskrcnn[cnt_maskrcnn > 0] / cnt_maskrcnn[cnt_maskrcnn > 0]
                         score_arr_clip[cnt_clip > 0] = score_arr_clip[cnt_clip > 0] / cnt_clip[cnt_clip > 0]
+                        
+                        score_arr_clip[score_arr_clip> 1e3] = 0.
+                        
+                        
                         
                         
                         object_label_maskrcnn[(env, epi)][cat][scene_obj_id] = [step, score_arr_maskrcnn]
                         object_label_clip[(env, epi)][cat][scene_obj_id] = [step, score_arr_clip.copy()]
                         
-                        score_arr_clip = (score_arr_clip - score_arr_clip.min()) / (score_arr_clip.max() - score_arr_clip.min())
-                        # 绘图
-                        text = f"env{env}_epi{epi}_step{step}"
-                        
+                        if (score_arr_clip > 0).sum() > 0:
+                            score_arr_clip[score_arr_clip > 0] = (score_arr_clip[score_arr_clip > 0] - score_arr_clip[score_arr_clip > 0].min()) / (score_arr_clip[score_arr_clip > 0].max() - score_arr_clip[score_arr_clip > 0].min())
+                            score_arr_clip[score_arr_clip > 0] = 1 - score_arr_clip[score_arr_clip > 0]
+                            # 绘图
+                            text = f"env{env}_epi{epi}_step{step}"
+                            visualize(score_arr_maskrcnn, scene, pth+"/vis", text+"_maskrcnn.png")
+                            visualize(score_arr_clip, scene, pth+"/vis", text+"_clip.png")
                         print(f"maskrcnn: ", score_arr_maskrcnn[score_arr_maskrcnn > 0])
                         print(f"clip: ", score_arr_clip[score_arr_clip > 0])
-                        visualize(score_arr_maskrcnn, scene, pth+"/vis", text+"_maskrcnn.png")
-                        visualize(score_arr_clip, scene, pth+"/vis", text+"_clip.png")
+                        
                         
                     elif mode == "pred_orient":
                         # object_orient[(env, epi)][cat][obj] = angles
