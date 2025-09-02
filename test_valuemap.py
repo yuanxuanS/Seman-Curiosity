@@ -2,6 +2,9 @@ import torch
 import math
 import numpy as np
 import itertools
+from src.finetune.dataset_utils import get_loader, SampleLoader
+from torch.nn import functional as F
+from src.policy_rl.utils.model import get_grid
 
 def polar_to_cartesian_map(values_2d, dis_list, map_size, origin=(0, 0)):
     """
@@ -48,7 +51,7 @@ def polar_to_cartesian_map(values_2d, dis_list, map_size, origin=(0, 0)):
     
     return map_result
 
-def splat_value_in_map(init_grid, feat, coords):
+def splat_field_in_map(init_grid, feat, coords):
         
     '''
     将coords对应的特征feat， 按照坐标值赋值到地图init_grid中
@@ -110,9 +113,10 @@ def splat_value_in_map(init_grid, feat, coords):
     grid = grid_flat.view(init_grid.shape)
     return grid
 
-def splat_value_in_correspond_region(center, coords, distance_center, value_array):
+def splat_value_in_field(center, coords, distance_center, value_array):
     '''
     coords: num * 2
+    distance_center: [n_distance_bin], 距离分区的中心
     value_array: n_distance_bin * num_angle_bin
     竖直向下为azimuth正向
     '''
@@ -133,22 +137,20 @@ def splat_value_in_correspond_region(center, coords, distance_center, value_arra
     dist_idx = dist_idx[valid_mask] - 1
     
     # 根据角度计算每个坐标所属角度区间
-    angle_rad = torch.atan2(torch.from_numpy(dx), torch.from_numpy(-dy))    # 弧度 [-π, π]
+    angle_rad = torch.atan2(torch.from_numpy(dx), torch.from_numpy(-dy))    # 极坐标方向为x正，逆时针；弧度 [-π, π]
     angle_rad = angle_rad[valid_mask]
     angle_deg = (angle_rad * 180 / math.pi) % 360  # 转换为 [0°, 360°)
-    angle_rad = angle_rad % 360
+    angle_deg = angle_deg % 360
     # 计算角度索引 (0-35 对应 0°-350°)
-    angle_idx = (angle_deg // 10).long()  # 每10°一个索引 [height, width]
-    
-    
+    # angle_idx = (angle_deg // 10).long()  # 每10°一个索引 [height, width]
+    shifted_angles = (angle_deg + 5) % 360
+    boundaries = torch.linspace(0, 360, 37)
+    indices = torch.bucketize(shifted_angles, boundaries, right=False)
+    angle_idx = (indices - 1) % 36
     # value_list = [1e4] + value_list
     # value_list.append(1e4)
     # value_list = torch.tensor(value_list)
-    # value_array = torch.ones(len(distance_center), 36)
-    # value_array[1, :] *= 4
-    # value_array[5, :] *= 2
-    # value_array[7, :] *= 6
-    # value_array[:, 4] *=2
+    
     
     values = value_array[dist_idx, angle_idx]        # dim=1
     coords = coords[valid_mask]
@@ -156,12 +158,8 @@ def splat_value_in_correspond_region(center, coords, distance_center, value_arra
     return values, coords
     
 if __name__ == "__main__":
-    # 示例输入参数
-    values_2d = torch.randn(3, 36)  # 3×36 的二维数组
-    dis_list = [10.0, 20.0, 30.0]   # 距离层级
-    map_size = (200, 200)            # 地图宽高
-    origin = (100, 100)              # 原点坐标（地图中心）
     
+    ## 将场的值赋值到圆形区域中
     # 创建实际坐标，直径11m, 间隔小于0.5m
     # coords = []
     center = (5.5, 5.5)
@@ -175,43 +173,119 @@ if __name__ == "__main__":
     coords = np.column_stack((xx.ravel(), yy.ravel()))
     
     distance_center = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]
-    value_list = [i+1 for i in range(len(distance_center))]
-    values, coords = splat_value_in_correspond_region(center, coords, distance_center, value_list)
+    value_array = torch.ones(len(distance_center), 36)
+    value_array[1, :] *= 4
+    value_array[5, :] *= 2
+    value_array[7, :] *= 6
+    value_array[:, 0] *=2
+    values, coords = splat_value_in_field(center, coords, distance_center, value_array)
     
-    w, h = 40, 40
+    ##  得到场地图
+    XY_resolution = 0.1     # 单位,m
+    w, h = int(11 / XY_resolution), int(11 / XY_resolution)       # field地图大小
     b = 1
     init_grid = torch.zeros(b, 1, w, h)
     feat = values[None, None, ...]
-    XY_resolution = 0.3
-
     
-    print(coords.shape)
-    
-    print(coords.max(), coords.min())
+    # print(coords.shape)
+    # print(coords.max(), coords.min())
     XY = coords / XY_resolution     # 地图分辨率的坐标
-    print(XY.max(), XY.min())
+    # print(XY.max(), XY.min())
     coord_range = 11 / XY_resolution
     XY = (XY - coord_range // 2) / coord_range * 2      # 除以坐标最大范围，所有坐标映射到 [-1, 1]
-    print(XY.max(), XY.min(), XY.shape)
-    print(type(XY))
+    # print(XY.max(), XY.min(), XY.shape)
+    # print(type(XY))
     XY= XY[None, ...].transpose(0, 2, 1)      # b X n_dim=2 X length
-    print(XY.shape)
+    # print(XY.shape)
     XY = torch.from_numpy(XY)
     
-    # 
-    grid = splat_value_in_map(init_grid, feat, XY)
-    print(grid.shape)
+    # 以圆心为中心的场
+    quality_field = splat_field_in_map(init_grid, feat, XY)
+    print(quality_field.shape)
     
+    from src.policy_rl.envs.utils import depth_utils as du
+
+    ## 根据点云计算obj相对agent的dx, dy
+    screen_w, screen_h = 128, 128  #?
+    fov = 79
+    device = "cpu"
+    camera_matrix = du.get_camera_matrix(
+            screen_w, screen_h, fov)
+    
+    ## 加载两个时刻的信息，叠加 1. gt_orient + gt的field 2. OriAny orient + gt的field
+    #   两个时刻分别得到affine后的field， 叠加
+    ## 如何从field中得到reward？
+    
+    # 得到obj在当前agent坐标系下的相对位置 dx_obj, dy_obj, 单位m
+    dataset_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/obj_samples/data/Collierville"
+    sampler = SampleLoader(dataset_path)
+    env, episode, step = 1, 0, 24
+    obj_id = 39
+    sample_data = sampler.get_sample_multimodality(env, episode, step, ["bbsgt", "rgb", "depth", "semantic"])
+    rgb = sample_data['rgb'].data
+    instance = sample_data['bbsgt'].data
+    depth = sample_data['depth'].data
+    semantic = sample_data['semantic'].data
+    # semantic == objid +depth得到agent坐标系下物体中心: 点云，计算点云中心    
+
+    mask = semantic == obj_id
+    rgb_obj = rgb * mask[:, :, None]
+    depth_obj = depth * mask[:, :, None]
+    
+    point_cloud_t = du.get_point_cloud_from_z_t(
+            torch.from_numpy(depth_obj), camera_matrix, device, scale=1)
+    
+    # agent_view_t = du.transform_camera_view_t(
+    #     point_cloud_t, self.agent_height, 0, self.device)
+    
+    dx_obj = point_cloud_t[..., 0].mean() * 4.5 + 0.5
+    dy_obj = point_cloud_t[..., 1].mean() * 4.5 + 0.5
+    
+    
+    # 地图大小定义
+    map_size_m = 20
+    agent_view = torch.zeros((1, 1,
+                        int(map_size_m // XY_resolution),
+                        int(map_size_m // XY_resolution)
+                        )).to(device)
+    
+    vision_range = w # 和field最小外围矩形的边长一致
+    x1 =int(map_size_m // (XY_resolution * 2) - vision_range // 2 )
+    x2 = x1 + vision_range
+    y1 = int(map_size_m // (XY_resolution * 2) - vision_range // 2)     # field以地图中心为原点 ？
+    y2 = y1 + vision_range
+    
+    agent_view[:, :, x1:x2, y1:y2] = quality_field
+    
+    # obj和agent的相对位置和朝向 
+    azimuth = 0    # agent在物体的azimuth朝向上
+    # dx_obj = 3      # obj相对地图中心、agent的偏移， 单位： 世界长度，m
+    # dy_obj = 1
+    x_obj = map_size_m // 2 + dx_obj    # obj在agent为中心的地图上的位置
+    y_obj = map_size_m // 2 + dy_obj
+    
+    ## field经过变换得到agent为中心的场
+    # 归一化到 [-1, 1]；（affine函数需要）
+    x_obj = - (x_obj / XY_resolution - map_size_m // (XY_resolution * 2)) / (map_size_m // (XY_resolution * 2))
+    y_obj = - (y_obj / XY_resolution - map_size_m // (XY_resolution * 2)) / (map_size_m // (XY_resolution * 2))
+    obj_pose = torch.tensor([x_obj, y_obj, -azimuth]).unsqueeze(0)
+    
+    rot_mat, trans_mat = get_grid(obj_pose, agent_view.size(),
+                                      device)
+    rotated = F.grid_sample(agent_view, rot_mat, align_corners=True)
+    translated = F.grid_sample(rotated, trans_mat, align_corners=True)
     # visualize
     import matplotlib.pyplot as plt
     # 假设 tensor 为输入数据，尺寸 [1, 1, w, h]
-    data = grid.squeeze(0).squeeze(0).detach().cpu().numpy()  # 压缩为 [w, h]
+    data_orig = agent_view.squeeze(0).squeeze(0).detach().cpu().numpy()  # 压缩为 [w, h]
+    data = translated.squeeze(0).squeeze(0).detach().cpu().numpy()  # 压缩为 [w, h]
 
-    # 方法1：Matplotlib imshow
-    plt.figure(figsize=(10, 8))
-    plt.imshow(data, cmap='viridis', vmin=0, vmax=100)  # vmin/vmax 限定值范围
-    plt.colorbar(label='Value')  # 添加颜色条
-    plt.title("Tensor俯视图")
-    plt.axis('off')  # 隐藏坐标轴
+    
+    # 可视化
+    fig, ax = plt.subplots(1, 2, figsize=(10, 8))
+    ax[0].imshow(data_orig, cmap='viridis')
+    ax[0].set_title("Original")
+    ax[1].imshow(translated.squeeze().detach(), cmap='viridis')
+    ax[1].set_title("Rotated 30° + Right Shift")
     # plt.show()
-    plt.savefig("./t_valuemap3.png")
+    plt.savefig('test_valuemap_affine4.png')
