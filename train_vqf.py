@@ -13,6 +13,8 @@ import random
 from tqdm import *
 from datetime import datetime
 from src.finetune.dataset_utils import get_loader, SampleLoader
+import numpy as np
+
 
 w, h = 640, 640
 import torchvision.transforms as T
@@ -55,6 +57,7 @@ class Mlp(nn.Module):
         out_features: Optional[int] = None,
         act_layer: Callable[..., nn.Module] = nn.GELU,
         drop: float = 0.0,
+        withdrop: bool = False,
         bias: bool = True,
         final_bias: bool = True
     ) -> None:
@@ -66,18 +69,22 @@ class Mlp(nn.Module):
         self.fc2 = nn.Linear(hidden_features1, hidden_features2, bias=bias)
         self.fc3 = nn.Linear(hidden_features2, out_features, bias=final_bias)
         self.drop = nn.Dropout(drop)
+        self.withdrop = withdrop
         self.sigmoid = torch.nn.Sigmoid()
     def forward(self, x: Tensor) -> Tensor:
         x = self.fc1(x)
         x = self.act(x)
-        # x = self.drop(x)
+        if self.withdrop:
+            x = self.drop(x)
         
         x = self.fc2(x)
         x = self.act(x)
-        # x = self.drop(x)
+        if self.withdrop:
+            x = self.drop(x)
         
         x = self.fc3(x)
-        # x = self.drop(x)        # activation?
+        if self.withdrop:
+            x = self.drop(x)
         x = self.sigmoid(x)
         return x
 
@@ -85,14 +92,15 @@ class Mlp(nn.Module):
 
     
     
-def load_dataset(dir, gt_mode, angle_interval, preprocess, train_augment):
+def load_dataset(dir, gt_mode, angle_interval, distances, preprocess, train_augment):
     
     
     train_dataset = None 
     test_unseen_dataset = None
     test_seen_dataset = None
     
-    classes = ['refrigerator', ]    #'toilet', 'bed', 'couch' ,'chair']
+    classes = ['refrigerator', 'toilet', 'bed', 'couch' ,'chair']
+    # distances = ['0.5m', '1m', '1.5m', '2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
     datas = []
     cls_objects = {}
     
@@ -101,7 +109,8 @@ def load_dataset(dir, gt_mode, angle_interval, preprocess, train_augment):
         cls_objects[cls_] = {}
         for obj_dir in os.listdir(dir+"/"+cls_):
             cls_objects[cls_][obj_dir] = []
-            for distance in os.listdir(dir + "/"+cls_+"/"+obj_dir):
+            # for distance in os.listdir(dir + "/"+cls_+"/"+obj_dir):
+            for distance in distances:
                 for azimuth in range(360): 
                     # img_pth = dir + "/"+ obj_dir+"/"+distance+f"/render_{azimuth:03d}.png"                    
                     datas.append((cls_, obj_dir, distance, azimuth))
@@ -131,7 +140,8 @@ def load_dataset(dir, gt_mode, angle_interval, preprocess, train_augment):
     for cls_ in classes:
         for obj_dir in train_objs[cls_]:
             all_data = []
-            for distance in os.listdir(dir + "/"+cls_+"/" + obj_dir):
+            # for distance in os.listdir(dir + "/"+cls_+"/" + obj_dir):
+            for distance in distances:
                 random_idxs = [idx for idx in range(360)]
                 random.shuffle(random_idxs)
                 all_data_ = [(cls_, obj_dir, distance, azimuth) for azimuth in random_idxs]
@@ -143,25 +153,26 @@ def load_dataset(dir, gt_mode, angle_interval, preprocess, train_augment):
     test_unseen_dataset = []
     for cls_ in classes:
         for obj_dir in test_unseen_objs[cls_]:
-            for distance in os.listdir(dir + "/"+cls_+"/" +obj_dir):
+            # for distance in os.listdir(dir + "/"+cls_+"/" +obj_dir):
+            for distance in distances:
                 for azimuth in range(360): 
                     test_unseen_dataset.append((cls_, obj_dir, distance, azimuth))
 
     # gt
     values_gt = {}
     for cls_ in classes:
-        gt_file = dir+"/"+cls_+"_clip.pkl"
+        gt_file = dir+"/"+cls_+"_clip_add.pkl"
         with open(gt_file, "rb") as f:
             values_gt[cls_] = pickle.load(f)     # values[obj_dir][distance], idnex-angle
     
-    TrainDataset = AzimuthDataset(train_dataset, dir, values_gt, gt_mode,
+    TrainDataset = AzimuthDataset(train_dataset, dir, distances, values_gt, gt_mode,
                                   obj_num=train_obj_num, 
                                   interval=angle_interval, 
                                   preprocess=preprocess,
                                   augment=True,
                                   augment_preprocess=train_augment)
-    TestSeenDataset = AzimuthDataset(test_seen_dataset, dir, values_gt, gt_mode, obj_num=train_obj_num, interval=angle_interval, preprocess=preprocess)
-    TestUnseenDataset = AzimuthDataset(test_unseen_dataset, dir, values_gt, gt_mode, obj_num=test_unseen_num, interval=angle_interval, preprocess=preprocess)
+    TestSeenDataset = AzimuthDataset(test_seen_dataset, dir,distances, values_gt, gt_mode, obj_num=train_obj_num, interval=angle_interval, preprocess=preprocess)
+    TestUnseenDataset = AzimuthDataset(test_unseen_dataset, dir, distances, values_gt, gt_mode, obj_num=test_unseen_num, interval=angle_interval, preprocess=preprocess)
     return TrainDataset, TestSeenDataset, TestUnseenDataset
 
 from src.vqf_constants import category_maps
@@ -185,16 +196,28 @@ class RealAzimuthDataset(Dataset):
                     if len(cat_obj)> 0:
                         for scene_obj_id, v_ in cat_obj.items():
                             _, obj_score_arr = object_label_clip[(env, epi)][cat][scene_obj_id]
-                            for step, index in v_.items():
-                                dis_idx, azimuth_idx = object_index[(env, epi)][cat][scene_obj_id][step]
-                            # data_lst[cat].append((env, epi, step, obj_score_arr))
-                                self.data_lst.append((scene, env, epi, step, cat, scene_obj_id, obj_score_arr, dis_idx, azimuth_idx))
+                            if obj_score_arr.max() > 0.1:
+                                for step, index in v_.items():
+                                    dis_idx, azimuth_idx = object_index[(env, epi)][cat][scene_obj_id][step]
+                                # data_lst[cat].append((env, epi, step, obj_score_arr))
+                                    self.data_lst.append((scene, env, epi, step, cat, scene_obj_id, obj_score_arr, dis_idx, azimuth_idx))
         
         self.samplers = {scene: SampleLoader(dir + "/data/"+scene) for scene in scenes}
 
-        self.norm_scale = {
-            'refrigerator': [ 13.9, 28.9,]
+        self.norm_scale = {     # real object 统计
+            'chair': [15.9, 30.1],
+            'couch':  [13.4, 30.4], 
+            'bed': [14.9, 28.6],
+            'toilet': [13.5, 27.3],
+            'refrigerator': [ 13.2, 30.4,]
         }
+        
+        self.transforms = T.Compose([
+            T.Resize(size=224, interpolation=Image.BICUBIC),
+            T.CenterCrop(size=(224, 224)),
+            T.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
+
+        ])
         
     def __getitem__(self, idx):
         '''
@@ -203,20 +226,25 @@ class RealAzimuthDataset(Dataset):
                 mask_: 矩阵有值的地方
         '''
         scene, env, epi, step, cat, scene_obj_id, obj_score_arr, dis_idx, azimuth_idx = self.data_lst[idx]  # obj_score_arr 未归一化
-        obj_score_arr = obj_score_arr.copy()
+        # obj_score_arr = obj_score_arr.copy()
         # 加载对应data和rgb
         sampler = self.samplers[scene]
         sample_data = sampler.get_sample_multimodality(env, epi, step, ["bbsgt", "rgb", "depth", "semantic"])
         rgb = sample_data['rgb'].data
         semantic = sample_data['semantic'].data
-        mask_ = semantic == scene_obj_id
+        mask_rgb = semantic == scene_obj_id
         
-        rgb_obj = rgb * mask_[:,:,None]
+        rgb_obj = rgb * mask_rgb[:,:,None]
+        rgb_obj = rgb_obj.transpose((2,0,1))
+        rgb_obj = self.transforms(torch.from_numpy(rgb_obj).type(torch.float32))
         # 不centerize
 
         class_name = category_maps[cat]
-        mask_ = obj_score_arr < 1e-5
-        y = (obj_score_arr[mask_] - self.norm_scale[class_name][0]) / (self.norm_scale[class_name][1] - self.norm_scale[class_name][0])
+        mask_ = obj_score_arr > 1e-5        # 0 处为无值
+        y = obj_score_arr.copy()
+        y[mask_] = (y[mask_] - self.norm_scale[class_name][0]) / (self.norm_scale[class_name][1] - self.norm_scale[class_name][0])
+        y[mask_] = np.ones_like(y)[mask_] - y[mask_]
+        
         if self.gt_mode == "inconsistent":
             y = torch.concat([y[:, azimuth_idx:], y[:, :azimuth_idx]], dim=-1)
             mask_ = torch.concat([mask_[:, azimuth_idx:], mask_[:, :azimuth_idx]], dim=-1)
@@ -237,6 +265,7 @@ class AzimuthDataset(Dataset):
         self,
         data_lst,
         dir,
+        gt_dis,
         gt_values_data,
         gt_mode, 
         obj_num,
@@ -248,18 +277,29 @@ class AzimuthDataset(Dataset):
         self.data_dir = dir
         self.datas = data_lst 
         
-        self.gt_dis = ['2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
+        self.gt_dis = gt_dis
         self.gt_values_data = gt_values_data
         self.gt_mode = gt_mode
         assert self.gt_mode in ["consistent", "inconsistent"], "Invalid gt mode"
-        self.norm_scale = {
-            'refrigerator': [12.7, 29.61],
-            'couch': [13.1, 28.85],
-            'toilet': [14, 26.83],
-            'chair': [14.6, 30.18],
-            'bed': [11.9, 28.46]
-        }
         
+        assert len(self.gt_dis) in [8, 11], "Invalid gt_dis"
+        mode = "8dis" if len(self.gt_dis) == 8 else "11dis"
+        if mode == "11dis":
+            self.norm_scale = {
+                'refrigerator': [10.6, 29.61],         # [12.7, 29.61],
+                'couch': [11.2, 28.85],               # [13.1, 28.85],
+                'toilet': [10.7, 26.83],      # [14, 26.83],
+                'chair': [11.3, 30.18],       # [14.6, 30.18],
+                'bed': [11.9, 28.46]
+            }
+        elif mode == "8dis":
+            self.norm_scale = {
+                'refrigerator': [12.7, 29.61],
+                'couch': [13.1, 28.85],
+                'toilet':  [14, 26.83],
+                'chair':  [14.6, 30.18],
+                'bed': [11.9, 28.46]
+            } 
         self.obj_num = obj_num
         self.interval = interval
         self.preprocess = preprocess
@@ -302,6 +342,7 @@ class AzimuthDataset(Dataset):
         max_ = max(self.norm_scale[cls_])
         min_ = min(self.norm_scale[cls_])
         y = (y - min_) / (max_ - min_)
+        assert y.min() > 0, "value array is < 0"
         y = torch.ones_like(y) - y
         
         # if self.gt_mode == "inconsistent":
@@ -316,7 +357,7 @@ class AzimuthDataset(Dataset):
         return len(self.datas)
     
 class VQFModel(nn.Module):
-    def __init__(self, device, in_dims, angle_interval, ):
+    def __init__(self, device, in_dims, withdrop, drop, angle_interval, distance_len):
         super().__init__()
         
         self.device = device
@@ -325,11 +366,13 @@ class VQFModel(nn.Module):
         self.dinov2 = torch.hub.load('/home/users/wpp/dinov2', 'dinov2_vitb14',source='local').to(device)  # base; 16patch
 
         self.angle_bin = int(360 / angle_interval)
-        out_dims = self.angle_bin * 8
+        out_dims = self.angle_bin * distance_len
         self.mlp = Mlp(in_dims, 
                   int(in_dims / 2),
                   int(in_dims / 4),
                   out_dims,
+                  drop=drop,
+                  withdrop=withdrop,
                   ).to(device)
     def preprocess(self, x):
         return self.preprocess(x).to(self.device)
@@ -386,18 +429,38 @@ if __name__ == "__main__":
     # parameters
     lr = 1e-3
     epochs = 10
-    batch_size = 128
-    
+    batch_size =1024
+    withdrop = True
+    drop=0.5
+    load_model = False
+    model_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-29_17-25-03_/best_real_model_e2.pth"
+    # "./vqf_logs/08-28_16-53-57_/best_unseen_model_e1.pth"
+    eval_only = False
+    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-27_09-48-23_/best_unseen_model.pth"
+    mode =   "11dis" #"8dis"   #
     ### model
     ## clip
     device = "cuda:2" if torch.cuda.is_available() else "cpu"
     in_dim = 768*2
-    model = VQFModel(device, in_dim, angle_interval)
+    distances = ['0.5m', '1m', '1.5m', '2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
+    distances = distances if mode == "11dis" else distances[3:]
+    
+    ### log
+
+    timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
+    note=  "withdropout"
+    log_dir = f"./vqf_logs/{timestamp}_{note}"
+    os.makedirs(log_dir, exist_ok=True)
+    print(f"log dir: {log_dir} in device {device}")
+    
+    model = VQFModel(device, in_dim, withdrop, drop, angle_interval, distance_len=len(distances))
+    if load_model:
+        model.load_state_dict(torch.load(model_pth))
     
     ### load dataset
     gt_mode = "consistent"
     ## augmentation in train
-    train_augment = ['crop', 'hflip']
+    train_augment = ['crop', 'hflip']       # 
     augments_x = []
     augments_y = []
     if "crop" in train_augment:
@@ -416,10 +479,10 @@ if __name__ == "__main__":
     
     # class_name = "refrigerator"
     dataset_dir = '/data2/wpp_data/obj_azimuth/'
-    
     train_dataset, test_seen_dataset, test_unseen_dataset = load_dataset(dataset_dir, 
                                                                          gt_mode,
                                                                          angle_interval, 
+                                                                         distances=distances,
                                                                          preprocess=model.preprocess,
                                                                          train_augment=train_augment)
     
@@ -435,13 +498,7 @@ if __name__ == "__main__":
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=helper_collate)
     test_seen_dataloader = DataLoader(test_seen_dataset, batch_size=batch_size, shuffle=False, collate_fn=helper_collate)
     test_unseen_dataloader = DataLoader(test_unseen_dataset, batch_size=batch_size, shuffle=False, collate_fn=helper_collate)
-    test_real_dataloader = DataLoader(test_real_dataset, batch_size=batch_size, shuffle=False, collate_fn=helper_collate)
-    ### log
-
-    timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
-    note=  ""
-    log_dir = f"./vqf_logs/{timestamp}_{note}"
-    os.makedirs(log_dir, exist_ok=True)
+    test_real_dataloader = DataLoader(test_real_dataset, batch_size=batch_size, shuffle=False)
     
 
     ### loss
@@ -457,68 +514,71 @@ if __name__ == "__main__":
     best_seen_loss = 1e5
     best_real_loss = 1e5
     for e in range(epochs):
-        train_loss = []
-        for i, batch in enumerate(tqdm(train_dataloader)):
-            x, y, azimuth = batch
-            
+        
+        if not eval_only:
+            train_loss = []
+            for i, batch in enumerate(tqdm(train_dataloader, desc="train:")):
+                x, y, azimuth = batch
+                
+                # x = model.preprocess(x)
+                x, y = x.to(device), y.to(device)
+                # augment
+                for aug_x, aug_y in zip(augments_x, augments_y):
 
-            # x = model.preprocess(x)
-            x, y = x.to(device), y.to(device)
-            # augment
-            for aug_x, aug_y in zip(augments_x, augments_y):
-
-                if not isinstance(aug_x, list):
-                    x = aug_x(x)
-    
-                if aug_y != None:
-                    if isinstance(aug_y, list):
-                        for idx in range(len(batch)):
-                            x[idx] = aug_x[idx](x[idx])
-                            y[idx] = aug_y[idx](y[idx], azimuth[idx])
-            
-            # forward
-            predict = model(x)
-            
-            # loss
-            y, predict = y.unsqueeze(1), predict.unsqueeze(1)
-            loss = (coef_dssim * dssim_criterion(y, predict)  
-                    + coef_mae * model.mean_absolute_error_loss(y, predict) 
-                    + coef_si * si_criterion(y, predict))
-            train_loss.append(loss.item())
-            # print(f"loss is {loss.item()}")
-            # backward
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-        train_loss = sum(train_loss) / len(train_loss)
-        train_losses.append(train_loss)
-        print(f"epoch {e}, loss: ", train_loss)
+                    if not isinstance(aug_x, list):
+                        x = aug_x(x)
+        
+                    if aug_y != None:
+                        if isinstance(aug_y, list):
+                            for idx in range(len(batch)):
+                                x[idx] = aug_x[idx](x[idx])
+                                y[idx] = aug_y[idx](y[idx], azimuth[idx])
+                
+                # forward
+                predict = model(x)
+                
+                # loss
+                y, predict = y.unsqueeze(1), predict.unsqueeze(1)
+                loss = (coef_dssim * dssim_criterion(y, predict)  
+                        + coef_mae * model.mean_absolute_error_loss(y, predict) 
+                        + coef_si * si_criterion(y, predict))
+                train_loss.append(loss.item())
+                # print(f"loss is {loss.item()}")
+                # backward
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                
+            train_loss = sum(train_loss) / len(train_loss)
+            train_losses.append(train_loss)
+            print(f"epoch {e}, loss: ", train_loss)
         
     
         ###  test
+        # ''''''
         save_dir = log_dir + "/images/predict_seen"
         cnt = 0
         test_seen_loss = []
-        for i, batch in tqdm(enumerate(test_seen_dataloader)):
+        for i, batch in enumerate(tqdm(test_seen_dataloader, desc="test seen:")):
             
             
-            if cnt % int(720 / batch_size) == 0:       # 每个物体有8×360×1/4 = 720张test， batch=16; 45轮后换物体
-                x, y, azimuth = batch
-                x, y = x.to(device), y.to(device)
-                with torch.no_grad():
-                    predict = model(x)
-                
-                y, predict = y.unsqueeze(1), predict.unsqueeze(1)
-                test_loss = (coef_dssim * dssim_criterion(y, predict)  
-                    + coef_mae * model.mean_absolute_error_loss(y, predict) 
-                    + coef_si * si_criterion(y, predict))
-                test_seen_loss.append(test_loss.item())
+            # if cnt % int(720 / batch_size) == 0:       # 每个物体有8×360×1/4 = 720张test， batch=16; 45轮后换物体
+            x, y, azimuth = batch
+            x, y = x.to(device), y.to(device)
+            with torch.no_grad():
+                predict = model(x)
+            
+            y, predict = y.unsqueeze(1), predict.unsqueeze(1)
+            test_loss = (coef_dssim * dssim_criterion(y, predict)  
+                + coef_mae * model.mean_absolute_error_loss(y, predict) 
+                + coef_si * si_criterion(y, predict))
+            test_seen_loss.append(test_loss.item())
                 
                 # visualize
-                j = 0
-                visualize(predict[j,:,:], "", save_dir, note=f"pred_"+str(j)+f"_{str(i)}_"+f"_e{e}")
-                visualize(y[j,:,:], "", save_dir, note=f"gt_"+str(j)+f"_{str(i)}_"+f"_e{e}")
+            j = 0
+            visualize(predict.squeeze(1)[j,:,:], "", save_dir, note=f"pred_"+str(j)+f"_{str(i)}_"+f"_e{e}")
+            if e == 0:
+                visualize(y.squeeze(1)[j,:,:], "", save_dir, note=f"gt_"+str(j)+f"_{str(i)}")
             cnt += 1
             
         test_seen_loss = sum(test_seen_loss) / len(test_seen_loss)
@@ -527,67 +587,71 @@ if __name__ == "__main__":
         
         if test_seen_loss < best_seen_loss:
             best_seen_loss = test_seen_loss
-            torch.save(model.state_dict(), log_dir + "/best_seen_model.pth")
+            torch.save(model.state_dict(), log_dir + f"/best_seen_model_e{e}.pth")
 
-
+        # test on unseen dataset
         save_dir = log_dir + "/images/predict_unseen"
         cnt = 0
         test_unseen_loss = []
-        for i, batch in enumerate(test_unseen_dataloader):
-            
-            
-            if cnt % int(2880 / batch_size) == 0:  # 每物体2880张，共11520 test , 4物体，batch=16; 
-                x, y, azimuth = batch
-                x, y = x.to(device), y.to(device)
-                with torch.no_grad():
-                    predict = model(x)
+        for i, batch in enumerate(tqdm(test_unseen_dataloader, desc="test unseen:")):
+            # if cnt % int(2880 / batch_size) == 0:  # 每物体2880张，共11520 test , 4物体，batch=16; 
+            x, y, azimuth = batch
+            x, y = x.to(device), y.to(device)
+            with torch.no_grad():
+                predict = model(x)
 
-                y, predict = y.unsqueeze(1), predict.unsqueeze(1)
-                test_loss = (coef_dssim * dssim_criterion(y, predict)  
-                    + coef_mae * model.mean_absolute_error_loss(y, predict) 
-                    + coef_si * si_criterion(y, predict))
-                test_unseen_loss.append(test_loss.item())
-                
-                # visualize
-                j = 0
-                visualize(predict[j,:,:], "", save_dir, note=f"pred_"+str(j)+f"_{str(i)}_"+f"_e{e}")
-                visualize(y[j,:,:], "", save_dir, note=f"gt_"+str(j)+f"_{str(i)}_"+f"_e{e}")
+            y, predict = y.unsqueeze(1), predict.unsqueeze(1)
+            test_loss = (coef_dssim * dssim_criterion(y, predict)  
+                + coef_mae * model.mean_absolute_error_loss(y, predict) 
+                + coef_si * si_criterion(y, predict))
+            test_unseen_loss.append(test_loss.item())
+            
+            # visualize
+            j = 0
+            visualize(predict.squeeze(1)[j,:,:], "", save_dir, note=f"pred_"+str(j)+f"_{str(i)}_"+f"_e{e}")
+            if e == 0:
+                visualize(y.squeeze(1)[j,:,:], "", save_dir, note=f"gt_"+str(j)+f"_{str(i)}")
             cnt += 1
         test_unseen_loss = sum(test_unseen_loss) / len(test_unseen_loss)
         test_unseen_losses.append(test_unseen_loss)
-        print(f"epoch {e}, test seen loss: ", test_unseen_loss)
+        print(f"epoch {e}, test unseen loss: ", test_unseen_loss)
         
         # save
         if test_unseen_loss < best_loss:
             best_loss = test_unseen_loss
-            torch.save(model.state_dict(), log_dir + "/best_unseen_model.pth")
-
+            torch.save(model.state_dict(), log_dir + f"/best_unseen_model_e{e}.pth")
+        # '''
+        
+        # test on real dataset
         save_dir = log_dir + "/images/predict_real"
         cnt = 0
         test_real_loss = []
-        for i, batch in enumerate(test_real_dataloader):
+        for i, batch in enumerate(tqdm(test_real_dataloader, desc="test real: ")):
             
             # if cnt % int(2880 / batch_size) == 0:  
             x, y, mask = batch
             x, y, mask = x.to(device), y.to(device), mask.to(device)
             
-            y = y[:, 3:, :]     # 从第3行开始
-            mask = mask[:, 3:, :]
+            idx = 3 if mode == "8dis" else 0
+            y = y[:, idx:, :]     # 从第3行开始
+            mask = mask[:, idx:, :]
             
             with torch.no_grad():
                 predict = model(x)
 
             y, predict = y.unsqueeze(1), predict.unsqueeze(1)
+            mask = mask.unsqueeze(1)
             test_loss = (coef_dssim * dssim_criterion(y*mask, predict*mask)  
                 + coef_mae * model.mean_absolute_error_loss(y*mask, predict*mask) 
                 + coef_si * si_criterion(y*mask, predict*mask))
             test_real_loss.append(test_loss.item())
             
             # visualize
-            for j in range(len(y.shape[0])):
+            for j in range(y.shape[0]):
                 if cnt % 5 == 0:
-                    visualize(predict[j,:,:], "", save_dir, note=f"pred_"+str(j)+f"_{str(i)}_"+f"_e{e}")
-                    visualize(y[j,:,:], "", save_dir, note=f"gt_"+str(j)+f"_{str(i)}_"+f"_e{e}")
+                    visualize((predict*mask).squeeze(1)[j,:,:], "", save_dir, note=f"pred_"+str(j)+f"_{str(i)}_"+f"_e{e}")
+                    if e == 0:
+                        visualize(y.squeeze(1)[j,:,:], "", save_dir, note=f"gt_"+str(j)+f"_{str(i)}")
             cnt += 1
         test_real_loss = sum(test_real_loss) / len(test_real_loss)
         test_real_losses.append(test_real_loss)
@@ -596,13 +660,16 @@ if __name__ == "__main__":
         # save
         if test_real_loss < best_real_loss:
             best_real_loss = test_real_loss
-            torch.save(model.state_dict(), log_dir + "/best_real_model.pth")
-            
+            torch.save(model.state_dict(), log_dir + f"/best_real_model_e{e}.pth")
+        
+        print("train loss: ", train_losses)
+        print("test seen loss: ", test_seen_losses)
+        print("test unseen loss: ", test_unseen_losses)
     torch.save(model.state_dict(), log_dir + "/last_model.pth")
     
-    print("train loss: ", train_losses)
-    print("test seen loss: ", test_seen_losses)
-    print("test unseen loss: ", test_unseen_losses)
+    print("final train loss: ", train_losses)
+    print("final test seen loss: ", test_seen_losses)
+    print("final test unseen loss: ", test_unseen_losses)
     
     # visualize loss
     plt.figure()  # 宽度调大以适应360列

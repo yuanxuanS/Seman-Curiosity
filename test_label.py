@@ -10,11 +10,13 @@ import torch
 import clip
 from PIL import Image
 
-def draw_array(obj_str, obj_value_dict, note, norm=False):
-    save_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/images/value_map/"+note
+def draw_array(obj_str, obj_value_dict, note, norm=False, dis=[],
+               save_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/images/value_map/",
+               ):
+    save_dir = save_dir + "/"+note
     os.makedirs(save_dir, exist_ok=True)
     
-    dis = ['2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
+    # dis = ['2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
     matrix = []
     matrix_min, matrix_max = 1e5, 0
     for d in dis:
@@ -70,15 +72,17 @@ def manual_bin_count(data, bin_size=0.1):
 
 if __name__ == "__main__":
 
-    mode = "predict"    # "read"   #
-    predict_mode = "clip"       # "maskrcnn"
-    class_names = ["couch", ]        # -ok, , "toilet", "bed", "chair", "refrigerator", 
+    mode = "read"   #"predict"    # 
+    predict_mode =   "clip"       #"maskrcnn"  #
+    class_names = ["couch", ]   # "toilet", "bed", "chair", "refrigerator",
+    visualize = True        # 可视化该物体的GT
     save_dir = "/data2/wpp_data/obj_azimuth/"
     preds = {}
     values = {}
     cnt_none = {}
     cnt_false = {}
-    distances = ['2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
+    distances = ['0.5m', '1m', '1.5m', '2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
+    distances = distances[3:]
     
     for class_name in class_names:
         if mode == "predict":
@@ -87,7 +91,7 @@ if __name__ == "__main__":
                 sem_pred = SemanticPredMaskRCNN(args)
                 pred_instances = {}
             elif predict_mode == "clip":
-                device = "cuda:3" if torch.cuda.is_available() else "cpu"
+                device = "cuda:1" if torch.cuda.is_available() else "cpu"
                 model, preprocess = clip.load("ViT-L/14", device=device)
 
                 text_str = [class_name]
@@ -155,19 +159,27 @@ if __name__ == "__main__":
                                 logits_per_image, logits_per_text = model(image, text)
                                 score = logits_per_text.item()
                                 values[obj_dir][distance].append(score)
-                #         tmp +=1
-                #         if tmp > 20:
-                #             break
-                #     if tmp > 20:
-                #         break
-                # if tmp > 20:
-                #     break
+                        # tmp +=1
+                        # if tmp > 20:
+                        #     break
+                    # if tmp > 20:
+                    #     break
+                tmp += 1
+                if tmp > 10:
+                    break
                     # clip打分
             
             # 存
             if predict_mode == "maskrcnn":
-                with open(save_dir+ class_name+".pkl", "wb") as f:
+                with open(save_dir+ class_name+"_orig_ins_part.pkl", "wb") as f:
                     pickle.dump(pred_instances, f)
+                with open(save_dir+ class_name+"_maskrcnn_part.pkl", "wb") as f:
+                    pickle.dump(values, f)
+                
+                for obj, obj_dict in values.items():
+                    if visualize: 
+                        draw_array(obj, values[obj], class_name+"_maskrcnn10_norm", norm=False)
+                        
             elif predict_mode == "clip":
                 with open(save_dir+ class_name+"_clip.pkl", "wb") as f:
                     pickle.dump(values, f)
@@ -176,14 +188,16 @@ if __name__ == "__main__":
                 dis = distances
                 for obj, obj_dict in values.items():
                     for d in dis:
-                        value = values[obj][d]
-                        max_ = max(value) if max(value) > max_ else max_
-                        min_ = min(value) if min(value) < min_ else min_
+                        if visualize:
+                            draw_array(obj, values[obj], class_name+"_clip10_norm", norm=True)
+                            value = values[obj][d]
+                            max_ = max(value) if max(value) > max_ else max_
+                            min_ = min(value) if min(value) < min_ else min_
                 print(f"clip score: max  {max_}, min {min_}")
                 
         if mode == "read":
             if predict_mode == "maskrcnn":
-                with open(save_dir+class_name+".pkl", "rb") as f:
+                with open(save_dir+class_name+"_orig_ins.pkl", "rb") as f:
                     pred_instances = pickle.load(f)
             
                 for obj, obj_dict in pred_instances.items():
@@ -231,18 +245,25 @@ if __name__ == "__main__":
                 print(f"检测错误数： {cnt_false_all}")
         
             elif predict_mode == "clip":
-                with open(save_dir+class_name+"_clip.pkl", "rb") as f:
+                with open(save_dir+class_name+"_clip_add.pkl", "rb") as f:
                     values = pickle.load(f)
                 
                 max_, min_ = 0,  1e4
                 dis = distances
+                tmp = 0
                 for obj, obj_dict in values.items():
                     for d in dis:
+                        
                         value = values[obj][d]
                         max_ = max(value) if max(value) > max_ else max_
                         min_ = min(value) if min(value) < min_ else min_
+                    if visualize:
+                        draw_array(obj, values[obj], class_name+"_clip10_norm11", norm=True, dis=distances)
+                    tmp += 1
+                    if tmp > 20:
+                        break
                 print(f"clip score: max  {max_}, min {min_}")
-                    # draw_array(obj, values[obj], class_name+"_clip10_norm", norm=True)
+                
             # 所有角度结果拼接
     
     
