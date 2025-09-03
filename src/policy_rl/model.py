@@ -310,6 +310,7 @@ class Semantic_Mapping(nn.Module):
         pose_pred = poses_last
 
         # all map: obstacle, explore, semantics
+        # 以agent为中心的全局地图，更新当前的map
         agent_view = torch.zeros(bs, c,
                                  self.map_size_cm // self.resolution,
                                  self.map_size_cm // self.resolution
@@ -358,7 +359,7 @@ class Semantic_Mapping(nn.Module):
             (self.map_size_cm // (self.resolution * 2))
         st_pose[:, 2] = 90. - (st_pose[:, 2])       # 向上，顺时针角度增加, 
         
-
+        # 将当前地图进行平移+旋转，和上一时刻地图进行融合
         rot_mat, trans_mat = get_grid(st_pose, agent_view.size(),
                                       self.device)
 
