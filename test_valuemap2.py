@@ -322,11 +322,12 @@ if __name__ == "__main__":
     
     # 可视化
     fig, ax = plt.subplots(1, 2, figsize=(10, 8))
-    ax[0].imshow(data_orig, cmap='hot')
+    im = ax[0].imshow(data_orig, cmap='Blues')
     ax[0].set_title("Original")
-    ax[1].imshow(data, cmap='hot')
+    ax[1].imshow(data, cmap='Blues')
     ax[1].set_title("Rotated 30° + Right Shift")
     # plt.show()
     plt.xlabel("X axis")
     plt.ylabel("Y axis")
-    plt.savefig('test_valuemap_affine_tsize.png')
+    plt.colorbar(im, label="value")
+    plt.savefig('test_valuemap_affine_tcolor.png')

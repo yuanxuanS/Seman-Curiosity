@@ -5,7 +5,7 @@ import numpy as np
 # print(plt.colormaps()) # 会输出一个很长的列表，包括 'viridis', 'plasma', 'inferno' 等[5,7](@ref)
 
 # 获取特定的colormap对象，例如'viridis'
-cmap = plt.get_cmap('hot')  # 或者使用 cmap = plt.cm.viridis
+cmap = plt.get_cmap('Blues')  # 或者使用 cmap = plt.cm.viridis
 
 # 查看colormap上特定位置（例如中点0.5）的RGBA值（范围0-1）
 rgba_value = cmap(0.5) # 参数为归一化到[0,1]之间的数值
