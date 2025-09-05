@@ -27,7 +27,7 @@ class SemanticPredMaskRCNN():
         self.segmentation_model = ImageSegmentation(args)
         self.args = args
 
-    def get_prediction(self, img, return_score=False, return_instance=False):
+    def get_prediction(self, img, return_instance=False):
         args = self.args
         image_list = []
         img = img[:, :, ::-1]
@@ -46,11 +46,8 @@ class SemanticPredMaskRCNN():
                 idx = target_coco_categories_mapping[class_idx]
                 obj_mask = seg_predictions[0]['instances'].pred_masks[j] * 1.
                 semantic_input[:, :, idx] += obj_mask.cpu().numpy()
-        if not return_instance and not return_score:
+        if not return_instance:
             return semantic_input, img
-        elif return_score:
-            all_scores = seg_predictions[0]['instances'].scores
-            return semantic_input, img, all_scores
         elif return_instance:
             return semantic_input, img, seg_predictions[0]['instances']
 def compress_sem_map(sem_map):

@@ -91,3 +91,24 @@ class VQFModel(nn.Module):
         criterion = nn.L1Loss(reduction='mean')
         loss = criterion(x, target)
         return loss
+
+
+if __name__ == "__main__":
+    import numpy as np
+    from PIL import Image
+    img = np.ones((256, 256, 3))
+    device = "cuda:1"
+    model = VQFModel(device)
+    
+    imgs = []
+    for i in range(5):
+        img_ = Image.fromarray(img.astype(np.uint8))
+        x = model.preprocess(img_)
+        imgs.append(x.unsqueeze(0))
+    imgs = torch.concat(imgs, dim=0)
+    print(f"x shape {imgs.shape}")
+    
+    with torch.no_grad():
+        x = imgs.to(device)
+        vsqf = model(x)
+    print(f"vsqf shape {vsqf.shape}")

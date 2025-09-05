@@ -14,7 +14,7 @@ from ..utils.fmm_planner import FMMPlanner
 import json
 import gzip
 
-class Vqf_Env(habitat.RLEnv):
+class Vqf_Frontier_Env(habitat.RLEnv):
     """The VQF environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
     metrics.
