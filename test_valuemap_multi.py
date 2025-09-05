@@ -63,6 +63,7 @@ def splat_field_in_map(init_grid, feat, coords):
     将coords对应的特征feat， 按照坐标值赋值到地图init_grid中
     对grid和coord不同维度的,grid的dim和coord一致即可, 
     如:
+        feat: [b, nPt]
         grid: [b, F, w, h]
         coords: [b, nDim=2, nPt]
     '''
@@ -124,7 +125,7 @@ def splat_value_in_field(center, coords, distance_center, value_array):
     根据价值矩阵，将每个区域的点赋值；
         coords: num * 2, 实际坐标值（单位m）
         distance_center: [n_distance_bin], 距离分区的中心
-        value_array: 距离矩阵，n_distance_bin * num_angle_bin
+        value_array: 距离矩阵，num_scene * n_distance_bin * num_angle_bin
         竖直向上为azimuth正向
     返回有效圆内的坐标点 coords，和点对应的值values
     '''
@@ -133,6 +134,9 @@ def splat_value_in_field(center, coords, distance_center, value_array):
     dy = coords[:, 0] - center[0]       # x为行索引，y方向
     dx = coords[:, 1] - center[1]
     distance_array = torch.from_numpy(np.sqrt(dx**2 + dy**2))
+    
+    num_scenes = value_array.shape[0]
+    # distance_array = distance_array.unsqueeze(0).repeat(num_scenes, 1, 1)
     print(distance_array.shape)
 
     # 根据距离矩阵计算每个坐标所属的距离区间
@@ -157,10 +161,18 @@ def splat_value_in_field(center, coords, distance_center, value_array):
     indices = torch.bucketize(shifted_angles, boundaries, right=False)
     angle_idx = (indices - 1) % 36    
     
-    values = value_array[dist_idx, angle_idx]        # dim=1
+    
+    dist_idx = dist_idx.unsqueeze(0).repeat(num_scenes, 1)
+    dist_idx = dist_idx.to(value_array.device)
+    angle_idx = angle_idx.unsqueeze(0).repeat(num_scenes, 1)
+    angle_idx = angle_idx.to(value_array.device)
+    
+    depth_indices = torch.arange(2)[..., None].repeat(1, dist_idx.shape[-1])
+    depth_indices = depth_indices.to(value_array.device)
+    values = value_array[depth_indices, dist_idx, angle_idx]        # dim=1
     coords = coords[valid_mask]
     
-    return values, coords
+    return values, coords[None, ...].repeat(2, 0)
     
 if __name__ == "__main__":
     
@@ -191,9 +203,6 @@ if __name__ == "__main__":
     mask = semantic == obj_id
     rgb_obj = rgb * mask[:, :, None]
     depth_obj = depth * mask[:, :, None]
-    
-    # 
-    rgb_obj = cv2.resize(rgb_obj, (224, 224)) 
     rgb_img = Image.fromarray(rgb_obj)  # .convert('RGB')
 
     ## VSQF预测
@@ -216,7 +225,7 @@ if __name__ == "__main__":
     ### 得到vqsf每个坐标对应的值
     # 将vsqf放大，且保证最小值> 0
     vsqf = (vsqf.squeeze(0) - vsqf.min() + 0.1) * magnify / (vsqf.max() - vsqf.min())
-    
+    vsqf = vsqf.unsqueeze(0).repeat(2, 1, 1)
     values, coords = splat_value_in_field(center, coords, distance_center, vsqf)
 
     ### 分散vsqf到2D地图上
@@ -329,4 +338,4 @@ if __name__ == "__main__":
     # plt.show()
     plt.xlabel("X axis")
     plt.ylabel("Y axis")
-    plt.savefig('test_valuemap_affine_tsize.png')
+    plt.savefig('test_valuemap_affine_v2-o1.png')
