@@ -243,9 +243,16 @@ class Vsqf_Maps_Env:
 
         return local_map, local_pose
     
-    def get_vsqf_reward(self):
-        pass
-    
+    def get_vsqf_score(self):
+        locs = self.full_pose.cpu().numpy()
+        scores = []
+        for e in range(self.num_scenes):
+            r, c = locs[e, 1], locs[e, 0]
+            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                            int(c * 100.0 / self.args.map_resolution)]
+            score = self.full_map[e, :, loc_r, loc_c] 
+            scores.append(score)
+        return scores
 if __name__ == "__main__":
     args = get_args()
     args.device = "cuda:1"

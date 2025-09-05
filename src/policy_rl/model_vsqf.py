@@ -33,8 +33,8 @@ class VSQF_Mapping(nn.Module):
         vr = int(diameter // self.resolution)       # vsqf vision range
 
         # 直接生成坐标轴数组， x向右，y向下
-        x = np.arange(0, diameter, 10)
-        y = np.arange(0, diameter, 10)
+        x = np.arange(2.5, diameter, 5)
+        y = np.arange(2.5, diameter, 5)
         xx, yy = np.meshgrid(x, y, indexing='xy')
         self.coords = np.column_stack((xx.ravel(), yy.ravel())) # coords: num * 2, 实际坐标值（单位m）
         self.distance_center = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]    # distance_center: [n_distance_bin], 距离分区的中心
@@ -171,7 +171,7 @@ class VSQF_Mapping(nn.Module):
             index = index.long()
             wts = wts.type(torch.float32)
             grid_flat.scatter_add_(2, index.expand(-1, F, -1), feat * wts)     # dim为展开的维度 ;TODO: 不使用add而是该位置的值
-            grid_flat = torch.round(grid_flat)
+            # grid_flat = torch.round(grid_flat)
             
         grid = grid_flat.view(init_grid.shape)
         return grid
