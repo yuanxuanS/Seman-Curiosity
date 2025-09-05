@@ -253,7 +253,7 @@ def main():
     logging.info("Start date and time: %s", start_datetime)
     
     l_reward = torch.zeros(num_scenes).to(device)
-    last_reward = torch.zeros(num_scenes).to(device)
+    last_scores = torch.zeros(num_scenes).to(device)
 
     
     torch.set_grad_enabled(False)
@@ -271,12 +271,10 @@ def main():
         
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
-            l_reward = last_reward
+            l_reward = last_scores
         else:
-            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
-
-        # per step reward? TODO
-        # add explore metric: TODO
+            l_scores = torch.tensor(vsqf_maps.get_vsqf_score()).to(device)
+            l_reward = l_scores - last_scores
 
         # ------------------------------------------------------------------ 
         # update local input, next state
@@ -292,7 +290,7 @@ def main():
             extras[:, :2] = local_xy[:]
             # print(f"input sxtras: {extras}")
         # Add samples to local policy storage
-        reward = l_reward - last_reward
+        reward = l_reward
         
         if args.agent == "rl":
             l_rollouts.insert(
@@ -300,8 +298,7 @@ def main():
                     l_action, l_action_log_prob, l_value,   # action, reward_t
                     reward, l_masks, extras
                 )
-        last_reward = l_reward
-
+        last_scores = l_scores
         # 
         reward_mean = np.mean(reward.cpu().numpy())
         l_reward_mean = np.mean(l_reward.cpu().numpy())
@@ -318,7 +315,7 @@ def main():
             l_episode_rewards.append(r_)
 
             l_reward = torch.zeros(num_scenes).to(device)
-            last_reward = l_reward
+            last_scores = l_reward
             
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
