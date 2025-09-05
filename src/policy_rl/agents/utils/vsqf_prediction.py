@@ -4,13 +4,14 @@ from PIL import Image
 import numpy as np
 
 class Vsqf_pred():
-    def __init__(self, args):
+    def __init__(self, device):
         load_model = True
         model_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-29_17-25-03_/best_unseen_model_e1.pth"
-        if args.sem_gpu_id == -2:
-            self.device = "cpu"
-        else:
-            self.device = "cuda:{}".format(args.sem_gpu_id)
+        # if args.sem_gpu_id == -2:
+        #     self.device = "cpu"
+        # else:
+        #     self.device = "cuda:{}".format(args.sem_gpu_id)
+        self.device = device
         self.model = VQFModel(self.device)
         if load_model:
             self.model.load_state_dict(torch.load(model_pth))
@@ -20,11 +21,11 @@ class Vsqf_pred():
         
     def preprocess(self, x_lst):
         '''
-        x_lst: list, numpy ndarray
+        x_lst: list of Images
         '''
         imgs = []
-        for i in range(len(x_lst)):
-            img_ = Image.fromarray(x_lst[i].astype(np.uint8))
+        for img_ in x_lst:
+            # img_ = Image.fromarray(x_lst[i].astype(np.uint8))
             x = self.model.preprocess(img_)
             imgs.append(x.unsqueeze(0))
         imgs = torch.concat(imgs, dim=0)

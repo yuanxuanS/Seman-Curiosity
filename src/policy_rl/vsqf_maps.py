@@ -176,15 +176,15 @@ class Vsqf_Maps_Env:
     def update_local_map(self, local_map):
         self.local_map = local_map
 
-    def update_vsqf_map(self, infos):   #, vsqf, azimuth):
+    def update_vsqf_map(self, infos, vsqf, azimuth):
 
         poses = torch.from_numpy(np.asarray(
                 [infos[env_idx]['sensor_pose'] for env_idx
                 in range(self.num_scenes)])
             ).float().to(self.device)
         
-        vsqf = torch.concat([infos[env_idx]['vsqf'] for env_idx in range(self.num_scenes)], dim=0)
-        azimuth = torch.tensor([infos[env_idx]['azimuth'] for env_idx in range(self.num_scenes)])
+        # vsqf = torch.concat([infos[env_idx]['vsqf'] for env_idx in range(self.num_scenes)], dim=0)
+        # azimuth = torch.tensor([infos[env_idx]['azimuth'] for env_idx in range(self.num_scenes)])
         depth_obj = np.concatenate([infos[env_idx]['depth_obj'] for env_idx in range(self.num_scenes)], axis=0)
         # agent当前观察到的自我中心的map
         local_map, _, local_pose = \

@@ -19,7 +19,8 @@ import cv2
 import json
 from src.policy_rl.agents.utils.vsqf_prediction import Vsqf_pred
 from src.policy_rl.agents.utils.orient_prediction import Orient_pred
-
+from PIL import Image
+from train_vqf import visualize
 
 def main():
     args = get_args()
@@ -97,17 +98,25 @@ def main():
     
     # Initializing VSQF Maps
     vsqf_maps = Vsqf_Maps_Env(args)
+    vsqf_pred = Vsqf_pred(device)
+    orient_pred = Orient_pred(device)
     
     # inference vsqf and azimuth
-    # vsqf_pred = Vsqf_pred(args)
-    # orient_pred = Orient_pred(args)
+    rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
+    rgb_objs = [Image.fromarray(rgb_obj.astype(np.uint8)) for rgb_obj in rgb_objs]
     
-    # rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
-    # rgb_objs_ = vsqf_pred.preprocess(rgb_objs)
-    # vsqf = vsqf_pred.pred_vsqf(rgb_objs_)
+    rgb_objs_ = vsqf_pred.preprocess(rgb_objs)
+    vsqf = vsqf_pred.inference(rgb_objs_)
+    orient_data = orient_pred.pred_orient_multi(rgb_objs)
+    azimuth, confidence = orient_data
+    # check if find goal
+    find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
+    find_goal = find_goal.to(vsqf.device)
+    vsqf = find_goal[:, None, None] * vsqf
+    azimuth = find_goal * azimuth
     
-    
-    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos)
+    # update vsqf maps
+    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map
     
     # for visualize
@@ -221,7 +230,22 @@ def main():
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
     
-    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos)
+    # inference vsqf and azimuth
+    rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
+    rgb_objs = [Image.fromarray(rgb_obj.astype(np.uint8)) for rgb_obj in rgb_objs]
+    
+    rgb_objs_ = vsqf_pred.preprocess(rgb_objs)
+    vsqf = vsqf_pred.inference(rgb_objs_)
+    orient_data = orient_pred.pred_orient_multi(rgb_objs)
+    azimuth, confidence = orient_data
+    # check if find goal
+    # find_goal = torch.tensor([False for _ in range(num_scenes)])
+    find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
+    find_goal = find_goal.to(vsqf.device)
+    vsqf = find_goal[:, None, None] * vsqf
+    azimuth = find_goal * azimuth
+    
+    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map
     
     start = time.time()
@@ -358,13 +382,29 @@ def main():
         for e, x in enumerate(done):    # if done, maps from new obs
             if x:
                 maps._init_map_and_pose_for_env(e)
+                vsqf_maps._init_map_and_pose_for_env(e)
                 print(f"Env {e}'s episode over in {step} step, {l_step} local step, reset maps")
                 
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)
         full_pose = maps.full_pose
         
-        local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos)
+        # inference vsqf and azimuth
+        rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
+        rgb_objs = [Image.fromarray(rgb_obj.astype(np.uint8)) for rgb_obj in rgb_objs]
+        
+        rgb_objs_ = vsqf_pred.preprocess(rgb_objs)
+        vsqf = vsqf_pred.inference(rgb_objs_)
+        orient_data = orient_pred.pred_orient_multi(rgb_objs)
+        azimuth, confidence = orient_data
+        # check if find goal
+        # find_goal = torch.tensor([False for _ in range(num_scenes)])
+        find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
+        find_goal = find_goal.to(vsqf.device)
+        vsqf = find_goal[:, None, None] * vsqf
+        azimuth = find_goal * azimuth
+        
+        local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
         full_vsqf_map = vsqf_maps.full_map
         
         # ------------------------------------------------------------------

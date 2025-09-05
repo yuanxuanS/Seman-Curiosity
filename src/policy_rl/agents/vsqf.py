@@ -18,7 +18,7 @@ from .utils.detect_utils import box_iou_calc
 from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.structures.instances import Instances
 from detectron2.structures.boxes import Boxes, BoxMode
-from src.vqf_constants import target_coco_categories_mapping
+from src.vqf_constants import target_coco_categories_mapping, clsid_name_maps
 
 class Vsqf_Env_Agent(Vsqf_Env):
     """The VSQF environment agent class. A separate Vsqf_Env_Agent class
@@ -47,10 +47,10 @@ class Vsqf_Env_Agent(Vsqf_Env):
 
         self.sem_pred = SemanticPredMaskRCNN(args)
         # VSQF
-        self.vsqf_pred = Vsqf_pred(args)
+        # self.vsqf_pred = Vsqf_pred(args)
         
         # OriAny
-        self.orient_pred = Orient_pred(args)
+        # self.orient_pred = Orient_pred(args)
         
         if args.visualize or args.print_images:
             self.legend = cv2.imread('docs/legend.png')
@@ -171,27 +171,30 @@ class Vsqf_Env_Agent(Vsqf_Env):
             rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
             rgb_obj = rgb_t * mask[:, :, None]
             depth_t = cv2.resize(depth, (256, 256))
-            depth_obj = depth_t * mask[:, :, None]
+            depth_obj = depth_t * mask
             info['find_goal'] = True
+            
+            cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
+            print(f"find goal True: {cls_name}, score {obj.scores[idx].cpu().numpy()}")
             info['rgb_obj'] = rgb_obj
-            info['depth_obj'] = depth_obj
+            info['depth_obj'] = depth_obj[None, ...]
             del rgb_t
             del depth_t
             # 
-            rgb_img = Image.fromarray(rgb_obj.astype(np.uint8))
-            vsqf = self.vsqf_pred.pred_vsqf(rgb_img)
-            info['vsqf'] = vsqf
+            # rgb_img = Image.fromarray(rgb_obj.astype(np.uint8))
+            # vsqf = self.vsqf_pred.pred_vsqf(rgb_img)
+            # info['vsqf'] = vsqf
             
-            # 
-            azimuth = self.orient_pred.pred_orient(rgb_img)[0]
-            info['azimuth'] = azimuth
+            # # 
+            # azimuth = self.orient_pred.pred_orient(rgb_img)[0]
+            # info['azimuth'] = azimuth
         else:
             info['find_goal'] = False
-            info['rgb_obj'] = np.zeros((1, 256, 256))
+            info['rgb_obj'] = np.zeros((256, 256, 3))
             info['depth_obj'] = np.zeros((1, 256, 256))     # TODO
             
-            info['vsqf'] = torch.zeros((1, 11, 36))
-            info['azimuth'] = 0
+            # info['vsqf'] = torch.zeros((1, 11, 36))
+            # info['azimuth'] = 0
             
         # 
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
@@ -306,10 +309,10 @@ class Vsqf_Env_Agent(Vsqf_Env):
         vsqf_map = inputs['vsqf_map']
         vsqf_map_full = inputs['vsqf_map_full']
         for i in range(10):
-            score_mask = (vsqf_map > i*0.1) and (vsqf_map <= (i+1)*0.1)
+            score_mask = (vsqf_map > i*0.1) * (vsqf_map <= (i+1)*0.1)
             vsqf_map[score_mask] = i+1      # 从 1 开始
             
-            score_mask_full = (vsqf_map_full > i *0.1) and (vsqf_map_full <= (i+1)*0.1)
+            score_mask_full = (vsqf_map_full > i *0.1) * (vsqf_map_full <= (i+1)*0.1)
             vsqf_map_full[score_mask_full] = i+1
             
         
@@ -400,26 +403,21 @@ class Vsqf_Env_Agent(Vsqf_Env):
         # vsqf
         color_pal_vsqf = [int(x * 255.) for x in color_palette_vsqf]
         if mode == "local":
-            vsqf_map_vis = Image.new("P", (vsqf_map.shape[1],
-                                        vsqf_map.shape[0]))
+            vsqf_map_vis = Image.new("P", (vsqf_map.shape[-1],
+                                        vsqf_map.shape[-2]))
             vsqf_map_vis.putpalette(color_pal_vsqf)
             vsqf_map_vis.putdata(vsqf_map.flatten().astype(np.uint8))
         elif mode == "full":        
-            vsqf_map_vis = Image.new("P", (vsqf_map_full.shape[1],
-                                        vsqf_map_full.shape[0]))
+            vsqf_map_vis = Image.new("P", (vsqf_map_full.shape[-1],
+                                        vsqf_map_full.shape[-2]))
             vsqf_map_vis.putpalette(color_pal_vsqf)
             vsqf_map_vis.putdata(vsqf_map_full.flatten().astype(np.uint8))
-        sem_map_vis = sem_map_vis.convert("RGB")
-        sem_map_vis = np.flipud(sem_map_vis)
-        sem_map_vis = sem_map_vis[:, :, [2, 1, 0]]
-        sem_map_vis = cv2.resize(sem_map_vis, (480, 480),
-                                interpolation=cv2.INTER_NEAREST)
-        
         vsqf_map_vis = vsqf_map_vis.convert("RGB")
         vsqf_map_vis = np.flipud(vsqf_map_vis)
         vsqf_map_vis = vsqf_map_vis[:, :, [2, 1, 0]]
         vsqf_map_vis = cv2.resize(vsqf_map_vis, (480, 480),
                                 interpolation=cv2.INTER_NEAREST)
+        
         
         rgb_vis = cv2.resize(self.rgb_vis, (640, 480),
                                  interpolation=cv2.INTER_NEAREST)
@@ -455,10 +453,25 @@ class Vsqf_Env_Agent(Vsqf_Env):
                  int(color_palette[9] * 255))
         cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
 
+        # agent in vsqf
+        origin = (1165, 50)  
+        agent_arrow = vu.get_contour_points(pos, origin)
+        color = (int(color_palette[11] * 255),
+                 int(color_palette[10] * 255),
+                 int(color_palette[9] * 255))
+        cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
+        
+        
         if args.visualize:
             # Displaying the image
-            cv2.imshow("Thread {}".format(self.rank), self.vis_image)
-            cv2.waitKey(1)
+            # cv2.imshow("Thread {}".format(self.rank), self.vis_image)
+            # cv2.waitKey(1)
+            
+            fn = '{}/episodes/thread_{}/eps_{}/{}-{}-Vis-{}.png'.format(
+                dump_dir, self.rank, self.episode_no,
+                self.rank, self.episode_no, self.timestep)
+            cv2.imwrite(fn, self.vis_image)
+            
             pass
 
         if args.print_images:

@@ -4,12 +4,13 @@ from third_parties.Orient_Anything.utils import background_preprocess
 import torch
 
 class Orient_pred():
-    def __init__(self, args):
-        if args.sem_gpu_id == -2:
-            self.device = "cpu"
-        else:
-            self.device = "cuda:{}".format(args.sem_gpu_id)
+    def __init__(self, device):
+        # if args.sem_gpu_id == -2:
+        #     self.device = "cpu"
+        # else:
+        #     self.device = "cuda:{}".format(args.sem_gpu_id)
 
+        self.device = device
         self.dino, self.val_preprocess = OriAny_pred(self.device)
         self.augment = False
         

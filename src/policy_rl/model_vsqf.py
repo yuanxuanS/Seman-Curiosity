@@ -79,7 +79,6 @@ class VSQF_Mapping(nn.Module):
         angle_rad = torch.atan2(torch.from_numpy(-dx[valid_mask]), torch.from_numpy(-dy[valid_mask]))    # 极坐标方向为x正，逆时针；弧度 [-π, π]
         # angle_rad = angle_rad[valid_mask]
         angle_deg = (angle_rad * 180 / math.pi)
-        print(f"max {angle_deg.max()}, min {angle_deg.min()}")
         angle_deg = angle_deg % 360  # 转换为 [0°, 360°)
         # 计算角度索引 (0-35 对应 0°-350°)
         # angle_idx = (angle_deg // 10).long()  # 每10°一个索引 [height, width]
@@ -193,7 +192,7 @@ class VSQF_Mapping(nn.Module):
         XY = torch.from_numpy(XY)
         
         quality_field = self.splat_field_in_map(
-            self.init_grid.to(feat.device), feat, XY.to(feat.device)
+            self.init_grid.to(feat.device) * 0., feat, XY.to(feat.device)
         )       # B*1*vr*vr
         
         # 转到azimuth角度
