@@ -8,7 +8,7 @@ import numpy as np
 from .utils.distributions import Categorical, DiagGaussian
 from .utils.model import get_grid, ChannelPool, Flatten, NNBase
 from .envs.utils import depth_utils as du
-
+import cv2
 
 class Goal_Oriented_Semantic_Policy(NNBase):
 

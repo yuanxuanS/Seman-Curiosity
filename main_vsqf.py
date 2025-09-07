@@ -276,6 +276,8 @@ def main():
         else:
             l_scores = torch.tensor(vsqf_maps.get_vsqf_score()).to(device)
             l_reward = l_scores - last_scores
+            # l_reward = l_reward if l_reward > 0 else torch.zeros_like(l_reward).to(device)
+            # print(f"reward {l_reward}")
 
         # ------------------------------------------------------------------ 
         # update local input, next state
