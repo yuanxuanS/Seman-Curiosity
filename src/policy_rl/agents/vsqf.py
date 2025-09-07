@@ -158,6 +158,27 @@ class Vsqf_Env_Agent(Vsqf_Env):
         sem_seg_pred, obj = self._get_sem_pred(
             rgb.astype(np.uint8), use_seg=use_seg, return_instance=return_instance)
 
+        
+        # 
+        depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
+
+        ds = args.det_frame_width // args.frame_width  # Downscaling factor
+        if ds != 1:
+            rgb = np.asarray(self.res(rgb.astype(np.uint8)))
+            depth = depth[ds // 2::ds, ds // 2::ds]
+            sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
+
+        depth = np.expand_dims(depth, axis=2)
+
+        if return_instance:
+            save_pred_ins = False
+            if save_pred_ins:
+                self.save_data({'bbs': {'instances': obj}})
+            
+        
+        state = np.concatenate((rgb, depth, sem_seg_pred),
+                               axis=2).transpose(2, 0, 1)
+        
         # if pred objects, pred vsqf and Orient, (在depth处理之前)
         obj = self.filter_instance(obj)
         if len(obj) > 0:
@@ -170,8 +191,8 @@ class Vsqf_Env_Agent(Vsqf_Env):
             
             rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
             rgb_obj = rgb_t * mask[:, :, None]
-            depth_t = cv2.resize(depth, (256, 256))
-            depth_obj = depth_t * mask
+            depth_t = cv2.resize(depth, (256, 256)) 
+            depth_obj = depth_t * mask    # 单位cm
             info['find_goal'] = True
             
             cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
@@ -196,28 +217,6 @@ class Vsqf_Env_Agent(Vsqf_Env):
             # info['vsqf'] = torch.zeros((1, 11, 36))
             # info['azimuth'] = 0
             
-        # 
-        depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
-
-        ds = args.det_frame_width // args.frame_width  # Downscaling factor
-        if ds != 1:
-            rgb = np.asarray(self.res(rgb.astype(np.uint8)))
-            depth = depth[ds // 2::ds, ds // 2::ds]
-            sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
-
-        depth = np.expand_dims(depth, axis=2)
-
-        if return_instance:
-            save_pred_ins = False
-            if save_pred_ins:
-                self.save_data({'bbs': {'instances': obj}})
-            
-        
-        state = np.concatenate((rgb, depth, sem_seg_pred),
-                               axis=2).transpose(2, 0, 1)
-        
-        
-            
         return state, info
     
     def filter_instance(self, instance):
@@ -241,6 +240,9 @@ class Vsqf_Env_Agent(Vsqf_Env):
         return new_instance
     
     def _preprocess_depth(self, depth, min_d, max_d):
+        '''
+        将深度值还原回设定范围, 单位cm
+        '''
         depth = depth[:, :, 0] * 1
 
         for i in range(depth.shape[1]):
@@ -249,9 +251,11 @@ class Vsqf_Env_Agent(Vsqf_Env):
         mask2 = depth > 0.99
         depth[mask2] = 0.
 
-        mask1 = depth == 0
-        depth[mask1] = 100.0
-        depth = min_d * 100.0 + depth * max_d * 100.0
+        # mask1 = depth == 0
+        # depth[mask1] = 100.0      #  标记为极大值：无效值
+        # depth = min_d * 100.0 + depth * max_d * 100.0
+        depth = min_d * 100.0 + depth * (max_d - min_d) * 100.0
+        
         return depth
     
     def _get_sem_pred(self, rgb, use_seg=True, return_instance=False):
@@ -308,12 +312,13 @@ class Vsqf_Env_Agent(Vsqf_Env):
         # vsqf map: 取间隔为0.1（放缩前），每一个间隔一个颜色
         vsqf_map = inputs['vsqf_map']
         vsqf_map_full = inputs['vsqf_map_full']
+        vsqf_map[m2[None, ...]] = 14
         for i in range(10):
             score_mask = (vsqf_map > i*0.1) * (vsqf_map <= (i+1)*0.1)
-            vsqf_map[score_mask] = i+1      # 从 1 开始
+            vsqf_map[score_mask] = i+2      # 从 1 开始
             
             score_mask_full = (vsqf_map_full > i *0.1) * (vsqf_map_full <= (i+1)*0.1)
-            vsqf_map_full[score_mask_full] = i+1
+            vsqf_map_full[score_mask_full] = i+2
             
         
         
@@ -338,6 +343,7 @@ class Vsqf_Env_Agent(Vsqf_Env):
 
         sem_map_full[vis_mask_full] = 3       # agent位置区域赋值3
 
+        vsqf_map_full[m2_full[None, ...]] = 14
         if 'frontier_goal' in inputs:
             if inputs['frontier_goal'] is not None:
                 goal = inputs['frontier_goal']
@@ -368,20 +374,7 @@ class Vsqf_Env_Agent(Vsqf_Env):
                         j = min(j, size-1)
                         sem_map_full[i, j] = 12
                         
-        # pos
-        # size = map_pred_full.shape[0]
-        # square_size = 10
-        # r, c = start_y, start_x     # 转化为格子坐标
-        # start = [int(r * 100.0 / args.map_resolution),
-        #         int(c * 100.0 / args.map_resolution)]
-        # # start[1] = map_pred_full.shape[0] - start[1] 
-        # start = pu.threshold_poses(start, map_pred_full.shape)
-        # half_size = square_size // 2
-        # for i in range(start[0] - half_size, start[0] + half_size + 1):
-        #     for j in range(start[1] - half_size, start[1] + half_size + 1):
-        #         i = min(i, size-1)
-        #         j = min(j, size-1)
-        #         sem_map_full[i, j] = 17
+
         # 绘制语义地图
         color_pal = [int(x * 255.) for x in color_palette]
         if mode == "local":
@@ -464,13 +457,13 @@ class Vsqf_Env_Agent(Vsqf_Env):
         
         if args.visualize:
             # Displaying the image
-            # cv2.imshow("Thread {}".format(self.rank), self.vis_image)
-            # cv2.waitKey(1)
+            cv2.imshow("Thread {}".format(self.rank), self.vis_image)
+            cv2.waitKey(1)
             
-            fn = '{}/episodes/thread_{}/eps_{}/{}-{}-Vis-{}.png'.format(
-                dump_dir, self.rank, self.episode_no,
-                self.rank, self.episode_no, self.timestep)
-            cv2.imwrite(fn, self.vis_image)
+            # fn = '{}/episodes/thread_{}/eps_{}/{}-{}-Vis-{}.png'.format(
+            #     dump_dir, self.rank, self.episode_no,
+            #     self.rank, self.episode_no, self.timestep)
+            # cv2.imwrite(fn, self.vis_image)
             
             pass
 
