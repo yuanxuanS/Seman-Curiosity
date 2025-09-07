@@ -204,27 +204,35 @@ class VSQF_Mapping(nn.Module):
         rotated_qf = F.grid_sample(quality_field.to(self.device), rot_mat, align_corners=True)
 
         # obj和agent的相对距离
-        
+        depth_obj = depth_obj     # cm -> m
         point_cloud_t = du.get_point_cloud_from_z_t(
             torch.from_numpy(depth_obj).to(self.device), 
             self.camera_matrix, 
             self.device, 
             scale=1)
         
-        dx_obj = point_cloud_t[..., 0].mean()        
-        dy_obj = (point_cloud_t[..., 1].mean() * 4.5 + 0.5) * (point_cloud_t[..., 1].mean() > 0)       # 深度方向
+        # agent_view_t = du.transform_camera_view_t(
+        #     point_cloud_t, self.agent_height, 0, self.device)
+
+        # agent_view_centered_t = du.transform_pose_t(
+        #     agent_view_t, self.shift_loc, self.device)
+        
+        dx_obj = point_cloud_t[..., 0][point_cloud_t[..., 0] > 0].mean() if (point_cloud_t[..., 0] > 0).sum() > 0 else 0.       
+        dy_obj = point_cloud_t[..., 1][point_cloud_t[..., 1] > 0].mean() if (point_cloud_t[..., 1] > 0).sum() > 0 else 0.
+        # dy_obj = (point_cloud_t[..., 1].mean() * 4.5 + 0.5) * (point_cloud_t[..., 1].mean() > 0)       # 深度方向
         # print(f"obj x {dx_obj}, y {dy_obj}")
         
         pose_pred = poses_last
-        ### vsqf到 agent view的 全局地图上
+        ### vsqf到 agent view的 全局地图上： 和agent的距离决定obj的位置
         agent_view = torch.zeros((B, 1,
                             int(self.map_size_cm // self.resolution),
                             int(self.map_size_cm // self.resolution)
                             )).to(self.device)
 
-        x1 =int(self.map_size_cm // (self.resolution * 2) - self.coord_range // 2 - dx_obj // self.resolution)
+        x1 = int(self.map_size_cm // (self.resolution * 2) - self.coord_range // 2 - dx_obj // self.resolution)
+        x1 = max(0, x1)
         x2 = x1 + self.coord_range
-        y1 = int(self.map_size_cm // (self.resolution * 2) + dy_obj // self.resolution) # - vision_range // 2)     # field以地图中心为原点 ？
+        y1 = int(self.map_size_cm // (self.resolution * 2) - self.coord_range // 2 + dy_obj // self.resolution) # - vision_range // 2)     # field以地图中心为原点 ？
         y2 = min(y1 + self.coord_range, int(self.map_size_cm // self.resolution))
         y_range = y2 - y1
         rotated_qf = rotated_qf[:, :, :int(y_range), :]
