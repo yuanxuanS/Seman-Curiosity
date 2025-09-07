@@ -98,7 +98,8 @@ def main():
     
     # Initializing VSQF Maps
     vsqf_maps = Vsqf_Maps_Env(args)
-    vsqf_pred = Vsqf_pred(device)
+    magnify, magnify_num = args.magnify, args.magnify_num
+    vsqf_pred = Vsqf_pred(device, magnify, magnify_num)
     orient_pred = Orient_pred(device)
     
     # inference vsqf and azimuth

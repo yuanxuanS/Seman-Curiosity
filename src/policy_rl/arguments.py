@@ -158,6 +158,13 @@ def get_args():
     # sample obj data 
     parser.add_argument('--num_sample_pts', type=int, default=50000)
     parser.add_argument('--sample_pt_distance_interval', type=float, default=0.1)
+    
+    # vsqf
+    parser.add_argument('--magnify', default=False,
+                        help='magnify vsqf scores')
+    parser.add_argument('--magnify_num', type=float, default=3.0)
+
+    
     # parse arguments
     args = parser.parse_args()
 

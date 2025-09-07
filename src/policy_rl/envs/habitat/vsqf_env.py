@@ -230,7 +230,7 @@ class Vsqf_Env(habitat.RLEnv):
 
         # step
         obs, _, done, _ = super().step(action)
-
+ 
         # reset location if on floor
         last_sim_location_z = self.this_sim_location_z
         this_sim_location_z, this_sim_rot = self.get_sim_location_z()
