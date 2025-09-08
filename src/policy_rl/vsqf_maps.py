@@ -262,7 +262,7 @@ class Vsqf_Maps_Env:
             # loc_c_l, loc_c_r= max(0, loc_c_l) , min(self.w - 1, loc_c_l)
             # loc_r_l, loc_r_r = loc_r - 2, loc_r + 2
             # loc_r_l, loc_r_r= max(0, loc_r_l) , min(self.h - 1, loc_r_r)
-            # score = self.full_map[e, :, loc_r_l:loc_r_r, loc_c_l:loc_c_r].sum()
+            # score = self.full_map[e, :, loc_r_l:loc_r_r, loc_c_l:loc_c_r].mean()
             
             scores.append(score)
         return scores
