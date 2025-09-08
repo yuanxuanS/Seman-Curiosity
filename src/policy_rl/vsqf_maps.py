@@ -250,11 +250,23 @@ class Vsqf_Maps_Env:
             r, c = locs[e, 1], locs[e, 0]
             loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
                             int(c * 100.0 / self.args.map_resolution)]
+            
+            # agent location
             loc_r = min(self.full_w - 1, loc_r)
             loc_c = min(self.full_w - 1, loc_c)
             score = self.full_map[e, :, loc_r, loc_c] 
+            
+            
+            # agent region
+            # loc_c_l, loc_c_r = loc_c - 2, loc_c + 2
+            # loc_c_l, loc_c_r= max(0, loc_c_l) , min(self.w - 1, loc_c_l)
+            # loc_r_l, loc_r_r = loc_r - 2, loc_r + 2
+            # loc_r_l, loc_r_r= max(0, loc_r_l) , min(self.h - 1, loc_r_r)
+            # score = self.full_map[e, :, loc_r_l:loc_r_r, loc_c_l:loc_c_r].sum()
+            
             scores.append(score)
         return scores
+
 if __name__ == "__main__":
     args = get_args()
     args.device = "cuda:1"
