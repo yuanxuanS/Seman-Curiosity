@@ -250,6 +250,8 @@ class Vsqf_Maps_Env:
             r, c = locs[e, 1], locs[e, 0]
             loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
                             int(c * 100.0 / self.args.map_resolution)]
+            loc_r = min(self.full_w - 1, loc_r)
+            loc_c = min(self.full_w - 1, loc_c)
             score = self.full_map[e, :, loc_r, loc_c] 
             scores.append(score)
         return scores
