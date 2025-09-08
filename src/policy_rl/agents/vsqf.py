@@ -196,7 +196,7 @@ class Vsqf_Env_Agent(Vsqf_Env):
             info['find_goal'] = True
             
             cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
-            print(f"find goal True: {cls_name}, score {obj.scores[idx].cpu().numpy()}")
+            # print(f"find goal True: {cls_name}, score {obj.scores[idx].cpu().numpy()}")
             info['rgb_obj'] = rgb_obj
             info['depth_obj'] = depth_obj[None, ...]
             del rgb_t
