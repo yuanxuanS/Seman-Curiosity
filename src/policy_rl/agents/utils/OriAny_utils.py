@@ -22,5 +22,5 @@ def OriAny_pred(device):
   dino = dino.to(device)
   print('weight loaded')
 
-  val_preprocess   = AutoImageProcessor.from_pretrained("/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/third_parties/Orient_Anything/models/dino/", local_files_only=True)
+  val_preprocess   = AutoImageProcessor.from_pretrained("/home/wpp/Seman-Curiosity/third_parties/Orient_Anything/models/dino/", local_files_only=True)
   return dino, val_preprocess
