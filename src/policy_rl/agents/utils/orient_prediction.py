@@ -1,4 +1,4 @@
-from test_gt_orient import OriAny_pred
+from src.policy_rl.agents.utils.OriAny_utils import OriAny_pred
 from third_parties.Orient_Anything.inference import get_3angle, get_3angle_infer_aug, inference, preprocess
 from third_parties.Orient_Anything.utils import background_preprocess
 import torch
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     from PIL import Image
     img = np.ones((256, 256, 3))
     img2 = np.ones((256, 256, 3))
-    device = "cuda:1"
+    device = "cuda:0"
     
     img_lst = [Image.fromarray(img.astype(np.uint8)), 
                Image.fromarray(img2.astype(np.uint8)),]
