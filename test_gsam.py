@@ -376,14 +376,14 @@ def segment_args():
 
 
 def main():
-    gsam_config = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/configs_finetune/gsam_config/config.yaml"
+    gsam_config = "/home/wpp/Seman-Curiosity/configs_finetune/gsam_config/config.yaml"
     with open(gsam_config, 'r') as f:
         seg_args = yaml.load(f, Loader=yaml.FullLoader)
 
     # dataset_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data"
     # sampler = SampleLoader(dataset_path)
 
-    seg_args['output_dir'] = "./outputs_v2_2/"
+    seg_args['output_dir'] = "./outputs/"
     model, predictor = init_segment(seg_args)
 
     sample_lst = [[0, 1, 10]]   # env, epi, step
@@ -391,8 +391,7 @@ def main():
     #     env, episode, step = idx
         # rgb = sampler.get_sample(env, episode, step, "rgb").data
 
-    img_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data_vqf/bed/0a5652c16e1a4575903dfc1696382502/0.5m/render_000.png"
-    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data_orig_imgs/epi1_env0_step0.png"
+    img_pth = "/home/wpp/Seman-Curiosity/render_017.png"
     rgb = cv2.imread(img_pth)
 
     env, episode, step = 0, 0, 0

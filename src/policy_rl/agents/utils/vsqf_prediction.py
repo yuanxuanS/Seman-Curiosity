@@ -6,7 +6,7 @@ import numpy as np
 class Vsqf_pred():
     def __init__(self, device, magnify=False, magnify_num=3.0):
         load_model = True
-        model_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-29_17-25-03_/best_unseen_model_e1.pth"
+        model_pth = "/home/wpp/Seman-Curiosity/best_unseen_model_e1.pth"
         # if args.sem_gpu_id == -2:
         #     self.device = "cpu"
         # else:
