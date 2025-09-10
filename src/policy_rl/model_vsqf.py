@@ -176,7 +176,7 @@ class VSQF_Mapping(nn.Module):
         grid = grid_flat.view(init_grid.shape)
         return grid
 
-    def forward(self, vsqf, azimuth, depth_obj, pose_obs, maps_last, poses_last):
+    def forward(self, vsqf, azimuth, depth_obj, pose_obs, maps_last, poses_last, explore_map):
         '''
         azimuth: num_scenes*1
         '''
@@ -282,6 +282,8 @@ class VSQF_Mapping(nn.Module):
 
         map_pred, _ = torch.max(maps2, 1)
         
+        # on explore map
+        map_pred = map_pred * explore_map[:, None, ...]  # exp_map: num_scenes*1*w*h
         return map_pred, pose_pred, current_poses
 
 

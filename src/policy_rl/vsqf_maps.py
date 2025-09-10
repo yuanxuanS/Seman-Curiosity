@@ -176,7 +176,7 @@ class Vsqf_Maps_Env:
     def update_local_map(self, local_map):
         self.local_map = local_map
 
-    def update_vsqf_map(self, infos, vsqf, azimuth):
+    def update_vsqf_map(self, infos, vsqf, azimuth, explore_map):
 
         poses = torch.from_numpy(np.asarray(
                 [infos[env_idx]['sensor_pose'] for env_idx
@@ -188,7 +188,7 @@ class Vsqf_Maps_Env:
         depth_obj = np.concatenate([infos[env_idx]['depth_obj'] for env_idx in range(self.num_scenes)], axis=0)
         # agent当前观察到的自我中心的map
         local_map, _, local_pose = \
-            self.vsqf_map(vsqf, azimuth, depth_obj, poses, self.local_map, self.local_pose)
+            self.vsqf_map(vsqf, azimuth, depth_obj, poses, self.local_map, self.local_pose, explore_map)
         
         # update 2-3: curr and past maps
         # locs = local_pose.cpu().numpy()
@@ -252,17 +252,17 @@ class Vsqf_Maps_Env:
                             int(c * 100.0 / self.args.map_resolution)]
             
             # agent location
-            # loc_r = min(self.full_w - 1, loc_r)
-            # loc_c = min(self.full_w - 1, loc_c)
-            # score = self.full_map[e, :, loc_r, loc_c] 
+            loc_r = min(self.full_h - 1, loc_r)
+            loc_c = min(self.full_w - 1, loc_c)
+            score = self.full_map[e, :, loc_r, loc_c] 
             
             
             # agent region
-            loc_c_l, loc_c_r = loc_c - 2, loc_c + 2
-            loc_c_l, loc_c_r= max(0, loc_c_l) , min(self.full_w - 1, loc_c_r)
-            loc_r_l, loc_r_r = loc_r - 2, loc_r + 2
-            loc_r_l, loc_r_r= max(0, loc_r_l) , min(self.full_h - 1, loc_r_r)
-            score = self.full_map[e, :, loc_r_l:loc_r_r, loc_c_l:loc_c_r].mean()
+            # loc_c_l, loc_c_r = loc_c - 2, loc_c + 2
+            # loc_c_l, loc_c_r= max(0, loc_c_l) , min(self.full_w - 1, loc_c_r)
+            # loc_r_l, loc_r_r = loc_r - 2, loc_r + 2
+            # loc_r_l, loc_r_r= max(0, loc_r_l) , min(self.full_h - 1, loc_r_r)
+            # score = self.full_map[e, :, loc_r_l:loc_r_r, loc_c_l:loc_c_r].mean()
             
             scores.append(score)
         return scores

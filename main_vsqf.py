@@ -117,7 +117,7 @@ def main():
     azimuth = find_goal * azimuth
     
     # update vsqf maps
-    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
+    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth, local_map[:,1,:,:])
     full_vsqf_map = vsqf_maps.full_map
     
     # for visualize
@@ -246,7 +246,7 @@ def main():
     vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
     
-    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
+    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth, local_map[:,1,:,:])
     full_vsqf_map = vsqf_maps.full_map
     
     start = time.time()
@@ -404,7 +404,7 @@ def main():
         vsqf = find_goal[:, None, None] * vsqf
         azimuth = find_goal * azimuth
         
-        local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
+        local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth, local_map[:,1,:,:])
         full_vsqf_map = vsqf_maps.full_map
         
         # ------------------------------------------------------------------
