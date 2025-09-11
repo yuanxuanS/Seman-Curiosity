@@ -279,7 +279,7 @@ class Seman_Curio_Env(habitat.RLEnv):
                                         args.exp_name)
         data_dir = '{}/episodes_data/'.format(dump_dir)
         if not os.path.exists(data_dir):
-            os.mkdir(data_dir)
+            os.makedirs(data_dir, exist_ok=True)
         paths = save_obs(data_dir, self.rank, self.episode_no, observations, self.timestep)
         return paths
     

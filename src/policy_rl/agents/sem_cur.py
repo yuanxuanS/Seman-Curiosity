@@ -238,7 +238,6 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
     def _get_sem_pred(self, rgb, use_seg=True, return_score=False, return_instance=False):
         if use_seg:
             semantic_pred, self.rgb_vis, obj = self.sem_pred.get_prediction(rgb, 
-                                                                            return_score=return_score, 
                                                                             return_instance=return_instance)
             semantic_pred = semantic_pred.astype(np.float32)
         else:
