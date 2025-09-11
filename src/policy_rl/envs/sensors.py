@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 import cv2
 from detectron2.structures import Boxes, Instances
-
+from src.vqf_constants import SIM_TO_COCO_MAPPING
 
 @registry.register_sensor(name="object_detector_gt")
 class ObjectDetectorGT(habitat.Sensor):
@@ -23,15 +23,16 @@ class ObjectDetectorGT(habitat.Sensor):
 
     }
     
-    SIM_TO_COCO_MAPPING = {
-        "chair": 56,  # chair
-        "couch": 57,  # couch
-        "potted plant": 58,  # plan
-        "bed": 59,  # bed
-        "toilet": 61,  # toilet
-        # "tv": 62,  # tv
-        # "dining table": 60,  # dining table
-    }
+    # SIM_TO_COCO_MAPPING = {
+    #     "chair": 56,  # chair
+    #     "couch": 57,  # couch
+    #     "potted plant": 58,  # plan
+    #     "bed": 59,  # bed
+    #     "toilet": 61,  # toilet
+    #     # "tv": 62,  # tv
+    #     # "dining table": 60,  # dining table
+    # }
+    SIM_TO_COCO_MAPPING = SIM_TO_COCO_MAPPING
     
     def __init__(self, sim, config, **kwargs: Any):
         super().__init__(config=config)

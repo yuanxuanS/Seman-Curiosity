@@ -45,6 +45,17 @@ clsid_name_maps = {
     59: "bed",
     61: "toilet",
 }
+
+SIM_TO_COCO_MAPPING = {
+    "chair": 56,  # chair
+    "couch": 57,  # couch
+    # "potted plant": 58,  # plan
+    "bed": 59,  # bed
+    "toilet": 61,  # toilet
+    "refrigerator": 72
+    
+}
+
 category_maps = {0: "chair", 1:"couch", 3:"bed", 4:"toilet", 9:"refrigerator"}
 category_id_maps = {0: 56, 1:57, 3:59, 4:61, 9:72}
 
