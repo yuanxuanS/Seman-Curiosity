@@ -52,7 +52,7 @@ DATASET:
     # "Allensville.glb", 
     # "Beechwood.glb", 
     # "Coffeen.glb", 
-    "Cosmos.glb",
+    # "Cosmos.glb",
     #  "Forkland.glb",
     # "Hanson.glb", "Hiteman.glb", "Klickitat.glb", "Lakeville.glb", "Leonardo.glb", 
     # "Lindenwood.glb", "Marstons.glb", "Merom.glb", "Mifflinburg.glb", "Newfields.glb",
@@ -63,7 +63,7 @@ DATASET:
     # "Corozal.glb",
     # "Darden.glb",
     # "Markleeville.glb",
-    # "Wiconisco.glb"
+    "Wiconisco.glb"
   # ]
 
   # dataset1 train

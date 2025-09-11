@@ -38,7 +38,7 @@ def load_data_imgs(dataset_path, save_pth):
 
 
     dataset = BbsgtDataset(
-        modalities = ['rgb', 'bbsgt', 'bbs'],
+        modalities = ['rgb', 'bbsgt',],
         data_path=None,
         sampler=sampler,
         index_mask=filter_empty_instances,      # 仅保留有mask的
@@ -65,7 +65,8 @@ def save_data_imgs(dataset_path, save_pth, with_label=False, with_mask=False):
             
             y = deepcopy(x['instances'])
             # y = deepcopy(x['instances_pred'])
-            
+            if len(x['instances']) == 0:
+                print(f"no ins in env {x['env']} epi{x['episode']} step {x['step']}")
             
             if with_mask:
                 iter = len(y)
@@ -127,7 +128,7 @@ def play_imgs(path):
         cv2.waitKey(100)
     
 if __name__ == "__main__":   
-    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_env1"
+    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/vsqf_test_val5/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/multiSens_test_val5"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/active_val4/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_6_sample/"
@@ -146,7 +147,7 @@ if __name__ == "__main__":
             save_pth = base_dir + "/imgs"
     if not os.path.exists(save_pth):
         os.mkdir(save_pth)
-    dataset_path = base_dir + "/episodes_data"
+    dataset_path = base_dir + "/data"# "/episodes_data"
 
     save_data_imgs(dataset_path, save_pth, with_label=with_label, with_mask=with_mask)
     

@@ -83,7 +83,7 @@ class Sample_Obj_Env(habitat.RLEnv):
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
         # save dir
-        output_path = "/data1/wpp_data/data/obj_samples/"
+        output_path = "/data1/wpp_data/data/vsqf_test_val5/"
         os.makedirs(output_path, exist_ok=True)
         data_pth = output_path+"/data/"
         os.makedirs(data_pth, exist_ok=True)
