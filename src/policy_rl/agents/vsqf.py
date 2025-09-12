@@ -412,12 +412,14 @@ class Vsqf_Env_Agent(Vsqf_Env):
                                 interpolation=cv2.INTER_NEAREST)
         
         
-        rgb_vis = cv2.resize(self.rgb_vis, (640, 480),
+        rgb_vis = cv2.resize(self.rgb_vis, (480, 480),
                                  interpolation=cv2.INTER_NEAREST)
-        self.vis_image[50:530, 15:655] = rgb_vis
-        self.vis_image[50:530, 670:1150] = sem_map_vis
-        self.vis_image[50:530, 1165:1645] = vsqf_map_vis
-        
+        # self.vis_image[50:530, 15:655] = rgb_vis
+        # self.vis_image[50:530, 670:1150] = sem_map_vis
+        # self.vis_image[50:530, 1165:1645] = vsqf_map_vis
+        self.vis_image[50:530, 15:495] = rgb_vis
+        self.vis_image[50:530, 510:990] = sem_map_vis
+        self.vis_image[50:530, 1005:1485] = vsqf_map_vis
         
         # 绘制agent位置
         if mode == "local":
@@ -439,7 +441,7 @@ class Vsqf_Env_Agent(Vsqf_Env):
             
             
             
-        origin = (670, 50)  
+        origin = (510, 50)  
         agent_arrow = vu.get_contour_points(pos, origin)
         color = (int(color_palette[11] * 255),
                  int(color_palette[10] * 255),
@@ -447,7 +449,7 @@ class Vsqf_Env_Agent(Vsqf_Env):
         cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
 
         # agent in vsqf
-        origin = (1165, 50)  
+        origin = (1005, 50)  
         agent_arrow = vu.get_contour_points(pos, origin)
         color = (int(color_palette[11] * 255),
                  int(color_palette[10] * 255),
