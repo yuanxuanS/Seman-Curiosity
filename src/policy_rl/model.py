@@ -47,7 +47,7 @@ class Goal_Oriented_Semantic_Policy(NNBase):
     def forward(self, inputs, rnn_hxs, masks, extras):
         x = self.main(inputs)
         orientation_emb = self.orientation_emb(extras[:, 0])
-        goal_emb = self.goal_emb(extras[:, 1])
+        goal_emb = self.goal_emb(extras[:, 0])
 
         x = torch.cat((x, orientation_emb, goal_emb), 1)
 
@@ -59,6 +59,55 @@ class Goal_Oriented_Semantic_Policy(NNBase):
 
         return self.critic_linear(x).squeeze(-1), x, rnn_hxs
 
+class Semantic_map_policy(NNBase):
+
+    def __init__(self, input_shape, recurrent=False, hidden_size=512,
+                 num_sem_categories=16):
+        super(Semantic_map_policy, self).__init__(
+            recurrent, hidden_size, hidden_size)
+
+        out_size = int(input_shape[1] / 16.) * int(input_shape[2] / 16.)
+
+        self.main = nn.Sequential(
+            nn.MaxPool2d(2),
+            nn.Conv2d(num_sem_categories + 5, 32, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(64, 128, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(128, 64, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 32, 3, stride=1, padding=1),
+            nn.ReLU(),
+            Flatten()
+        )
+
+        self.linear1 = nn.Linear(out_size * 32 + 8, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, 256)
+        self.critic_linear = nn.Linear(256, 1)
+        self.orientation_emb = nn.Embedding(72, 8)
+        # self.goal_emb = nn.Embedding(num_sem_categories, 8)
+        self.train()
+
+    def forward(self, inputs, rnn_hxs, masks, extras):
+        x = self.main(inputs)
+        orientation_emb = self.orientation_emb(extras[:, 0])
+        # goal_emb = self.goal_emb(extras[:, 0])
+
+        x = torch.cat((x, orientation_emb), 1)
+
+        x = nn.ReLU()(self.linear1(x))
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        x = nn.ReLU()(self.linear2(x))
+
+        return self.critic_linear(x).squeeze(-1), x, rnn_hxs
+    
 class Semantic_Curiosity_Policy(NNBase):
     def __init__(self, input_shape, num_actions,
                  recurrent=True, hidden_size=512,
@@ -141,6 +190,9 @@ class RL_Policy(nn.Module):
         if model_type == 1:
             self.network = Semantic_Curiosity_Policy(
                 obs_shape, num_outputs, **base_kwargs)
+        elif model_type == 2:
+            self.network = Semantic_map_policy(
+                obs_shape, **base_kwargs)
         else:
             raise NotImplementedError
 
