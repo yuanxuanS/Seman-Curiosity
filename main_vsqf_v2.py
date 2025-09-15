@@ -297,8 +297,8 @@ def main():
                 in range(num_scenes)])
             ).float().to(device)
             step_penalty = torch.ones_like(l_reward).to(device) * -0.01
-            l_reward = l_reward * sample_stage + step_penalty * (1 - sample_stage)
-            # l_reward = l_reward * sample_stage * 10 + step_penalty * (1 - sample_stage)
+            # l_reward = l_reward * sample_stage + step_penalty * (1 - sample_stage)
+            l_reward = l_reward * sample_stage * 10 + step_penalty * (1 - sample_stage)
             # l_reward = l_reward if l_reward > 0 else torch.zeros_like(l_reward).to(device)
             # print(f"reward {l_reward}")
 
