@@ -12,6 +12,8 @@ import skimage.morphology
 from ..utils.fmm_planner import FMMPlanner
 import json
 import gzip
+from src.vqf_constants import target_coco_categories_mapping, target_coco_categories, category_id_maps, target_cls_id_in_scene
+
 
 class Vsqf_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
@@ -132,9 +134,10 @@ class Vsqf_Env(habitat.RLEnv):
         map_obj_origin = scene_info[floor_idx]['origin']
 
         cat_counts = sem_map.sum(2).sum(1)
-        possible_cats = list(np.arange(6))      # 0-5类别
+        possible_cats = target_cls_id_in_scene       ## 目标类别索引 
+        possible_cats_ = target_cls_id_in_scene.copy()
         
-        for i in range(6):
+        for i in possible_cats_:
             if cat_counts[i + 1] == 0:      # 从0-5的类别中，如果有一个类别的数量为0，则去除这个类别
                 possible_cats.remove(i)
 
@@ -149,7 +152,7 @@ class Vsqf_Env(habitat.RLEnv):
             
             goal_idx = np.random.choice(possible_cats)
 
-            for key, value in coco_categories.items():      # 找到目标的类别名
+            for key, value in target_coco_categories.items():      # 找到目标的类别名
                 if value == goal_idx:
                     goal_name = key
 
