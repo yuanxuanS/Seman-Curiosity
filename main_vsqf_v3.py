@@ -296,11 +296,9 @@ def main():
                 [infos[env_idx]['sample_stage'] for env_idx
                 in range(num_scenes)])
             ).float().to(device)
-            step_penalty = torch.ones_like(l_reward).to(device) * -0.01
-
             # distance reward
             distance_rewards = distance_rewards.to(device)
-            l_reward = l_reward * sample_stage * 10 + step_penalty * (1 - sample_stage) +  distance_rewards * (1 - sample_stage)
+            l_reward = l_reward * sample_stage * 10 + distance_rewards * (1 - sample_stage)
 
         # ------------------------------------------------------------------ 
         # update local input, next state
