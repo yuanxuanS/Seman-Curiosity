@@ -66,8 +66,7 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         self.visited_vis = np.zeros(map_shape)
         self.curr_loc = [args.map_size_cm / 100.0 / 2.0,
                          args.map_size_cm / 100.0 / 2.0, 0.]
-        # 计算最近目标
-        self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
+        
         
         # visualize
         if args.visualize or args.print_images:

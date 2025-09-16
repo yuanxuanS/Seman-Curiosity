@@ -111,7 +111,8 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.info['sample_step'] = 0
         self.info['found_classes'] = []
         
-        
+        # 计算最近目标
+        self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
         return state, self.info
     
     def load_episode_loc(self):
@@ -284,7 +285,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.map_obj_origin = map_obj_origin
         
         # 记录目标物体语义地图，用于计算和物体距离
-        self.objects_map_dict = {name: [] for name in target_coco_categories.keys()}
+        self.objects_planner_dict = {name: [] for name in target_coco_categories.keys()}
         
         selem = skimage.morphology.disk(2)
         traversible = skimage.morphology.binary_dilation(
@@ -324,7 +325,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
                 goal_map_one_ = 1 - goal_map_one_
                 
                 planner.set_multi_goal(goal_map_one_)
-                self.objects_map_dict[goal_name].append(planner)
+                self.objects_planner_dict[goal_name].append(planner)
                     
         return obs
                 
