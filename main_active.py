@@ -194,9 +194,6 @@ def main():
                 p_input["short_time_goal"] = short_time_goals[e]
     # transition:
     # pred instance, get semantic masks and step env: 
-    actions = []
-    actions.append(l_action)
-    # print(f"action is {l_action}")
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
     # update map
@@ -225,11 +222,12 @@ def main():
             break
         
         # get reward: map change after state transition
-        if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
-            l_reward = last_reward
-        else:
-            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
-
+        # if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
+            # l_reward = last_reward
+        # else:
+            # l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+        l_reward = torch.tensor([info['reward'] for info in infos])
+        
         # per step reward? TODO
         # add explore metric: TODO
 
@@ -247,7 +245,8 @@ def main():
             extras[:, :2] = local_xy[:]
             # print(f"input sxtras: {extras}")
         # Add samples to local policy storage
-        reward = l_reward - last_reward
+        # reward = l_reward - last_reward
+        reward = l_reward
         
         if args.agent == "rl":
             l_rollouts.insert(
@@ -329,8 +328,6 @@ def main():
         
         # transition: next state
         # pred instance, get semantic masks and step env
-        actions.append(l_action)
-        # print(f"action is {l_action}")
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
         # if episode over, reset maps
@@ -444,7 +441,6 @@ def main():
     np.savez('{}/{}_episode_rewards.npz'.format(
             dump_dir, args.split), episode_reward=l_episode_rewards)
     
-    np.savez('actions.npz', actions=np.array(actions))
     if args.eval:
         print("Dumping eval details...")
         

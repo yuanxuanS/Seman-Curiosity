@@ -10,12 +10,17 @@ import time
 from datetime import datetime
 from src.policy_rl.envs import make_vec_envs
 from src.policy_rl.maps import Maps_Env
+from src.policy_rl.vsqf_maps import Vsqf_Maps_Env
 from src.policy_rl.utils.storage import GlobalRolloutStorage
 from src.policy_rl.model import RL_Policy
 from  src.policy_rl import algo 
 from src.policy_rl.baseline_frontier import Frontier
 import cv2
 import json
+from src.policy_rl.agents.utils.vsqf_prediction import Vsqf_pred
+from src.policy_rl.agents.utils.orient_prediction import Orient_pred
+from PIL import Image
+from train_vqf import visualize
 
 def main():
     args = get_args()
@@ -91,6 +96,30 @@ def main():
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
     
+    # Initializing VSQF Maps
+    vsqf_maps = Vsqf_Maps_Env(args)
+    magnify, magnify_num = args.magnify, args.magnify_num
+    vsqf_pred = Vsqf_pred(device, magnify, magnify_num)
+    orient_pred = Orient_pred(device)
+    
+    # inference vsqf and azimuth
+    rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
+    rgb_objs = [Image.fromarray(rgb_obj.astype(np.uint8)) for rgb_obj in rgb_objs]
+    
+    rgb_objs_ = vsqf_pred.preprocess(rgb_objs)
+    vsqf = vsqf_pred.inference(rgb_objs_)
+    orient_data = orient_pred.pred_orient_multi(rgb_objs)
+    azimuth, confidence = orient_data
+    # check if find goal
+    find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
+    find_goal = find_goal.to(vsqf.device)
+    vsqf = find_goal[:, None, None] * vsqf
+    azimuth = find_goal * azimuth
+    
+    # update vsqf maps
+    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
+    full_vsqf_map = vsqf_maps.full_map
+    
     # for visualize
     full_map = maps.full_map
     vis_inputs = [{} for e in range(num_scenes)]
@@ -108,7 +137,9 @@ def main():
                                                 ].argmax(0).cpu().numpy()   # 如果无object，选最后一个通道
             full_map[e, -1, :, :] = 1e-5
             p_input['sem_map_pred_full'] = full_map[e, 4:, :, :].argmax(0).cpu().numpy()
-
+            
+            p_input['vsqf_map'] = local_vsqf_map[e, :, :, :].cpu().numpy()
+            p_input['vsqf_map_full'] = full_vsqf_map[e, :, :, :].cpu().numpy()
 
     if args.agent == "rl":
         # Local policy observation space
@@ -194,21 +225,36 @@ def main():
                 p_input["short_time_goal"] = short_time_goals[e]
     # transition:
     # pred instance, get semantic masks and step env: 
-    actions = []
-    actions.append(l_action)
-    # print(f"action is {l_action}")
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
     
+    # inference vsqf and azimuth
+    rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
+    rgb_objs = [Image.fromarray(rgb_obj.astype(np.uint8)) for rgb_obj in rgb_objs]
+    
+    rgb_objs_ = vsqf_pred.preprocess(rgb_objs)
+    vsqf = vsqf_pred.inference(rgb_objs_)
+    orient_data = orient_pred.pred_orient_multi(rgb_objs)
+    azimuth, confidence = orient_data
+    # check if find goal
+    # find_goal = torch.tensor([False for _ in range(num_scenes)])
+    find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
+    find_goal = find_goal.to(vsqf.device)
+    vsqf = find_goal[:, None, None] * vsqf
+    azimuth = find_goal * azimuth
+    
+    local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
+    full_vsqf_map = vsqf_maps.full_map
+    
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
     logging.info("Start date and time: %s", start_datetime)
     
     l_reward = torch.zeros(num_scenes).to(device)
-    last_reward = torch.zeros(num_scenes).to(device)
+    last_scores = torch.zeros(num_scenes).to(device)
 
     
     torch.set_grad_enabled(False)
@@ -226,12 +272,12 @@ def main():
         
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
-            l_reward = last_reward
+            l_reward = last_scores
         else:
-            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
-
-        # per step reward? TODO
-        # add explore metric: TODO
+            l_scores = torch.tensor(vsqf_maps.get_vsqf_score()).to(device)
+            l_reward = l_scores - last_scores
+            # l_reward = l_reward if l_reward > 0 else torch.zeros_like(l_reward).to(device)
+            # print(f"reward {l_reward}")
 
         # ------------------------------------------------------------------ 
         # update local input, next state
@@ -247,7 +293,7 @@ def main():
             extras[:, :2] = local_xy[:]
             # print(f"input sxtras: {extras}")
         # Add samples to local policy storage
-        reward = l_reward - last_reward
+        reward = l_reward
         
         if args.agent == "rl":
             l_rollouts.insert(
@@ -255,8 +301,7 @@ def main():
                     l_action, l_action_log_prob, l_value,   # action, reward_t
                     reward, l_masks, extras
                 )
-        last_reward = l_reward
-
+        last_scores = l_scores
         # 
         reward_mean = np.mean(reward.cpu().numpy())
         l_reward_mean = np.mean(l_reward.cpu().numpy())
@@ -273,7 +318,7 @@ def main():
             l_episode_rewards.append(r_)
 
             l_reward = torch.zeros(num_scenes).to(device)
-            last_reward = l_reward
+            last_scores = l_reward
             
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
@@ -318,7 +363,9 @@ def main():
                                                     ].argmax(0).cpu().numpy()
                 full_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred_full'] = full_map[e, 4:, :, :
-                                                        ].argmax(0).cpu().numpy()                    
+                                                        ].argmax(0).cpu().numpy()  
+                p_input['vsqf_map'] = local_vsqf_map[e, :, :, :].cpu().numpy()
+                p_input['vsqf_map_full'] = full_vsqf_map[e, :, :, :].cpu().numpy()                  
         
         if args.agent == "frontier":  # must be after updating vis_inputs
             l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
@@ -329,19 +376,37 @@ def main():
         
         # transition: next state
         # pred instance, get semantic masks and step env
-        actions.append(l_action)
-        # print(f"action is {l_action}")
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
         # if episode over, reset maps
         for e, x in enumerate(done):    # if done, maps from new obs
             if x:
                 maps._init_map_and_pose_for_env(e)
+                vsqf_maps._init_map_and_pose_for_env(e)
                 print(f"Env {e}'s episode over in {step} step, {l_step} local step, reset maps")
                 
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)
         full_pose = maps.full_pose
+        
+        # inference vsqf and azimuth
+        rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
+        rgb_objs = [Image.fromarray(rgb_obj.astype(np.uint8)) for rgb_obj in rgb_objs]
+        
+        rgb_objs_ = vsqf_pred.preprocess(rgb_objs)
+        vsqf = vsqf_pred.inference(rgb_objs_)
+        orient_data = orient_pred.pred_orient_multi(rgb_objs)
+        azimuth, confidence = orient_data
+        # check if find goal
+        # find_goal = torch.tensor([False for _ in range(num_scenes)])
+        find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
+        find_goal = find_goal.to(vsqf.device)
+        vsqf = find_goal[:, None, None] * vsqf
+        azimuth = find_goal * azimuth
+        
+        local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
+        full_vsqf_map = vsqf_maps.full_map
+        
         # ------------------------------------------------------------------
         # Training
         torch.set_grad_enabled(True)
@@ -444,7 +509,6 @@ def main():
     np.savez('{}/{}_episode_rewards.npz'.format(
             dump_dir, args.split), episode_reward=l_episode_rewards)
     
-    np.savez('actions.npz', actions=np.array(actions))
     if args.eval:
         print("Dumping eval details...")
         

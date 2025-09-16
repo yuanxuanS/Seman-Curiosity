@@ -1,0 +1,44 @@
+epochs: 0
+batch_size: 8   # train, pseudo labeler predict
+val_batch_size: 1
+
+transform_type: none
+
+exp_name_training: visualize_lbs
+
+visualize: True
+############################# not used
+
+cls_loss: focal # cross_entropy   # 
+focal_loss_alpha: 0.25
+focal_loss_gamma: 2.0
+
+lr: 0.0001
+optimizer: SGD
+optimizer_params:
+  momentum: 0.9
+  nesterov: True
+  # weight_decay: 5e-4  # TODO
+
+student_test_thr: 0.5
+teacher_pred_thr: 0.7
+
+
+use_teacher: True
+consensus: vanilla
+
+
+loss_weights:   # 没有参数，默认为1.0
+  loss_cls: 1.0
+  loss_soft: 0.0    
+  contrastive_loss: 0.0
+  loss_mask: 1.0
+
+# trick
+early_stopping: 0   # TODO
+ema: False    # TODO
+teacher_momentum: 0.    # TODO
+
+
+pipeline: Pipeline  # TODO 不同pipeline
+student_model: MultiStageModel  # TODO

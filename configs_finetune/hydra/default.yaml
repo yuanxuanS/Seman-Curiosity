@@ -1,0 +1,15 @@
+
+output_subdir: .hydra
+job:
+  config:
+    # configuration for the ${hydra.job.override_dirname} runtime variable
+    override_dirname:
+      kv_sep: '_'
+      item_sep: '__'
+      exclude_keys: []
+sweep:
+  dir: ${base_dir}/exps_finetune/${now:%Y-%m-%d}/
+  subdir: ${exp_name}
+  
+run:
+  dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}
