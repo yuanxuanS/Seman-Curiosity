@@ -14,6 +14,7 @@ import json
 import gzip
 from src.vqf_constants import target_coco_categories_mapping, target_coco_categories, category_id_maps, target_cls_id_in_scene
 import cv2
+import queue
 
 class Vsqf_v3_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
@@ -59,17 +60,21 @@ class Vsqf_v3_Env(habitat.RLEnv):
         '''
         更新agent和目标类别物体中的最近物体
         '''
+        if len(self.objects_planner_dict) == 0:
+            self.objects_planner_dict = self.objects_planner_dict_tmp
+            self.objects_planner_dict_tmp = {}
+            
         curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
         
         min_dist = 1e4
         for cls_, planners in self.objects_planner_dict.items():
-            for planner in planners:
-                curr_distance = planner.fmm_dist[curr_loc[0], curr_loc[1]] / 20.0
-                if curr_distance < min_dist:
-                    min_dist = curr_distance
-                    self.nearest_obj_planner = planner
-                    self.nearest_obj = cls_
-                    self.prev_distance = curr_distance
+            planner = planners[0]
+            curr_distance = planner.fmm_dist[curr_loc[0], curr_loc[1]] / 20.0
+            if curr_distance < min_dist:
+                min_dist = curr_distance
+                self.nearest_obj_planner = planner
+                self.nearest_obj = cls_
+                self.prev_distance = curr_distance
 
         return self.nearest_obj_planner, self.nearest_obj
         
@@ -153,6 +158,9 @@ class Vsqf_v3_Env(habitat.RLEnv):
         possible_cats_ = target_cls_id_in_scene.copy()
         
         self.objects_planner_dict = {name: [] for name in target_coco_categories.keys()}
+        self.objects_planner_dict_tmp = {}
+        # self.objects_planner_list = []
+        # self.objects_planner_list_memory = []
         
         selem = skimage.morphology.disk(2)
         traversible = skimage.morphology.binary_dilation(
@@ -191,7 +199,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
                 
                 planner.set_multi_goal(goal_map_one_)
                 self.objects_planner_dict[goal_name].append(planner)
-                
+                # self.objects_planner_list.append((goal_name, planner))
         return obs
     
     def initial_possible_loc(self):
@@ -286,6 +294,8 @@ class Vsqf_v3_Env(habitat.RLEnv):
         
         # 记录目标物体语义地图，用于计算和物体距离
         self.objects_planner_dict = {name: [] for name in target_coco_categories.keys()}
+        self.objects_planner_dict_tmp = {}
+        # self.objects_planner_list = []
         
         selem = skimage.morphology.disk(2)
         traversible = skimage.morphology.binary_dilation(
@@ -318,6 +328,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
                 sem_map[goal_idx + 1], selem) != True
             goal_map = 1 - goal_map
             planner.set_multi_goal(goal_map)
+            # self.objects_planner_list.append((goal_name, planner))
             self.objects_planner_dict[goal_name].append(planner)
             # 在语义地图上得到物体区域
             # goal_map_ = sem_map[goal_idx + 1]

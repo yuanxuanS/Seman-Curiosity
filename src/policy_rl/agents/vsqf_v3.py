@@ -217,7 +217,8 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
                     info['found_classes'].append(cls_name)
                     
                     # 检测到时，从planner中去除该类别, 避免重复作为最近物体
-                    self.objects_planner_dict.pop(cls_name)
+                    tmp = self.objects_planner_dict.pop(cls_name)
+                    self.objects_planner_dict_tmp[cls_name] = tmp
                     
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
@@ -248,16 +249,18 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
                 info['sample_stage'] = False
                 info['sample_step'] = 0
                 
-                # # explore stage且到达目标, 且未检测到，换物体
-                # curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-                # curr_distance = self.nearest_obj_planner.fmm_dist[curr_loc[0],
-                #                                             curr_loc[1]] / 20.0
-                # if curr_distance == 0.0:
-                #     self.objects_planner_dict.pop(self.nearest_obj)
-                #     self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
-                
-                # explore stage且到达目标, 且未检测到， 调用大模型分割，进入sample stage
-                
+                # explore stage且到达目标, 且未检测到，换物体
+                curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
+                curr_distance = self.nearest_obj_planner.fmm_dist[curr_loc[0],
+                                                            curr_loc[1]] / 20.0
+                if curr_distance == 0.0:
+                    nearest_obj = self.nearest_obj
+                    tmp = self.objects_planner_dict.pop(self.nearest_obj)
+                    
+                    # 先更新最近物体，再添加最近pop的，避免仍用当前物体
+                    self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
+                    
+                    self.objects_planner_dict_tmp[nearest_obj] = tmp                
                 
         return state, info
     
