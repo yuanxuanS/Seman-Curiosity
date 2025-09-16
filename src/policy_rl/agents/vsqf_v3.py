@@ -217,8 +217,9 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
                     info['found_classes'].append(cls_name)
                     
                     # 检测到时，从planner中去除该类别, 避免重复作为最近物体
-                    tmp = self.objects_planner_dict.pop(cls_name)
-                    self.objects_planner_dict_tmp[cls_name] = tmp
+                    if cls_name in self.objects_planner_dict.keys():
+                        tmp = self.objects_planner_dict.pop(cls_name)
+                        self.objects_planner_dict_tmp[cls_name] = tmp
                     
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
