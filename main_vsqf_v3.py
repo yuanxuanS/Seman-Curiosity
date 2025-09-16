@@ -240,7 +240,7 @@ def main():
                 p_input["short_time_goal"] = short_time_goals[e]
     # transition:
     # pred instance, get semantic masks and step env: 
-    obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
+    obs, distance_rewards, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
@@ -299,7 +299,7 @@ def main():
             step_penalty = torch.ones_like(l_reward).to(device) * -0.01
 
             # distance reward
-            distance_rewards = envs.get_rewards()
+            distance_rewards = distance_rewards.to(device)
             l_reward = l_reward * sample_stage * 10 + step_penalty * (1 - sample_stage) +  distance_rewards * (1 - sample_stage)
 
         # ------------------------------------------------------------------ 
@@ -410,7 +410,7 @@ def main():
         
         # transition: next state
         # pred instance, get semantic masks and step env
-        obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
+        obs, distance_rewards, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
         # if episode over, reset maps
         for e, x in enumerate(done):    # if done, maps from new obs

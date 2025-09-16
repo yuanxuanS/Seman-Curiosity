@@ -74,9 +74,9 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         
         return obs, info
     
-    def get_reward(self):
+    def get_reward(self, obs):
         curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-        self.curr_distance = self.gt_planner.fmm_dist[curr_loc[0],
+        self.curr_distance = self.nearest_obj_planner.fmm_dist[curr_loc[0],
                                                       curr_loc[1]] / 20.0
 
         reward = (self.prev_distance - self.curr_distance) * \
@@ -127,7 +127,7 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         # act and step
         action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         action = {'action': action}
-        obs, _, done, info = super().step(action)       # 4,256,256
+        obs, dis_r, done, info = super().step(action)       # 4,256,256
 
         
         
@@ -138,7 +138,7 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         self.info = info
 
 
-        return obs, 0., done, info
+        return obs, dis_r, done, info
     
     
     

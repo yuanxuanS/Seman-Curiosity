@@ -369,7 +369,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         # action = action["action"]
 
         # step
-        obs, _, done, _ = super().step(action)
+        obs, dis_r, done, _ = super().step(action)
  
         # reset location if on floor
         last_sim_location_z = self.this_sim_location_z
@@ -409,7 +409,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.timestep += 1
         self.info['time'] = self.timestep
 
-        return state, 0., done, self.info
+        return state, dis_r, done, self.info
     
     def save_data(self, observations):
         args = self.args
