@@ -292,7 +292,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
             sem_map[0], selem) != True
         traversible = 1 - traversible
         
-        planner = FMMPlanner(traversible)
+        
         
         ## 
         # objects_dict = {name: [] for name in target_coco_categories.keys()}
@@ -310,22 +310,30 @@ class Vsqf_v3_Env(habitat.RLEnv):
                 if value == goal_idx:
                     goal_name = key
                     break
-            
+                
+            planner = FMMPlanner(traversible)
+            selem = skimage.morphology.disk(
+            int(object_boundary * 100. / map_resolution))
+            goal_map = skimage.morphology.binary_dilation(
+                sem_map[goal_idx + 1], selem) != True
+            goal_map = 1 - goal_map
+            planner.set_multi_goal(goal_map)
+            self.objects_planner_dict[goal_name].append(planner)
             # 在语义地图上得到物体区域
-            goal_map_ = sem_map[goal_idx + 1]
-            connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
-            object_ids = list(np.unique(connected_region[connected_region > 0]))
-            for object_id in object_ids:
-                goal_map_one = np.ones_like(goal_map_)
-                goal_map_one[connected_region == object_id] = 0
+            # goal_map_ = sem_map[goal_idx + 1]
+            # connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
+            # object_ids = list(np.unique(connected_region[connected_region > 0]))
+            # for object_id in object_ids:
+            #     goal_map_one = np.ones_like(goal_map_)
+            #     goal_map_one[connected_region == object_id] = 0
                 
-                selem = skimage.morphology.disk(2)
-                goal_map_one_ = skimage.morphology.binary_dilation(
-                    goal_map_one, selem) != True
-                goal_map_one_ = 1 - goal_map_one_
+            #     selem = skimage.morphology.disk(2)
+            #     goal_map_one_ = skimage.morphology.binary_dilation(
+            #         goal_map_one, selem) != True
+            #     goal_map_one_ = 1 - goal_map_one_
                 
-                planner.set_multi_goal(goal_map_one_)
-                self.objects_planner_dict[goal_name].append(planner)
+            #     planner.set_multi_goal(goal_map_one_)
+            #     self.objects_planner_dict[goal_name].append(planner)
                     
         return obs
                 

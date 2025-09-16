@@ -248,14 +248,17 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
                 info['sample_stage'] = False
                 info['sample_step'] = 0
                 
-                # explore stage且到达目标, 且未检测到，换物体
-                curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-                curr_distance = self.nearest_obj_planner.fmm_dist[curr_loc[0],
-                                                            curr_loc[1]] / 20.0
-                if curr_distance == 0.0:
-                    self.objects_planner_dict.pop(self.nearest_obj)
-                    self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
-                    
+                # # explore stage且到达目标, 且未检测到，换物体
+                # curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
+                # curr_distance = self.nearest_obj_planner.fmm_dist[curr_loc[0],
+                #                                             curr_loc[1]] / 20.0
+                # if curr_distance == 0.0:
+                #     self.objects_planner_dict.pop(self.nearest_obj)
+                #     self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
+                
+                # explore stage且到达目标, 且未检测到， 调用大模型分割，进入sample stage
+                
+                
         return state, info
     
     def filter_instance(self, instance):
