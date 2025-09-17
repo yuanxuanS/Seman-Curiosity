@@ -53,7 +53,7 @@ EPISODE_OVER = "episode_over"
 GET_METRICS = "get_metrics"
 GET_OBS_SPACE= "get_obs_space"
 GET_ACTION_SPACE= "get_action_space"
-
+GET_REWARD = "get_reward"
 
 def _make_env_fn(
     config: Config, dataset: Optional[habitat.Dataset] = None, rank: int = 0
@@ -241,6 +241,9 @@ class VectorEnv:
                 elif command == GET_ACTION_SPACE:
                     result = env.get_action_space()
                     connection_write_fn(result)
+                elif command == GET_REWARD:
+                    result = env.get_reward(None)
+                    connection_write_fn(result)
                 else:
                     raise NotImplementedError   
                 
@@ -374,6 +377,16 @@ class VectorEnv:
         self._is_waiting = False
         return results
 
+    def get_reward(self):
+        self._is_waiting = True
+        for write_fn in self._connection_write_fns:
+            write_fn((GET_REWARD, None))
+        rewards = []
+        for read_fn in self._connection_read_fns:
+            rewards.append(read_fn())
+        self._is_waiting = False
+        return np.stack(rewards)
+    
     def step_at(self, index_env: int, action: Union[int, str, Dict[str, Any]]):
         r"""Step in the index_env environment in the vector.
 

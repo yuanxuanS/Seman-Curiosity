@@ -8,7 +8,7 @@ from src.vqf_constants import color_palette_vsqf
 import os
 import torch
 from ..envs.utils import pose as pu
-from ..envs.habitat.vsqf_v3_env import Vsqf_v3_Env
+from ..envs.habitat.vsqf_v4_env import Vsqf_v4_Env
 from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
 from .utils.vsqf_prediction import Vsqf_pred
 from .utils.orient_prediction import Orient_pred
@@ -20,7 +20,7 @@ from detectron2.structures.instances import Instances
 from detectron2.structures.boxes import Boxes, BoxMode
 from src.vqf_constants import target_coco_categories_mapping, clsid_name_maps
 
-class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
+class Vsqf_v4_Env_Agent(Vsqf_v4_Env):
     """The VSQF environment agent class. A separate Vsqf_Env_Agent class
     object is used for each environment thread.
 
@@ -95,6 +95,24 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
             done (bool): whether the episode has ended
             info (dict): contains timestep
         """
+        # compute vsqf goal
+        if self.info['find_goal']: # in 1st step in sample stage
+            
+            # real location in vsqf map
+            
+            import skimage
+            selem = skimage.morphology.disk(2)
+            traversible = skimage.morphology.binary_dilation(
+                self.sem_map[0], selem) != True
+            traversible = 1 - traversible
+            planner = FMMPlanner(traversible)
+            
+            selem = skimage.morphology.disk(
+                int(object_boundary * 100. / map_resolution))
+            goal_map = skimage.morphology.binary_dilation(
+                sem_map[goal_idx + 1], selem) != True
+            goal_map = 1 - goal_map
+            
         # visualize 
         self.last_loc = self.curr_loc
         # Get Map prediction

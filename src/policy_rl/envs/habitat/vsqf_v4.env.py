@@ -16,7 +16,7 @@ from src.vqf_constants import target_coco_categories_mapping, target_coco_catego
 import cv2
 import queue
 
-class Vsqf_v3_Env(habitat.RLEnv):
+class Vsqf_v4_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
     metrics.
@@ -58,28 +58,23 @@ class Vsqf_v3_Env(habitat.RLEnv):
 
     def find_closest_obj(self):
         '''
-        更新agent和目标类别物体中的最近物体        '''
-        maps_num = sum([len(lst) for lst in self.objects_planner_dict.values()])
-        maps_num_tmp = sum([len(lst) for lst in self.objects_planner_dict_tmp.values()])
-        assert not (maps_num_tmp == 0 and maps_num == 0), "No object in the scene"
-             
-        if len(self.objects_planner_dict) == 0 or maps_num == 0:
+        更新agent和目标类别物体中的最近物体
+        '''
+        if len(self.objects_planner_dict) == 0:
             self.objects_planner_dict = self.objects_planner_dict_tmp
             self.objects_planner_dict_tmp = {}
-        
-        
+            
         curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
         
         min_dist = 1e4
         for cls_, planners in self.objects_planner_dict.items():
-            if len(planners) > 0:
-                planner = planners[0]
-                curr_distance = planner.fmm_dist[curr_loc[0], curr_loc[1]] / 20.0
-                if curr_distance < min_dist:
-                    min_dist = curr_distance
-                    self.nearest_obj_planner = planner
-                    self.nearest_obj = cls_
-                    self.prev_distance = curr_distance
+            planner = planners[0]
+            curr_distance = planner.fmm_dist[curr_loc[0], curr_loc[1]] / 20.0
+            if curr_distance < min_dist:
+                min_dist = curr_distance
+                self.nearest_obj_planner = planner
+                self.nearest_obj = cls_
+                self.prev_distance = curr_distance
 
         return self.nearest_obj_planner, self.nearest_obj
         
@@ -156,7 +151,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         scene_info = self.dataset_info[scene_name]
         floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
         sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
-
+        self.sem_map = sem_map
 
         cat_counts = sem_map.sum(2).sum(1)
         possible_cats = target_cls_id_in_scene
@@ -172,6 +167,8 @@ class Vsqf_v3_Env(habitat.RLEnv):
             sem_map[0], selem) != True
         traversible = 1 - traversible
         
+        
+        ## ry.name()].append(obj)
         object_boundary = args.success_dist # TODO：
         map_resolution = args.map_resolution
         
@@ -186,6 +183,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
                 if value == goal_idx:
                     goal_name = key
                     break
+            
             
             planner = FMMPlanner(traversible)
             selem = skimage.morphology.disk(
@@ -319,7 +317,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
                 
             planner = FMMPlanner(traversible)
             selem = skimage.morphology.disk(
-            int(object_boundary * 100. / map_resolution))
+                int(object_boundary * 100. / map_resolution))
             goal_map = skimage.morphology.binary_dilation(
                 sem_map[goal_idx + 1], selem) != True
             goal_map = 1 - goal_map

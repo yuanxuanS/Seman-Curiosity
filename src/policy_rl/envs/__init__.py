@@ -42,8 +42,8 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
 
-    def get_rewards(self, inputs):
-        reward = self.venv.get_rewards(inputs)
+    def get_reward(self):
+        reward = self.venv.get_reward()
         reward = torch.from_numpy(reward).float()
         return reward
 
