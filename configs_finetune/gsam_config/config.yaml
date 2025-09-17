@@ -11,7 +11,7 @@ sam_hq_checkpoint: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/third_p
 use_sam_hq: True
 
 # text_prompt: "Bed. Soft couch. Plant. Chair. Toilet. Table. Cupboard. Cabinet"
-text_prompt: "Bed. Couch. Chair. Toilet."  # Refrigerator." #Cupboard. Cabinet"
+text_prompt: "Bed. Couch. Chair. Toilet. Refrigerator." #Cupboard. Cabinet"
 # text_prompt: "Bed. Couch. Plant. Chair. Toilet. Table. Refrigerator. Painting. Cupboard" #Cupboard. Cabinet"
 output_dir: "outputs"
 
