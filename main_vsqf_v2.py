@@ -72,8 +72,12 @@ def main():
     finished = np.zeros((args.num_processes))
 
     l_episode_rewards = []
+    l_episode_dis_r = []
+    l_episode_vsqf_r = []
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
+    per_step_dis_rewards = deque(maxlen=1000)
+    per_step_vsqf_rewards = deque(maxlen=1000)
     
     l_value_losses = deque(maxlen=1000)
     l_action_losses = deque(maxlen=1000)
@@ -269,6 +273,9 @@ def main():
     logging.info("Start date and time: %s", start_datetime)
     
     l_reward = torch.zeros(num_scenes).to(device)
+    l_cumu_r = torch.zeros(num_scenes).to(device)
+    l_cumu_dis_r = torch.zeros(num_scenes).to(device)
+    l_cumu_vsqf_r = torch.zeros(num_scenes).to(device)
     last_scores = torch.zeros(num_scenes).to(device)
 
     
@@ -290,18 +297,23 @@ def main():
             l_reward = last_scores
         else:
             l_scores = torch.tensor(vsqf_maps.get_vsqf_score()).to(device)
-            l_reward = l_scores - last_scores
+            sample_reward = l_scores - last_scores
             
             sample_stage = torch.from_numpy(np.asarray(
                 [infos[env_idx]['sample_stage'] for env_idx
                 in range(num_scenes)])
             ).float().to(device)
             step_penalty = torch.ones_like(l_reward).to(device) * -0.01
+            
+            sample_reward = sample_reward * sample_stage * 10
+            step_penalty = step_penalty * (1 - sample_stage)
             # l_reward = l_reward * sample_stage + step_penalty * (1 - sample_stage)
-            l_reward = l_reward * sample_stage * 10 + step_penalty * (1 - sample_stage)
-            # l_reward = l_reward if l_reward > 0 else torch.zeros_like(l_reward).to(device)
-            # print(f"reward {l_reward}")
+            l_reward = sample_reward + step_penalty
+            
+            l_cumu_dis_r += step_penalty
+            l_cumu_vsqf_r += sample_reward
 
+        l_cumu_r += l_reward        
         # ------------------------------------------------------------------ 
         # update local input, next state
         # locs = full_pose.cpu().numpy()
@@ -341,18 +353,29 @@ def main():
         l_reward_mean = np.mean(l_reward.cpu().numpy())
         per_step_rewards.append(reward_mean)
         per_step_l_rewards.append(l_reward_mean)
-
+        if int(sample_stage.sum().cpu().numpy()) != num_scenes:
+            per_step_dis_rewards.append(torch.sum(step_penalty).cpu().numpy() / (num_scenes - sample_stage.sum() + 1e-5).cpu().numpy())
+        if sample_stage.sum() > 0:
+            per_step_vsqf_rewards.append(torch.sum(sample_reward).cpu().numpy() / (sample_stage.sum() + 1e-5).cpu().numpy())
         # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         
         if done[0]:
-            r_ = np.mean(l_reward.cpu().numpy())
-            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
-            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
+            r_ = np.mean(l_cumu_r.cpu().numpy())
+            dis_r = np.mean(l_cumu_dis_r.cpu().numpy())
+            vsqf_r = np.mean(l_cumu_vsqf_r.cpu().numpy())
+            
             l_episode_rewards.append(r_)
-
+            l_episode_dis_r.append(dis_r)
+            l_episode_vsqf_r.append(vsqf_r)
+            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}, dis reward={dis_r}, vsqf reward={vsqf_r}")
+            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_},  dis reward={dis_r}, vsqf reward={vsqf_r}")
+            
             l_reward = torch.zeros(num_scenes).to(device)
             last_scores = l_reward
+            l_cumu_r = torch.zeros(num_scenes).to(device)
+            l_cumu_vsqf_r = torch.zeros(num_scenes).to(device)
+            l_cumu_dis_r = torch.zeros(num_scenes).to(device)
             
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
@@ -489,6 +512,30 @@ def main():
                         np.max(per_step_rewards))
                 ])
 
+            log += "\n\tDistance Rewards:"
+
+            if len(per_step_dis_rewards) > 0:
+                log += " ".join([
+                    " per step mean/med/min/max, dis rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(per_step_dis_rewards),
+                        np.median(per_step_dis_rewards),
+                        np.min(per_step_dis_rewards),
+                        np.max(per_step_dis_rewards))
+                ])
+                
+            log += "\n\tSample Rewards:"
+
+            if len(per_step_vsqf_rewards) > 0:
+                log += " ".join([
+                    " per step mean/med/min/max, Vsqf rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(per_step_vsqf_rewards),
+                        np.median(per_step_vsqf_rewards),
+                        np.min(per_step_vsqf_rewards),
+                        np.max(per_step_vsqf_rewards))
+                ])
+                
             log += "\n\tLosses:"
             if len(l_value_losses) > 0 and not args.eval:
                 log += " ".join([
@@ -509,7 +556,29 @@ def main():
                         np.min(l_episode_rewards),
                         np.max(l_episode_rewards))
                     ])
-                
+            
+            if done[0]:
+                if len(l_episode_dis_r) > 0:
+                    log += " ".join([
+                    " episode mean/med/min/max, dis rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(l_episode_dis_r),
+                        np.median(l_episode_dis_r),
+                        np.min(l_episode_dis_r),
+                        np.max(l_episode_dis_r))
+                    ])
+            
+            if done[0]:
+                if len(l_episode_vsqf_r) > 0:
+                    log += " ".join([
+                    " episode mean/med/min/max, rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(l_episode_vsqf_r),
+                        np.median(l_episode_vsqf_r),
+                        np.min(l_episode_vsqf_r),
+                        np.max(l_episode_vsqf_r))
+                    ])
+                    
             print(log)
             logging.info(log)
 
