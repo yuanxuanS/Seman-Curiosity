@@ -189,7 +189,7 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         # if pred objects, pred vsqf and Orient, (在depth处理之前)
         obj = self.filter_instance(obj)
         if info['sample_stage']:
-            if info['sample_step'] > 70:    # sample stage ends
+            if info['sample_step'] > 50:    # sample stage ends
                 info['sample_stage'] = False
                 info['sample_step'] = 0
                 # print("sample stage ends")
