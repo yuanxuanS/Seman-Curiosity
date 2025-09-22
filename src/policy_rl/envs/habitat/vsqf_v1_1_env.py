@@ -13,10 +13,8 @@ from ..utils.fmm_planner import FMMPlanner
 import json
 import gzip
 from src.vqf_constants import target_coco_categories_mapping, target_coco_categories, category_id_maps, target_cls_id_in_scene
-import cv2
-import queue
 
-class Vsqf_v3_Env(habitat.RLEnv):
+class Vsqf_v1_1_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
     metrics.
@@ -56,32 +54,6 @@ class Vsqf_v3_Env(habitat.RLEnv):
         # episode id 
         self.episode_no = 0
 
-    def find_closest_obj(self):
-        '''
-        更新agent和目标类别物体中的最近物体        '''
-        maps_num = sum([len(lst) for lst in self.objects_planner_dict.values()])
-        maps_num_tmp = sum([len(lst) for lst in self.objects_planner_dict_tmp.values()])
-        assert not (maps_num_tmp == 0 and maps_num == 0), "No object in the scene"
-             
-        if len(self.objects_planner_dict) == 0 or maps_num == 0:
-            self.objects_planner_dict = self.objects_planner_dict_tmp
-            self.objects_planner_dict_tmp = {}
-        
-        
-        curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-        
-        min_dist = 1e4
-        for cls_, planners in self.objects_planner_dict.items():
-            if len(planners) > 0:
-                planner = planners[0]
-                curr_distance = planner.fmm_dist[curr_loc[0], curr_loc[1]] / 20.0
-                if curr_distance < min_dist:
-                    min_dist = curr_distance
-                    self.nearest_obj_planner = planner
-                    self.nearest_obj = cls_
-                    self.prev_distance = curr_distance
-
-        return self.nearest_obj_planner, self.nearest_obj
         
     def reset(self):
         """Resets the environment to a new episode.
@@ -117,12 +89,10 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.info['sensor_pose'] = [0., 0., 0.]
         
         #vsqf 
-        self.info['sample_stage'] = False
-        self.info['sample_step'] = 0
+        # self.info['sample_stage'] = False
+        # self.info['sample_step'] = 0
         self.info['found_classes'] = []
-        
-        # 计算最近目标
-        self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
+
         return state, self.info
     
     def load_episode_loc(self):
@@ -151,51 +121,6 @@ class Vsqf_v3_Env(habitat.RLEnv):
         
         self._env.sim.set_agent_state(pos, rot)
         obs = self._env.sim.get_observations_at(pos, rot)
-        # 记录目标物体语义地图，用于计算和物体距离
-        
-        scene_info = self.dataset_info[scene_name]
-        floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
-        sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
-
-
-        cat_counts = sem_map.sum(2).sum(1)
-        possible_cats = target_cls_id_in_scene
-        possible_cats_ = target_cls_id_in_scene.copy()
-        
-        self.objects_planner_dict = {name: [] for name in target_coco_categories.keys()}
-        self.objects_planner_dict_tmp = {}
-        # self.objects_planner_list = []
-        # self.objects_planner_list_memory = []
-        
-        selem = skimage.morphology.disk(2)
-        traversible = skimage.morphology.binary_dilation(
-            sem_map[0], selem) != True
-        traversible = 1 - traversible
-        
-        object_boundary = args.success_dist # TODO：
-        map_resolution = args.map_resolution
-        
-        for i in possible_cats_:
-            if cat_counts[i + 1] == 0:      # 从0-5的类别中，如果有一个类别的数量为0，则去除这个类别
-                possible_cats.remove(i)
-                
-        for pcat in possible_cats:
-            goal_idx = pcat
-            goal_name = None
-            for key, value in target_coco_categories.items():      # 目标类别的名字
-                if value == goal_idx:
-                    goal_name = key
-                    break
-            
-            planner = FMMPlanner(traversible)
-            selem = skimage.morphology.disk(
-            int(object_boundary * 100. / map_resolution))
-            goal_map = skimage.morphology.binary_dilation(
-                sem_map[goal_idx + 1], selem) != True
-            goal_map = 1 - goal_map
-            planner.set_multi_goal(goal_map)
-            # self.objects_planner_list.append((goal_name, planner))
-            self.objects_planner_dict[goal_name].append(planner)
         return obs
     
     def initial_possible_loc(self):
@@ -213,7 +138,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         map_obj_origin = scene_info[floor_idx]['origin']
 
         cat_counts = sem_map.sum(2).sum(1)
-        possible_cats = target_cls_id_in_scene
+        possible_cats = target_cls_id_in_scene      # 0-5类别
         possible_cats_ = target_cls_id_in_scene.copy()
         
         for i in possible_cats_:
@@ -288,60 +213,6 @@ class Vsqf_v3_Env(habitat.RLEnv):
         
         self.map_obj_origin = map_obj_origin
         
-        # 记录目标物体语义地图，用于计算和物体距离
-        self.objects_planner_dict = {name: [] for name in target_coco_categories.keys()}
-        self.objects_planner_dict_tmp = {}
-        # self.objects_planner_list = []
-        
-        selem = skimage.morphology.disk(2)
-        traversible = skimage.morphology.binary_dilation(
-            sem_map[0], selem) != True
-        traversible = 1 - traversible
-        
-        
-        
-        ## 
-        # objects_dict = {name: [] for name in target_coco_categories.keys()}
-        # for obj in self._env.sim.semantic_scene.objects[1:]:
-        #     if obj.category.name() in target_coco_categories.keys():
-        #         tgt = obj.aabb.center
-        #         dist_ = self._env.sim.geodesic_distance(np.array(pos), np.array(tgt))
-        #         if dist_ < 100: # 可达
-        #             objects_dict[obj.category.name()].append(obj)
-        
-        for pcat in possible_cats:
-            goal_idx = pcat
-            goal_name = None
-            for key, value in target_coco_categories.items():      # 目标类别的名字
-                if value == goal_idx:
-                    goal_name = key
-                    break
-                
-            planner = FMMPlanner(traversible)
-            selem = skimage.morphology.disk(
-            int(object_boundary * 100. / map_resolution))
-            goal_map = skimage.morphology.binary_dilation(
-                sem_map[goal_idx + 1], selem) != True
-            goal_map = 1 - goal_map
-            planner.set_multi_goal(goal_map)
-            # self.objects_planner_list.append((goal_name, planner))
-            self.objects_planner_dict[goal_name].append(planner)
-            # 在语义地图上得到物体区域
-            # goal_map_ = sem_map[goal_idx + 1]
-            # connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
-            # object_ids = list(np.unique(connected_region[connected_region > 0]))
-            # for object_id in object_ids:
-            #     goal_map_one = np.ones_like(goal_map_)
-            #     goal_map_one[connected_region == object_id] = 0
-                
-            #     selem = skimage.morphology.disk(2)
-            #     goal_map_one_ = skimage.morphology.binary_dilation(
-            #         goal_map_one, selem) != True
-            #     goal_map_one_ = 1 - goal_map_one_
-                
-            #     planner.set_multi_goal(goal_map_one_)
-            #     self.objects_planner_dict[goal_name].append(planner)
-                    
         return obs
                 
 
@@ -365,7 +236,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         # action = action["action"]
 
         # step
-        obs, dis_r, done, _ = super().step(action)
+        obs, _, done, _ = super().step(action)
  
         # reset location if on floor
         last_sim_location_z = self.this_sim_location_z
@@ -405,7 +276,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.timestep += 1
         self.info['time'] = self.timestep
 
-        return state, dis_r, done, self.info
+        return state, 0., done, self.info
     
     def save_data(self, observations):
         args = self.args
@@ -449,17 +320,6 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.last_sim_location = self.this_sim_location
         self.this_sim_location = curr_sim_pose
         return dx, dy, do
-    
-    def sim_continuous_to_sim_map(self, sim_loc):
-        """Converts absolute Habitat simulator pose to ground-truth 2D Map
-        coordinates.
-        """
-        x, y, o = sim_loc
-        min_x, min_y = self.map_obj_origin / 100.0
-        x, y = int((-x - min_x) * 20.), int((-y - min_y) * 20.)
-
-        o = np.rad2deg(o) + 180.0
-        return y, x, o
     
     def get_sim_location(self):
         """Returns x, y, o pose of the agent in the Habitat simulator."""

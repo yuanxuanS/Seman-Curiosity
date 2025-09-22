@@ -8,7 +8,7 @@ from src.vqf_constants import color_palette_vsqf
 import os
 import torch
 from ..envs.utils import pose as pu
-from ..envs.habitat.vsqf_v3_env import Vsqf_v3_Env
+from ..envs.habitat.vsqf_v1_1_env import Vsqf_v1_1_Env
 from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
 from .utils.vsqf_prediction import Vsqf_pred
 from .utils.orient_prediction import Orient_pred
@@ -20,7 +20,7 @@ from detectron2.structures.instances import Instances
 from detectron2.structures.boxes import Boxes, BoxMode
 from src.vqf_constants import target_coco_categories_mapping, clsid_name_maps
 
-class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
+class Vsqf_v1_1_Env_Agent(Vsqf_v1_1_Env):
     """The VSQF environment agent class. A separate Vsqf_Env_Agent class
     object is used for each environment thread.
 
@@ -67,23 +67,11 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         self.curr_loc = [args.map_size_cm / 100.0 / 2.0,
                          args.map_size_cm / 100.0 / 2.0, 0.]
         
-        
         # visualize
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend, mode=3)
         
         return obs, info
-    
-    def get_reward(self, obs):
-        curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-        self.curr_distance = self.nearest_obj_planner.fmm_dist[curr_loc[0],
-                                                      curr_loc[1]] / 20.0
-
-        reward = (self.prev_distance - self.curr_distance) * \
-            self.args.distance_reward_coeff
-
-        self.prev_distance = self.curr_distance
-        return reward
     
     def step_and_preprocess(self, action, inputs):
         """Function responsible for taking the action and
@@ -127,18 +115,18 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         # act and step
         action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         action = {'action': action}
-        obs, dis_r, done, info = super().step(action)       # 4,256,256
+        obs, _, done, info = super().step(action)       # 4,256,256
 
         
         
         # preprocess obs
-        obs, info = self._preprocess_obs(obs, info) # maskrcnn检测时进入sample stage
+        obs, info = self._preprocess_obs(obs, info) 
         self.last_action = action['action']     
         self.obs = obs
         self.info = info
 
 
-        return obs, dis_r, done, info
+        return obs, 0., done, info
     
     
     
@@ -188,81 +176,61 @@ class Vsqf_v3_Env_Agent(Vsqf_v3_Env):
         
         # if pred objects, pred vsqf and Orient, (在depth处理之前)
         obj = self.filter_instance(obj)
-        if info['sample_stage']:
-            if info['sample_step'] > 50:    # sample stage ends
-                info['sample_stage'] = False
-                info['sample_step'] = 0
-                # print("sample stage ends")
-                
-                # 更新最近目标
-                self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
-            else:       # sample stage continues
-                info['sample_step'] += 1
-                info['find_goal'] = False
-                info['rgb_obj'] = np.zeros((256, 256, 3))
-                info['depth_obj'] = np.zeros((1, 256, 256)) 
-        else:       
-            # maskrcnn检测到时开启sample stage
-            if len(obj) > 0:
-                if len(obj) > 1:        # 选置信度最高
-                    scores = obj.scores
-                    idx = obj.scores.argmax()
-                else:
-                    idx = 0
-                mask = obj.pred_masks[idx, ...].cpu().numpy()
-                
-                cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
-                if not (cls_name in info['found_classes']):   # 之前没找到过该类物体
-                    # 存储物体信息， 避免重复查找
-                    info['found_classes'].append(cls_name)
-                    
-                    # 检测到时，从planner中去除该类别, 避免重复作为最近物体
-                    if cls_name in self.objects_planner_dict.keys():
-                        tmp = self.objects_planner_dict.pop(cls_name)
-                        self.objects_planner_dict_tmp[cls_name] = tmp
-                    
-                    rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
-                    rgb_obj = rgb_t * mask[:, :, None]
-                    depth_t = cv2.resize(depth, (256, 256)) 
-                    depth_obj = depth_t * mask    # 单位cm
-                    info['find_goal'] = True
-                    # print(f"find goal True: {cls_name}, score {obj.scores[idx].cpu().numpy()}")
-                    info['rgb_obj'] = rgb_obj
-                    info['depth_obj'] = depth_obj[None, ...]
-                    del rgb_t
-                    del depth_t
-                    # 
-                    info['sample_stage'] = True
-                    info['sample_step'] += 1
-                else:       # 同类物体，不处理
-                    info['find_goal'] = False
-                    info['rgb_obj'] = np.zeros((256, 256, 3))
-                    info['depth_obj'] = np.zeros((1, 256, 256))     
-                    
-                    info['sample_stage'] = False
-                    info['sample_step'] = 0
-                    
+        # if info['sample_stage']:
+        #     if info['sample_step'] > 70:    # sample stage ends
+        #         info['sample_stage'] = False
+        #         info['sample_step'] = 0
+        #         print("sample stage ends")
+        #     else:       # sample stage continues
+        #         info['sample_step'] += 1
+        #         info['find_goal'] = False
+        #         info['rgb_obj'] = np.zeros((256, 256, 3))
+        #         info['depth_obj'] = np.zeros((1, 256, 256)) 
+        # else:
+        # maskrcnn检测到时开启sample stage
+        if len(obj) > 0:
+            if len(obj) > 1:        # 选置信度最高
+                scores = obj.scores
+                idx = obj.scores.argmax()
             else:
+                idx = 0
+            mask = obj.pred_masks[idx, ...].cpu().numpy()
+            
+            cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
+            if not (cls_name in info['found_classes']):   # 之前没找到过该类物体
+                # 存储物体信息， 避免重复查找
+                info['found_classes'].append(cls_name)
+                
+                rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
+                rgb_obj = rgb_t * mask[:, :, None]
+                depth_t = cv2.resize(depth, (256, 256)) 
+                depth_obj = depth_t * mask    # 单位cm
+                info['find_goal'] = True
+                # print(f"find goal True: {cls_name}, score {obj.scores[idx].cpu().numpy()}")
+                info['rgb_obj'] = rgb_obj
+                info['depth_obj'] = depth_obj[None, ...]
+                del rgb_t
+                del depth_t
+                # 
+                # info['sample_stage'] = True
+                # info['sample_step'] += 1
+            else:       # 同类物体，不处理
                 info['find_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256))     
                 
-                info['sample_stage'] = False
-                info['sample_step'] = 0
+                # info['sample_stage'] = False
+                # info['sample_step'] = 0
                 
-                # explore stage且到达目标, 且未检测到，换物体
-                curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
-                curr_distance = self.nearest_obj_planner.fmm_dist[curr_loc[0],
-                                                            curr_loc[1]] / 20.0
-                if curr_distance == 0.0:
-                    nearest_obj = self.nearest_obj
-                    tmp = self.objects_planner_dict.pop(self.nearest_obj)
-                    
-                    # 先更新最近物体，再添加最近pop的，避免仍用当前物体
-                    self.nearest_obj_planner, self.nearest_obj = self.find_closest_obj()
-                    
-                    self.objects_planner_dict_tmp[nearest_obj] = tmp                
-                
+        else:
+            info['find_goal'] = False
+            info['rgb_obj'] = np.zeros((256, 256, 3))
+            info['depth_obj'] = np.zeros((1, 256, 256))     
+            
+            # info['sample_stage'] = False
+            # info['sample_step'] = 0
+            
+            
         return state, info
     
     def filter_instance(self, instance):

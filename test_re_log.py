@@ -3,7 +3,8 @@ import re
 import matplotlib.pyplot as plt
 
 # 日志文件路径（替换为实际路径）
-log_file_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/logs/expv7.log"
+log_file_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/rl_vsqf_v3_1.log"
+# "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/logs/expv7.log"
 # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/rl_vsqf_v3_0.log"
 
 # 读取文件内容
@@ -29,4 +30,4 @@ else:
     plt.legend()
     plt.grid(True)
     # plt.show()
-    plt.savefig('episode_mean_reward_curi_expv7.png')  # 保存图像
+    plt.savefig('episode_mean_reward_vsqf_v3_1.png')  # 保存图像
