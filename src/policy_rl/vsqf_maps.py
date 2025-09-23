@@ -187,7 +187,7 @@ class Vsqf_Maps_Env:
         # azimuth = torch.tensor([infos[env_idx]['azimuth'] for env_idx in range(self.num_scenes)])
         depth_obj = np.concatenate([infos[env_idx]['depth_obj'] for env_idx in range(self.num_scenes)], axis=0)
         
-        # 非 sample stage， vsqf map全0
+        # 非 sample stage， vsqf map全0 
         sample_stage = torch.from_numpy(np.asarray(
                 [infos[env_idx]['sample_stage'] for env_idx
                 in range(self.num_scenes)])

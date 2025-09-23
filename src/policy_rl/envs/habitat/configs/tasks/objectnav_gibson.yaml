@@ -49,7 +49,7 @@ DATASET:
   EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
   SCENES_DIR: "data/scene_datasets/"
   CONTENT_SCENES: [
-    "Allensville.glb", 
+    # "Allensville.glb", 
     # "Beechwood.glb", 
     # "Coffeen.glb", 
     # "Cosmos.glb",
@@ -59,7 +59,7 @@ DATASET:
     # "Onaga.glb", "Pinesdale.glb", "Pomaria.glb", "Ranchester.glb", "Shelbyville.glb",
     # "Stockman.glb", "Tolstoy.glb", "Wainscott.glb", "Woodbine.glb" 
   # ]
-    # "Collierville.glb",
+    "Collierville.glb",
     # "Corozal.glb",
     # "Darden.glb",
     # "Markleeville.glb",
