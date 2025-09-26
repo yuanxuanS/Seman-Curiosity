@@ -260,7 +260,7 @@ class Sample_Obj_Env(habitat.RLEnv):
                         else:
                             continue
                         
-                        # raycasting算法检测位置点能看到物体
+                        #过滤位置点： raycasting算法检测能看到物体的
                         object_pixels = np.where(goal_map_one > 0)
                         visible = Sample_Obj_Env.is_visible_raycasting(goal_map_one, map_obs, point, object_pixels)
                         if visible:
