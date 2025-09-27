@@ -76,10 +76,10 @@ if __name__ == "__main__":
     batch_size =1024
     withdrop = False
     drop=0.5
-    load_model = False
+    load_model = True
     model_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-29_17-25-03_/best_real_model_e2.pth"
     # "./vqf_logs/08-28_16-53-57_/best_unseen_model_e1.pth"
-    eval_only = False
+    eval_only = True
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-27_09-48-23_/best_unseen_model.pth"
     mode =   "11dis" #"8dis"   #
     ### model
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     ### log
 
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
-    note=  "withdropout"
+    note=  "eval"
     log_dir = f"./vqf_logs/{timestamp}_{note}"
     os.makedirs(log_dir, exist_ok=True)
     print(f"log dir: {log_dir} in device {device}")

@@ -6,6 +6,7 @@ from torch.utils.data import Dataset
 from src.finetune.dataset_utils import get_loader, SampleLoader
 import torchvision.transforms as T
 import torch
+import numpy as np
 
 def helper_collate(batch):
     # x = torch.concat([T.ToTensor()(b[0]).unsqueeze(0) for b in batch], dim=0)
@@ -103,6 +104,7 @@ class RealAzimuthDataset(Dataset):
     def __init__(self, dir, scenes, gt_mode):
         
         self.gt_mode = gt_mode
+        self.dir = dir
         
         self.data_lst = []
         for scene in scenes:
@@ -172,6 +174,30 @@ class RealAzimuthDataset(Dataset):
             mask_ = torch.concat([mask_[:, azimuth_idx:], mask_[:, :azimuth_idx]], dim=-1)
         return rgb_obj, y, mask_
     
+    
+    def get_single_data(self, scene, env, epi, step, cat, scene_obj_id):
+        
+        class_name = category_maps[cat]
+        # 加载对应data和rgb
+        sampler = self.samplers[scene]
+        sample_data = sampler.get_sample_multimodality(env, epi, step, ["bbsgt", "rgb", "depth", "semantic"])
+        rgb = sample_data['rgb'].data
+        semantic = sample_data['semantic'].data
+        mask_rgb = semantic == scene_obj_id
+        
+        rgb_obj = rgb * mask_rgb[:,:,None]
+        rgb_obj = rgb_obj.transpose((2,0,1))
+        rgb_obj = self.transforms(torch.from_numpy(rgb_obj).type(torch.float32))
+        
+        with open(self.dir+f"/{scene}_objects_value_clip.pkl", 'rb') as f:
+            object_label_clip = pickle.load(f)
+        _, obj_score_arr = object_label_clip[(env, epi)][cat][scene_obj_id]
+
+        mask_ = obj_score_arr > 1e-5        # 0 处为无值
+        y = obj_score_arr.copy()
+        y[mask_] = (y[mask_] - self.norm_scale[class_name][0]) / (self.norm_scale[class_name][1] - self.norm_scale[class_name][0])
+        y[mask_] = np.ones_like(y)[mask_] - y[mask_]
+        return rgb_obj, y, mask_
     def __len__(self):
         return len(self.data_lst)
 
