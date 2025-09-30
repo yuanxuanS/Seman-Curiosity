@@ -165,7 +165,7 @@ def get_args():
     parser.add_argument('--magnify', default=False,
                         help='magnify vsqf scores')
     parser.add_argument('--magnify_num', type=float, default=3.0)
-
+    parser.add_argument('--vsqf_version', type=str, default="v2")
     
     # parse arguments
     args = parser.parse_args()
