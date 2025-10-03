@@ -280,11 +280,12 @@ def main():
             l_reward = last_scores
         else:
             l_scores = torch.tensor(vsqf_maps.get_vsqf_score()).to(device)
-            score_increasement = l_scores - last_scores
+            # score_increasement = l_scores - last_scores
             score_abs = l_scores
-            l_reward = score_increasement + score_abs
+            # l_reward = score_increasement + score_abs
+            l_reward = score_abs
             
-            r_score_incs += score_increasement
+            # r_score_incs += score_increasement
             r_score_abs += score_abs
             # l_reward = l_reward if l_reward > 0 else torch.zeros_like(l_reward).to(device)
             # print(f"reward {l_reward}")
@@ -318,10 +319,10 @@ def main():
         # 
         reward_mean = np.mean(reward.cpu().numpy())
         l_reward_mean = np.mean(l_reward.cpu().numpy())
-        r_score_incs_mean = np.mean(score_increasement.cpu().numpy())
+        # r_score_incs_mean = np.mean(score_increasement.cpu().numpy())
         r_score_abs_mean = np.mean(score_abs.cpu().numpy())
         per_step_rewards.append(reward_mean)
-        per_step_rewards_score_incs.append(r_score_incs_mean)
+        # per_step_rewards_score_incs.append(r_score_incs_mean)
         per_step_rewards_score_abs.append(r_score_abs_mean)
         per_step_l_rewards.append(l_reward_mean)
 
@@ -476,17 +477,17 @@ def main():
                         np.max(per_step_rewards))
                 ])
             
-            log += "\n\tscore incs Rewards:"
+            # log += "\n\tscore incs Rewards:"
 
-            if len(per_step_rewards_score_incs) > 0:
-                log += " ".join([
-                    " per step mean/med/min/max, score incs rew:",
-                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
-                        np.mean(per_step_rewards_score_incs),
-                        np.median(per_step_rewards_score_incs),
-                        np.min(per_step_rewards_score_incs),
-                        np.max(per_step_rewards_score_incs))
-                ])
+            # if len(per_step_rewards_score_incs) > 0:
+            #     log += " ".join([
+            #         " per step mean/med/min/max, score incs rew:",
+            #         "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+            #             np.mean(per_step_rewards_score_incs),
+            #             np.median(per_step_rewards_score_incs),
+            #             np.min(per_step_rewards_score_incs),
+            #             np.max(per_step_rewards_score_incs))
+            #     ])
             log += "\n\tRewards:"
 
             if len(per_step_rewards_score_abs) > 0:
