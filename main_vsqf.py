@@ -479,25 +479,25 @@ def main():
             print(log)
             logging.info(log)
 
-
-        # ------------------------------------------------------------------
-        # Save best models
-        if (step * num_scenes) % args.save_interval < \
-                num_scenes:
-            if len(l_episode_rewards) >= 20 and \
-                    (np.mean(l_episode_rewards) >= best_l_reward) \
-                    and not args.eval:
-                torch.save(l_policy.state_dict(),
-                           os.path.join(log_dir, "model_best.pth"))
-                best_l_reward = np.mean(l_episode_rewards)
-        # Save periodic models
-        if (step * num_scenes) % args.save_periodic < \
-                num_scenes:
-            total_steps = step * num_scenes
-            if not args.eval:
-                torch.save(l_policy.state_dict(),
-                           os.path.join(dump_dir,
-                                        "periodic_{}.pth".format(total_steps)))
+        if args.agent == "rl":
+            # ------------------------------------------------------------------
+            # Save best models
+            if (step * num_scenes) % args.save_interval < \
+                    num_scenes:
+                if len(l_episode_rewards) >= 20 and \
+                        (np.mean(l_episode_rewards) >= best_l_reward) \
+                        and not args.eval:
+                    torch.save(l_policy.state_dict(),
+                            os.path.join(log_dir, "model_best.pth"))
+                    best_l_reward = np.mean(l_episode_rewards)
+            # Save periodic models
+            if (step * num_scenes) % args.save_periodic < \
+                    num_scenes:
+                total_steps = step * num_scenes
+                if not args.eval:
+                    torch.save(l_policy.state_dict(),
+                            os.path.join(dump_dir,
+                                            "periodic_{}.pth".format(total_steps)))
         # ------------------------------------------------------------------
     # Print and save model performance numbers during evaluation: TODO
     # with open('{}/{}_episode_rewards.json'.format(
