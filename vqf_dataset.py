@@ -7,13 +7,24 @@ from src.finetune.dataset_utils import get_loader, SampleLoader
 import torchvision.transforms as T
 import torch
 import numpy as np
+from vqf_utils import return_bin_idx
+import cv2
+
+real_obj_statistics = {     # real object 统计
+            'chair': [15.9, 30.1],
+            'couch':  [13.4, 30.4], 
+            'bed': [14.9, 28.6],
+            'toilet': [13.5, 27.3],
+            'refrigerator': [ 13.2, 30.4,]
+        }
 
 def helper_collate(batch):
     # x = torch.concat([T.ToTensor()(b[0]).unsqueeze(0) for b in batch], dim=0)
     x = torch.concat([b[0].unsqueeze(0) for b in batch], dim=0)
     y = torch.concat([b[1].unsqueeze(0) for b in batch], dim=0)
     azimuths = [b[2] for b in batch]
-    return x, y, azimuths
+    distances = [b[3] for b in batch]
+    return x, y, azimuths, distances
 
 def load_dataset(dir, gt_mode, angle_interval, distances, preprocess, train_augment):
     
@@ -128,13 +139,7 @@ class RealAzimuthDataset(Dataset):
         
         self.samplers = {scene: SampleLoader(dir + "/data/"+scene) for scene in scenes}
 
-        self.norm_scale = {     # real object 统计
-            'chair': [15.9, 30.1],
-            'couch':  [13.4, 30.4], 
-            'bed': [14.9, 28.6],
-            'toilet': [13.5, 27.3],
-            'refrigerator': [ 13.2, 30.4,]
-        }
+        self.norm_scale = real_obj_statistics
         
         self.transforms = T.Compose([
             T.Resize(size=224, interpolation=Image.BICUBIC),
@@ -170,9 +175,11 @@ class RealAzimuthDataset(Dataset):
         y[mask_] = np.ones_like(y)[mask_] - y[mask_]
         
         if self.gt_mode == "inconsistent":
+            y = torch.from_numpy(y)
+            mask_ = torch.from_numpy(mask_)
             y = torch.concat([y[:, azimuth_idx:], y[:, :azimuth_idx]], dim=-1)
             mask_ = torch.concat([mask_[:, azimuth_idx:], mask_[:, :azimuth_idx]], dim=-1)
-        return rgb_obj, y, mask_
+        return rgb_obj, y, mask_, dis_idx, azimuth_idx
     
     
     def get_single_data(self, scene, env, epi, step, cat, scene_obj_id):
@@ -288,13 +295,13 @@ class AzimuthDataset(Dataset):
         assert y.min() > 0, "value array is < 0"
         y = torch.ones_like(y) - y
         
-        # if self.gt_mode == "inconsistent":
-        #     y = torch.concat([y[:, azimuth:], y[:, :azimuth]], dim=-1)
+        if self.gt_mode == "inconsistent":
+            angles=[i for i in range(360)]
+            angle_bins  = angles[::10]
+            azi_idx = return_bin_idx(azimuth, angle_bins, 5)
+            y = torch.concat([y[:, azi_idx:], y[:, :azi_idx]], dim=-1)
             
-        # if self.augment:
-        #     for yt in y_trans:
-        #         y = yt(y, azimuth)
-        return x, y, azimuth
+        return x, y, azimuth, distance
     
     def __len__(self):
         return len(self.datas)
