@@ -154,6 +154,72 @@ class Frontier:
                 pass
         return np.array(actions), self.goals, self.short_time_goals
     
+    def get_action_one_env(self, p_input, env_idx):
+            
+        # update current location: real distance (m)
+        start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
+            p_input['pose_pred']
+        self.last_loc[env_idx] = self.curr_loc[env_idx]
+        self.curr_loc[env_idx] = [start_x, start_y, start_o]
+            
+        if self.rotation_counts[env_idx] < 10:        
+            action = 2  # left
+            self.rotation_counts[env_idx] += 1
+            return action, None, None
+        
+        # check if need replan (arrive goal or no goal)
+        x2, y2, _ = self.curr_loc[env_idx]
+        r, c = y2, x2     # 转化为格子坐标
+        start = [int(r * 100.0 / self.args.map_resolution),
+                int(c * 100.0 / self.args.map_resolution)]
+        map_pred = np.rint(p_input['map_pred_full'])
+        start = pu.threshold_poses(start, map_pred.shape)
+        if self.goals[env_idx] is None:
+            self.replan[env_idx] = True
+            self.counts[env_idx] = 0
+        else:
+            # replan if get close to goal
+            goal_r, goal_c = self.goals[env_idx][0], self.goals[env_idx][1]
+            if abs(goal_c - start[1]) < 10 and abs(goal_r - start[0]) < 10:     # for grid distance
+                self.replan[env_idx] = True
+                print(f"get in goal {self.replan[env_idx]}")
+            else:
+                self.replan[env_idx] = self.counts[env_idx] >= 50       # if long time
+                
+            if self.replan[env_idx]:
+                self.counts[env_idx] = 0 
+            else:
+                self.counts[env_idx] += 1
+            
+            if self.invalid_goal[env_idx]:
+                self.replan[env_idx] = True
+                self.invalid_goal[env_idx] = False
+            
+        # compute goal on full map if does replan
+        if self.replan[env_idx]:  
+
+            fmap, lagst_contrs = self.get_frontier_map(p_input, env_idx)
+            gain_fmap = self.get_frontier_gains(fmap, p_input, lagst_contrs)
+            goal = self.sample_frontier(gain_fmap, env_idx)
+            self.goals[env_idx] = goal
+            # print(f"replan in env :{env_idx}, goal {goal}")
+        else:
+            goal = self.goals[env_idx]
+
+        # return action according to current goal
+        self.last_goal[env_idx] = goal
+        action, short_time_goal, get_in_goal, get_in_stg = self.get_determine_action(p_input, goal, env_idx)
+        # print(f"goal: {goal}, short_time_goal: {short_time_goal}, loc: {start}, action: {action}")
+        self.short_time_goals[env_idx] = short_time_goal
+        
+        if get_in_goal:
+            self.invalid_goal[env_idx] = True
+            # self.invalid_goal_loc[e].append(goal)
+            # print(f"frontier goal is invalid, it has been here!")
+        if get_in_stg:
+            # print(f"get in short time goal")
+            pass
+        return np.array(action), self.goals, self.short_time_goals
     def get_determine_action(self, p_input, goal, env_idx):
         '''
         object-oriented 里面的determin policy
@@ -478,7 +544,7 @@ class Frontier:
     
     def get_frontier_maps(self, inputs_envs):
         frontier_maps = []
-        for e, p_input in enumerate(inputs_envs):
+        for env_idx, p_input in enumerate(inputs_envs):
             fmap = self.get_frontier_map(p_input)
             frontier_maps.append(fmap)
         return frontier_maps
@@ -497,7 +563,7 @@ class Frontier:
         """
         args = self.args
 
-        obs_map = np.rint(planner_inputs["map_pred_full"])
+        obs_map = np.rint(planner_inputs["map_pred_full"])      
         exp_map = np.rint(planner_inputs["exp_pred_full"])
         # selem = skimage.morphology.disk(3)
         # obs_map = skimage.morphology.dilation(
@@ -603,7 +669,7 @@ if __name__ == "__main__":
 
     # for visualize
     full_map = maps.full_map
-    vis_inputs = [{} for e in range(num_scenes)]
+    vis_inputs = [{} for env_idx in range(num_scenes)]
     for e, p_input in enumerate(vis_inputs):
         p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
         p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()

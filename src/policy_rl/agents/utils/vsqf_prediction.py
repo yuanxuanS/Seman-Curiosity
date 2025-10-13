@@ -14,7 +14,7 @@ class Vsqf_pred():
         self.device = device
         self.model = VQFModel(self.device)
         if load_model:
-            self.model.load_state_dict(torch.load(model_pth))
+            self.model.load_state_dict(torch.load(model_pth, map_location=device))
 
         self.magnify = magnify
         self.magnify_num = magnify_num
