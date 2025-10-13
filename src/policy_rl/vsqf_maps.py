@@ -188,12 +188,12 @@ class Vsqf_Maps_Env:
         depth_obj = np.concatenate([infos[env_idx]['depth_obj'] for env_idx in range(self.num_scenes)], axis=0)
         
         # 非 sample stage， vsqf map全0 
-        sample_stage = torch.from_numpy(np.asarray(
-                [infos[env_idx]['sample_stage'] for env_idx
-                in range(self.num_scenes)])
-            ).float().to(self.device)
-        self.local_map  = self.local_map * sample_stage[:, None, None, None]
-        self.full_map  = self.full_map * sample_stage[:, None, None, None]
+        # sample_stage = torch.from_numpy(np.asarray(
+        #         [infos[env_idx]['sample_stage'] for env_idx
+        #         in range(self.num_scenes)])
+        #     ).float().to(self.device)
+        # self.local_map  = self.local_map * sample_stage[:, None, None, None]
+        # self.full_map  = self.full_map * sample_stage[:, None, None, None]
         
         # agent当前观察到的自我中心的map
         local_map, _, local_pose = \
