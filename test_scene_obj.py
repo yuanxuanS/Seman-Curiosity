@@ -14,7 +14,7 @@ from PIL import Image
 from test_gt_orient import OriAny_pred
 from third_parties.Orient_Anything.inference import get_3angle, get_3angle_infer_aug
 from third_parties.Orient_Anything.utils import background_preprocess
-from train_vqf import visualize
+from vqf_train import visualize
 from src.vqf_constants import category_maps, category_id_maps, target_cls_id_in_scene
 
 gt_angle = {"Collierville": {

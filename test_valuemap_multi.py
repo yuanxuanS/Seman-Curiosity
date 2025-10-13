@@ -210,7 +210,7 @@ if __name__ == "__main__":
     model_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-29_17-25-03_/best_unseen_model_e1.pth"
     magnify = 3.
     from vqf import VQFModel
-    from train_vqf import visualize
+    from vqf_train import visualize
     device = "cuda:1" if torch.cuda.is_available() else "cpu"
     model = VQFModel(device)
     if load_model:

@@ -12,10 +12,12 @@ from datetime import datetime
 import numpy as np
 from vqf import VQFModel
 from vqf_dataset import load_dataset, RealAzimuthDataset, helper_collate
-
+from vqf_utils import visualize
 w, h = 640, 640
 import torchvision.transforms as T
 from torchvision.transforms import functional as TF
+from vqf_utils import return_bin_idx
+import re
 
 class HorizontalFlip:
 
@@ -46,45 +48,26 @@ transforms = {"crop": T.RandomResizedCrop((224,224), scale=(0.3, 1.0), ratio=(0.
 
    
 
-def visualize(x, obj_str, save_dir, note=""):
-    '''
-    x : h*w
-    '''
-    if isinstance(x, torch.Tensor):
-        x = x.cpu().numpy()
-    
-    # 绘制热力图
-    plt.figure(figsize=(18, 3))  # 宽度调大以适应360列
-    im = plt.imshow(x, 
-                    cmap='hot',  # 颜色映射
-                    aspect='auto',   # 自动调整纵横比防止变形
-                    interpolation='none')  # 禁用插值保持清晰边界
-    plt.colorbar(im, label='Value')  # 添加颜色条
-    plt.title('value Heatmap')
-    plt.xlabel('azimuth (0-359)')
-    plt.ylabel('distance')
-    os.makedirs(save_dir+"/"+obj_str, exist_ok=True)
-    plt.savefig(save_dir+"/"+obj_str+"/"+note+".png", dpi=300, bbox_inches='tight')  # 保存高清图
-    plt.show()
+
     
 if __name__ == "__main__":
     
     angle_interval = 10
     # parameters
     lr = 1e-3
-    epochs = 10
+    epochs = 5
     batch_size =1024
     withdrop = False
     drop=0.5
-    load_model = False
+    load_model = True
     model_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-29_17-25-03_/best_real_model_e2.pth"
-    # "./vqf_logs/08-28_16-53-57_/best_unseen_model_e1.pth"
-    eval_only = False
-    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-27_09-48-23_/best_unseen_model.pth"
+    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/10-04_18-20-02_incnsistnt/best_seen_model_e0.pth"
+    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/vqf_logs/08-29_17-25-03_/best_real_model_e2.pth"
+    eval_only = True
     mode =   "11dis" #"8dis"   #
     ### model
     ## clip
-    device = "cuda:2" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     in_dim = 768*2
     distances = ['0.5m', '1m', '1.5m', '2m', '2.5m', '3m', '3.5m', '4m', '4.5m', '5m', '5.5m']
     distances = distances if mode == "11dis" else distances[3:]
@@ -92,7 +75,7 @@ if __name__ == "__main__":
     ### log
 
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
-    note=  "withdropout"
+    note=  "eval_input"
     log_dir = f"./vqf_logs/{timestamp}_{note}"
     os.makedirs(log_dir, exist_ok=True)
     print(f"log dir: {log_dir} in device {device}")
@@ -162,7 +145,7 @@ if __name__ == "__main__":
         if not eval_only:
             train_loss = []
             for i, batch in enumerate(tqdm(train_dataloader, desc="train:")):
-                x, y, azimuth = batch
+                x, y, azimuth, distance = batch
                 
                 # x = model.preprocess(x)
                 x, y = x.to(device), y.to(device)
@@ -173,10 +156,11 @@ if __name__ == "__main__":
                         x = aug_x(x)
         
                     if aug_y != None:
-                        if isinstance(aug_y, list):
+                        if isinstance(aug_y, list):     # flip trans
                             for idx in range(len(batch)):
-                                x[idx] = aug_x[idx](x[idx])
-                                y[idx] = aug_y[idx](y[idx], azimuth[idx])
+                                trans_idx = random.randint(0, len(aug_y)-1)
+                                x[idx] = aug_x[trans_idx](x[idx])
+                                y[idx] = aug_y[trans_idx](y[idx], azimuth[idx])
                 
                 # forward
                 predict = model(x)
@@ -199,7 +183,7 @@ if __name__ == "__main__":
         
     
         ###  test
-        # ''''''
+        '''
         save_dir = log_dir + "/images/predict_seen"
         cnt = 0
         test_seen_loss = []
@@ -207,15 +191,13 @@ if __name__ == "__main__":
             
             
             # if cnt % int(720 / batch_size) == 0:       # 每个物体有8×360×1/4 = 720张test， batch=16; 45轮后换物体
-            x, y, azimuth = batch
+            x, y, azimuth, distance = batch
             x, y = x.to(device), y.to(device)
             with torch.no_grad():
                 predict = model(x)
             
             y, predict = y.unsqueeze(1), predict.unsqueeze(1)
-            test_loss = (coef_dssim * dssim_criterion(y, predict)  
-                + coef_mae * model.mean_absolute_error_loss(y, predict) 
-                + coef_si * si_criterion(y, predict))
+            test_loss = model.mean_absolute_error_loss(y, predict) 
             test_seen_loss.append(test_loss.item())
                 
                 # visualize
@@ -232,23 +214,45 @@ if __name__ == "__main__":
         if test_seen_loss < best_seen_loss:
             best_seen_loss = test_seen_loss
             torch.save(model.state_dict(), log_dir + f"/best_seen_model_e{e}.pth")
-
+        '''
+        
+        '''
         # test on unseen dataset
         save_dir = log_dir + "/images/predict_unseen"
         cnt = 0
         test_unseen_loss = []
+        
+        # 统计不同区域的mean error
+        region_error = np.zeros((11, 36))
+        region_cnt = np.zeros((11, 36))
+        angles=[i for i in range(360)]
+        angle_bins  = angles[::10]
+        distances = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]
+
         for i, batch in enumerate(tqdm(test_unseen_dataloader, desc="test unseen:")):
             # if cnt % int(2880 / batch_size) == 0:  # 每物体2880张，共11520 test , 4物体，batch=16; 
-            x, y, azimuth = batch
+            x, y, azimuth, distance = batch
             x, y = x.to(device), y.to(device)
             with torch.no_grad():
                 predict = model(x)
 
             y, predict = y.unsqueeze(1), predict.unsqueeze(1)
-            test_loss = (coef_dssim * dssim_criterion(y, predict)  
-                + coef_mae * model.mean_absolute_error_loss(y, predict) 
-                + coef_si * si_criterion(y, predict))
+            test_loss = model.mean_absolute_error_loss(y, predict)
+            
             test_unseen_loss.append(test_loss.item())
+            
+            for  k in range(len(x)):
+                azi_idx = return_bin_idx(azimuth[k], angle_bins, 5)
+                dis = distance[k]
+                match = re.search(r'\d+\.?\d*', dis)
+                if match:
+                    number = float(match.group())  # 转换为浮点数
+                    # print("提取到的数字:", number)
+                else:
+                    print("未找到数字")
+                dis_idx = return_bin_idx(number, distances, 0.25)
+                region_cnt[dis_idx, azi_idx] += 1
+                region_error[dis_idx, azi_idx] += test_loss.item()
             
             # visualize
             j = 0
@@ -260,20 +264,43 @@ if __name__ == "__main__":
         test_unseen_losses.append(test_unseen_loss)
         print(f"epoch {e}, test unseen loss: ", test_unseen_loss)
         
+        region_error_mean = np.zeros((11, 36))
+        region_error_mean[region_cnt > 0] = region_error[region_cnt > 0] / region_cnt[region_cnt > 0]
+        print(f"unseen error arrsy: {region_error_mean}")
+        # 绘制热力图
+        plt.figure(figsize=(18, 3))  # 宽度调大以适应360列
+        im = plt.imshow(region_error_mean, 
+                        cmap='hot',  # 颜色映射
+                        aspect='auto',   # 自动调整纵横比防止变形
+                        interpolation='none')  # 禁用插值保持清晰边界
+        plt.colorbar(im, label='error')  # 添加颜色条
+        plt.title('unseen prediction mean error with diff input')
+        plt.xlabel('azimuth (0-359)')
+        plt.ylabel('distance')
+        plt.savefig(log_dir+"/unseen_pred_mean_error.png", dpi=300, bbox_inches='tight')  # 保存高清图
+    
         # save
         if test_unseen_loss < best_loss:
             best_loss = test_unseen_loss
             torch.save(model.state_dict(), log_dir + f"/best_unseen_model_e{e}.pth")
-        # '''
+        '''
         
         # test on real dataset
         save_dir = log_dir + "/images/predict_real"
         cnt = 0
         test_real_loss = []
+        
+        # 统计不同区域的mean error
+        region_error = np.zeros((11, 36))
+        region_cnt = np.zeros((11, 36))
+        angles=[i for i in range(360)]
+        angle_bins  = angles[::10]
+        distances = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]
+        
         for i, batch in enumerate(tqdm(test_real_dataloader, desc="test real: ")):
             
             # if cnt % int(2880 / batch_size) == 0:  
-            x, y, mask = batch
+            x, y, mask, dis_idx, azi_idx = batch
             x, y, mask = x.to(device), y.to(device), mask.to(device)
             
             idx = 3 if mode == "8dis" else 0
@@ -285,11 +312,13 @@ if __name__ == "__main__":
 
             y, predict = y.unsqueeze(1), predict.unsqueeze(1)
             mask = mask.unsqueeze(1)
-            test_loss = (coef_dssim * dssim_criterion(y*mask, predict*mask)  
-                + coef_mae * model.mean_absolute_error_loss(y*mask, predict*mask) 
-                + coef_si * si_criterion(y*mask, predict*mask))
+            test_loss = model.mean_absolute_error_loss(y*mask, predict*mask)
             test_real_loss.append(test_loss.item())
             
+            for k in range(len(x)):
+                region_cnt[dis_idx, azi_idx] += 1
+                region_error[dis_idx, azi_idx] += test_loss.item()
+                
             # visualize
             for j in range(y.shape[0]):
                 if cnt % 5 == 0:
@@ -301,6 +330,22 @@ if __name__ == "__main__":
         test_real_losses.append(test_real_loss)
         print(f"epoch {e}, test real loss: ", test_real_loss)
         
+        region_error_mean = np.zeros((11, 36))
+        region_error_mean[region_cnt > 0] = region_error[region_cnt > 0] / region_cnt[region_cnt > 0]
+        print(f"real data, error arrsy: {region_error_mean}")
+        # 绘制热力图
+        plt.figure(figsize=(18, 3))  # 宽度调大以适应360列
+        im = plt.imshow(region_error_mean, 
+                        cmap='hot',  # 颜色映射
+                        aspect='auto',   # 自动调整纵横比防止变形
+                        interpolation='none')  # 禁用插值保持清晰边界
+        plt.colorbar(im, label='error')  # 添加颜色条
+        plt.title('real prediction mean error with diff input')
+        plt.xlabel('azimuth (0-359)')
+        plt.ylabel('distance')
+        plt.savefig(log_dir+"/real_pred_mean_error.png", dpi=300, bbox_inches='tight')  # 保存高清图
+    
+    
         # save
         if test_real_loss < best_real_loss:
             best_real_loss = test_real_loss
@@ -309,6 +354,10 @@ if __name__ == "__main__":
         print("train loss: ", train_losses)
         print("test seen loss: ", test_seen_losses)
         print("test unseen loss: ", test_unseen_losses)
+        
+        
+        if eval_only:
+            break
     torch.save(model.state_dict(), log_dir + "/last_model.pth")
     
     print("final train loss: ", train_losses)

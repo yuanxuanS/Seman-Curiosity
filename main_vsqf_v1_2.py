@@ -21,7 +21,6 @@ from src.policy_rl.agents.utils.vsqf_prediction import Vsqf_pred
 from src.policy_rl.agents.utils.orient_prediction import Orient_pred
 from PIL import Image
 from vqf_train import visualize
-import torch.nn as nn
 
 def main():
     args = get_args()
@@ -54,7 +53,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -74,6 +73,8 @@ def main():
     l_episode_rewards = []
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
+    per_step_rewards_score_incs = deque(maxlen=1000)
+    per_step_rewards_score_abs = deque(maxlen=1000)
     
     l_value_losses = deque(maxlen=1000)
     l_action_losses = deque(maxlen=1000)
@@ -96,8 +97,6 @@ def main():
     maps = Maps_Env(args)
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
-    
-    local_w, local_h = maps.local_w, maps.local_h
     
     # Initializing VSQF Maps
     vsqf_maps = Vsqf_Maps_Env(args)
@@ -146,13 +145,8 @@ def main():
 
     if args.agent == "rl":
         # Local policy observation space
-        es = 1      # extra size: orientation
-        ngc = 4 + args.num_sem_categories + 1
-        
-        l_observation_space = gym.spaces.Box(0, 1,      
-                                         (ngc,
-                                          local_w,
-                                          local_h), dtype='uint8')
+        es = 3      # extra size: x, y, orientation
+        l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
         l_action_space = envs.get_action_space()[0]
 
         # local policy recurrent layer size
@@ -160,10 +154,10 @@ def main():
 
         # Local policy: TODO
         l_policy = RL_Policy(l_observation_space.shape, l_action_space,
-                            model_type=2,
+                            model_type=1,
                             base_kwargs={'recurrent': args.use_recurrent_local,
                                         'hidden_size': l_hidden_size,
-                                        'num_sem_categories': args.num_sem_categories,  # TODO
+                                        'num_sem_categories': args.num_sem_categories
                                         }).to(device)
         
         l_agent = algo.PPO(l_policy, args.clip_param, args.ppo_epoch,
@@ -191,28 +185,21 @@ def main():
             l_policy.eval()
     
         # Get local policy input
-        local_input = torch.zeros(num_scenes, ngc, local_w, local_h)
+        # local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
+        local_input = obs[:, :3, ...]
         local_orientation = torch.zeros(num_scenes, 1).long()
-
-        # local_input[:, 0:4, :, :] = local_map[:, 0:4, :, :].detach()  # local_map的 obstacle, explored, curr loc, past loc
-        # # TODO: add vsqf
-        # local_input[:, 4:8, :, :] = nn.MaxPool2d(args.global_downscaling)(
-        #     full_map[:, 0:4, :, :])     # full_map的 obstacle, explored, curr loc, past loc
-        # local_input[:, 8:, :, :] = local_map[:, 4:, :, :].detach()     # local semantic map
-        local_input[:, 0:4, :, :] = nn.MaxPool2d(args.global_downscaling)(
-            full_map[:, 0:4, :, :])     # full_map的 obstacle, explored, curr loc, past loc
-        local_input[:, 4:4+args.num_sem_categories, :, :] = nn.MaxPool2d(args.global_downscaling)(
-            full_map[:, 4:, :, :]).detach()     # full_map的 semantic map
-        local_input[:, 4+args.num_sem_categories, :, :] = nn.MaxPool2d(args.global_downscaling)(
-            full_vsqf_map[:, 0, :, :]).detach()
+        local_xy = torch.zeros(num_scenes, 2)
         
-        locs = local_pose.cpu().numpy()
-        # locs = full_pose.cpu().numpy()      # 使用全局pose
+        # locs = local_pose.cpu().numpy()
+        locs = full_pose.cpu().numpy()      # 使用全局pose
         for e in range(num_scenes):
             local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
+            local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
             
         extras = torch.zeros(num_scenes, es)
-        extras[:, 0] = local_orientation[:, 0]
+        # extras[:, 0] = local_orientation[:, 0]
+        extras[:, 2] = local_orientation[:, 0]
+        extras[:, :2] = local_xy[:]
 
         l_rollouts.obs[0].copy_(local_input)   # 
         l_rollouts.extras[0].copy_(extras)
@@ -269,11 +256,11 @@ def main():
     logging.info("Start date and time: %s", start_datetime)
     
     l_reward = torch.zeros(num_scenes).to(device)
-    l_cumu_r = torch.zeros(num_scenes).to(device)
-    l_cumu_dis_r = torch.zeros(num_scenes).to(device)
-    l_cumu_vsqf_r = torch.zeros(num_scenes).to(device)
     last_scores = torch.zeros(num_scenes).to(device)
-
+    r_score_incs = torch.zeros(num_scenes).to(device)
+    r_score_abs = torch.zeros(num_scenes).to(device)
+    # scores_mean = torch.zeros(num_scenes).to(device)
+    # scores_num = torch.zeros(num_scenes).to(device)
     
     torch.set_grad_enabled(False)
 
@@ -292,35 +279,32 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_scores
         else:
-            l_scores = torch.tensor(vsqf_maps.get_vsqf_score()).to(device)
-            sample_reward = l_scores - last_scores
-            l_reward = sample_reward
+            l_scores = torch.tensor(vsqf_maps.get_vsqf_score(occupy=True)).to(device)
+            # score_increasement = l_scores - last_scores
+            score_abs = l_scores
+            # l_reward = score_increasement + score_abs
+            l_reward = score_abs
             
+            # r_score_incs += score_increasement
+            r_score_abs += score_abs
+            # l_reward = l_reward if l_reward > 0 else torch.zeros_like(l_reward).to(device)
+            # print(f"reward {l_reward}")
+            # update
+            # scores_mean = (scores_mean * scores_num + l_scores) / (scores_num + 1)
+            # scores_num = torch.where(l_scores)
 
-        l_cumu_r += l_reward        
         # ------------------------------------------------------------------ 
         # update local input, next state
-        # locs = full_pose.cpu().numpy()
-        locs = local_pose.cpu().numpy()
+        locs = full_pose.cpu().numpy()
         
         if args.agent == "rl":
             for e in range(num_scenes):
                 local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
+                local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
                 
-            # local_input[:, 0:4, :, :] = local_map[:, 0:4, :, :].detach()  # local_map的 obstacle, explored, curr loc, past loc
-            # # TODO: add vsqf
-            # local_input[:, 4:8, :, :] = nn.MaxPool2d(args.global_downscaling)(
-            #     full_map[:, 0:4, :, :])     # full_map的 obstacle, explored, curr loc, past loc
-            # local_input[:, 8:, :, :] = local_map[:, 4:, :, :].detach()     # local semantic map
-
-            local_input[:, 0:4, :, :] = nn.MaxPool2d(args.global_downscaling)(
-                full_map[:, 0:4, :, :])     # full_map的 obstacle, explored, curr loc, past loc
-            local_input[:, 4:4+args.num_sem_categories, :, :] = nn.MaxPool2d(args.global_downscaling)(
-                full_map[:, 4:, :, :]).detach()     # full_map的 semantic map
-            local_input[:, 4+args.num_sem_categories, :, :] = nn.MaxPool2d(args.global_downscaling)(
-                full_vsqf_map[:, 0, :, :]).detach()
-            
+            local_input = obs[:, :3, ...]       # rgb
             extras[:, 0] = local_orientation[:, 0]
+            extras[:, :2] = local_xy[:]
             # print(f"input sxtras: {extras}")
         # Add samples to local policy storage
         reward = l_reward
@@ -335,19 +319,28 @@ def main():
         # 
         reward_mean = np.mean(reward.cpu().numpy())
         l_reward_mean = np.mean(l_reward.cpu().numpy())
+        # r_score_incs_mean = np.mean(score_increasement.cpu().numpy())
+        r_score_abs_mean = np.mean(score_abs.cpu().numpy())
         per_step_rewards.append(reward_mean)
+        # per_step_rewards_score_incs.append(r_score_incs_mean)
+        per_step_rewards_score_abs.append(r_score_abs_mean)
         per_step_l_rewards.append(l_reward_mean)
+
+        # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
+        # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         
         if done[0]:
-            r_ = np.mean(l_cumu_r.cpu().numpy())
-
+            r_ = np.mean(l_reward.cpu().numpy())
+            r_score_incs_ = np.mean(r_score_incs.cpu().numpy())
+            r_score_abs_ = np.mean(r_score_abs.cpu().numpy())
+            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}, score increase r={r_score_incs_}, score abs r={r_score_abs_}")
+            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}, score increase r={r_score_incs_}, score abs r={r_score_abs_}")
             l_episode_rewards.append(r_)
-            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
-            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
-            
+
             l_reward = torch.zeros(num_scenes).to(device)
             last_scores = l_reward
-            l_cumu_r = torch.zeros(num_scenes).to(device)
+            r_score_incs = torch.zeros(num_scenes).to(device)
+            r_score_abs = torch.zeros(num_scenes).to(device)
             
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
@@ -483,8 +476,30 @@ def main():
                         np.min(per_step_rewards),
                         np.max(per_step_rewards))
                 ])
+            
+            # log += "\n\tscore incs Rewards:"
 
-                
+            # if len(per_step_rewards_score_incs) > 0:
+            #     log += " ".join([
+            #         " per step mean/med/min/max, score incs rew:",
+            #         "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+            #             np.mean(per_step_rewards_score_incs),
+            #             np.median(per_step_rewards_score_incs),
+            #             np.min(per_step_rewards_score_incs),
+            #             np.max(per_step_rewards_score_incs))
+            #     ])
+            log += "\n\tRewards:"
+
+            if len(per_step_rewards_score_abs) > 0:
+                log += " ".join([
+                    " per step mean/med/min/max, score abs rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(per_step_rewards_score_abs),
+                        np.median(per_step_rewards_score_abs),
+                        np.min(per_step_rewards_score_abs),
+                        np.max(per_step_rewards_score_abs))
+                ])
+
             log += "\n\tLosses:"
             if len(l_value_losses) > 0 and not args.eval:
                 log += " ".join([
@@ -505,9 +520,7 @@ def main():
                         np.min(l_episode_rewards),
                         np.max(l_episode_rewards))
                     ])
-            
-            
-                    
+                
             print(log)
             logging.info(log)
 
