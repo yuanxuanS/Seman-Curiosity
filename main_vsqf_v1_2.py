@@ -53,7 +53,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -279,7 +279,7 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_scores
         else:
-            l_scores = torch.tensor(vsqf_maps.get_vsqf_score()).to(device)
+            l_scores = torch.tensor(vsqf_maps.get_vsqf_score(occupy=True)).to(device)
             # score_increasement = l_scores - last_scores
             score_abs = l_scores
             # l_reward = score_increasement + score_abs
