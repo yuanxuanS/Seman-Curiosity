@@ -20,7 +20,7 @@ import json
 from src.policy_rl.agents.utils.vsqf_prediction import Vsqf_pred
 from src.policy_rl.agents.utils.orient_prediction import Orient_pred
 from PIL import Image
-from train_vqf import visualize
+from vqf_train import visualize
 import torch.nn as nn
 
 def main():
@@ -72,6 +72,8 @@ def main():
     finished = np.zeros((args.num_processes))
 
     l_episode_rewards = []
+    l_episode_dis_r = []
+    l_episode_vsqf_r = []
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
     per_step_dis_rewards = deque(maxlen=1000)
@@ -118,7 +120,7 @@ def main():
     # check if find goal
     find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
     find_goal = find_goal.to(vsqf.device)
-    vsqf = find_goal[:, None, None] * vsqf      # 仅sample stage第一帧更新vsqf，后面不更新
+    vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
     
     # update vsqf maps
@@ -271,6 +273,9 @@ def main():
     logging.info("Start date and time: %s", start_datetime)
     
     l_reward = torch.zeros(num_scenes).to(device)
+    l_cumu_r = torch.zeros(num_scenes).to(device)
+    l_cumu_dis_r = torch.zeros(num_scenes).to(device)
+    l_cumu_vsqf_r = torch.zeros(num_scenes).to(device)
     last_scores = torch.zeros(num_scenes).to(device)
 
     
@@ -290,6 +295,7 @@ def main():
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_scores
+            
         else:
             sample_stage = torch.from_numpy(np.asarray(
                 [infos[env_idx]['sample_stage'] for env_idx
@@ -302,12 +308,15 @@ def main():
             # distance reward
             distance_rewards = distance_rewards.to(device)
             distance_rewards = distance_rewards * (1 - sample_stage)
-            # log
             
             l_reward = sample_reward + distance_rewards
+            # log
+            l_cumu_dis_r += distance_rewards
+            l_cumu_vsqf_r += sample_reward
+            
 
             # log
-            
+        l_cumu_r += l_reward
         # ------------------------------------------------------------------ 
         # update local input, next state
         # locs = full_pose.cpu().numpy()
@@ -348,20 +357,28 @@ def main():
         per_step_rewards.append(reward_mean)
         per_step_l_rewards.append(l_reward_mean)         
         if int(sample_stage.sum().cpu().numpy()) != num_scenes:
-            per_step_dis_rewards.append(torch.sum(distance_rewards).cpu().numpy() / (num_scenes - sample_stage.sum() + 1e-5))
+            per_step_dis_rewards.append(torch.sum(distance_rewards).cpu().numpy() / (num_scenes - sample_stage.sum() + 1e-5).cpu().numpy())
         if sample_stage.sum() > 0:
-            per_step_vsqf_rewards.append(torch.sum(sample_reward).cpu().numpy() / (sample_stage.sum() + 1e-5))
+            per_step_vsqf_rewards.append(torch.sum(sample_reward).cpu().numpy() / (sample_stage.sum() + 1e-5).cpu().numpy())
         # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         
         if done[0]:
-            r_ = np.mean(l_reward.cpu().numpy())
-            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
-            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
+            r_ = np.mean(l_cumu_r.cpu().numpy())            
+            dis_r = np.mean(l_cumu_dis_r.cpu().numpy())
+            vsqf_r = np.mean(l_cumu_vsqf_r.cpu().numpy())
+            
             l_episode_rewards.append(r_)
+            l_episode_dis_r.append(dis_r)
+            l_episode_vsqf_r.append(vsqf_r)
+            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}, dis reward={dis_r}, vsqf reward={vsqf_r}")
+            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_},  dis reward={dis_r}, vsqf reward={vsqf_r}")
 
             l_reward = torch.zeros(num_scenes).to(device)
             last_scores = l_reward
+            l_cumu_r = torch.zeros(num_scenes).to(device)
+            l_cumu_vsqf_r = torch.zeros(num_scenes).to(device)
+            l_cumu_dis_r = torch.zeros(num_scenes).to(device)
             
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
@@ -542,7 +559,29 @@ def main():
                         np.min(l_episode_rewards),
                         np.max(l_episode_rewards))
                     ])
-                
+            
+            if done[0]:
+                if len(l_episode_dis_r) > 0:
+                    log += " ".join([
+                    " episode mean/med/min/max, dis rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(l_episode_dis_r),
+                        np.median(l_episode_dis_r),
+                        np.min(l_episode_dis_r),
+                        np.max(l_episode_dis_r))
+                    ])
+            
+            if done[0]:
+                if len(l_episode_vsqf_r) > 0:
+                    log += " ".join([
+                    " episode mean/med/min/max, rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(l_episode_vsqf_r),
+                        np.median(l_episode_vsqf_r),
+                        np.min(l_episode_vsqf_r),
+                        np.max(l_episode_vsqf_r))
+                    ])
+                        
             print(log)
             logging.info(log)
 

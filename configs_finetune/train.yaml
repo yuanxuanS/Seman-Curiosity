@@ -3,11 +3,12 @@ defaults:
   - training: pipeline_gt #pipeline_semantic
   - hydra: default
 
-notes: nofinetune
+notes: vsqf_v3_1
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
 
 # data
-sample_path:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random4vsqf/episodes_data
+sample_path:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v3_1_eval/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random4vsqf/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v1_eval_re/episodes_data
 
 
@@ -18,13 +19,13 @@ testset_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/vsqf_te
 
 # training params
 update_target: True   # TODO
-n_iterations: 0
+n_iterations: 1
 checkpoint_path:  
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-07-20/07-20-11-03-07_gt_consensus_vanilla_bs_8_notes_score/iteration-0.ckpt
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-01-29/01-29-16-33-01_gt_consensus_vanilla_bs_16_notes_In640/checkpoints/epoch=09.ckpt
 
 # training device
-gpus: [1,]   # 指定gpu: [1,2,3] 多gpu训练  
+gpus: [3,]   # 指定gpu: [1,2,3] 多gpu训练  
 
 base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
 

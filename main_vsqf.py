@@ -20,7 +20,7 @@ import json
 from src.policy_rl.agents.utils.vsqf_prediction import Vsqf_pred
 from src.policy_rl.agents.utils.orient_prediction import Orient_pred
 from PIL import Image
-from train_vqf import visualize
+from vqf_train import visualize
 
 def main():
     args = get_args()

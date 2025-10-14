@@ -16,8 +16,9 @@ from src.constants import coco_categories_mapping
 import numpy as np
 
 def load_data_imgs(dataset_path, save_pth):
-    if not os.path.exists(save_pth):
-        os.mkdir(save_pth)
+    if save_pth != None:
+        if not os.path.exists(save_pth):
+            os.mkdir(save_pth)
 
     transform = A.Compose(
                 get_transform("none"),

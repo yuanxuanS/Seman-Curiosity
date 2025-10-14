@@ -29,7 +29,7 @@ class Vsqf_Maps_Env:
         self.local_map = torch.zeros(num_scenes, nc, self.local_w,
                             self.local_h).float().to(device)
         self.full_map = torch.zeros(num_scenes, nc, self.full_w, self.full_h).float().to(device)
-    
+        self.visited = torch.zeros(num_scenes, 1, self.full_w, self.full_h).float().to(device)
         # Initial full and local pose
         self.full_pose = torch.zeros(num_scenes, 3).float().to(device)
         self.local_pose = torch.zeros(num_scenes, 3).float().to(device)
@@ -54,6 +54,7 @@ class Vsqf_Maps_Env:
         从fullmap初始化local map
         '''
         self.full_map.fill_(0.)
+        self.visited.fill_(0.)
         self.full_pose.fill_(0.)
         self.full_pose[:, :2] = self.args.map_size_cm / 100.0 / 2.0
 
@@ -65,7 +66,6 @@ class Vsqf_Maps_Env:
                             int(c * 100.0 / self.args.map_resolution)]
 
             self.full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
-
             self.lmb[e] = self.get_local_map_boundaries((loc_r, loc_c),
                                               (self.local_w, self.local_h),
                                               (self.full_w, self.full_h))
@@ -83,6 +83,7 @@ class Vsqf_Maps_Env:
     
     def _init_map_and_pose_for_env(self, e):
         self.full_map[e].fill_(0.)
+        self.visited.fill_(0.)
         self.full_pose[e].fill_(0.)
         self.full_pose[e, :2] = self.args.map_size_cm / 100.0 / 2.0
 
@@ -93,7 +94,7 @@ class Vsqf_Maps_Env:
                         int(c * 100.0 / self.args.map_resolution)]
 
         self.full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
-
+        
         self.lmb[e] = self.get_local_map_boundaries((loc_r, loc_c),
                                           (self.local_w, self.local_h),
                                           (self.full_w, self.full_h))
@@ -187,13 +188,16 @@ class Vsqf_Maps_Env:
         # azimuth = torch.tensor([infos[env_idx]['azimuth'] for env_idx in range(self.num_scenes)])
         depth_obj = np.concatenate([infos[env_idx]['depth_obj'] for env_idx in range(self.num_scenes)], axis=0)
         
-        # 非 sample stage， vsqf map全0
-        sample_stage = torch.from_numpy(np.asarray(
-                [infos[env_idx]['sample_stage'] for env_idx
-                in range(self.num_scenes)])
-            ).float().to(self.device)
-        self.local_map  = self.local_map * sample_stage[:, None, None, None]
-        self.full_map  = self.full_map * sample_stage[:, None, None, None]
+        if self.args.vsqf_version == "v1":
+            pass
+        else:
+            # 非 sample stage， vsqf map全0
+            sample_stage = torch.from_numpy(np.asarray(
+                    [infos[env_idx]['sample_stage'] for env_idx
+                    in range(self.num_scenes)])
+                ).float().to(self.device)
+            self.local_map  = self.local_map * sample_stage[:, None, None, None]
+            self.full_map  = self.full_map * sample_stage[:, None, None, None]
         
         # agent当前观察到的自我中心的map
         local_map, _, local_pose = \
@@ -214,7 +218,17 @@ class Vsqf_Maps_Env:
         # update 
         self.local_map = local_map
         self.local_pose = local_pose
-
+        
+        # uopdate visited
+        for e in range(self.num_scenes):
+            locs = self.full_pose[e].cpu().numpy()
+            r, c = locs[1], locs[0]
+            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                            int(c * 100.0 / self.args.map_resolution)]
+            loc_r = min(self.full_w - 1, loc_r)
+            loc_c = min(self.full_w - 1, loc_c)
+            self.visited[e, 0, loc_r, loc_c] += 1.0  
+            
         return local_map, local_pose
     
     def update_local_vsqf_map(self, obs, infos):
@@ -252,7 +266,15 @@ class Vsqf_Maps_Env:
 
         return local_map, local_pose
     
-    def get_vsqf_score(self):
+    def get_best_region(self):
+        
+        # TODO: 根据region选取还是根据 loc选取
+        maps_flat = self.full_map.reshape(self.num_scenes, -1)
+        flat_indices = torch.argmax(maps_flat, dim=1)
+        row_indices, col_indices = np.unravel_index(flat_indices.cpu().numpy(), (self.full_map.shape[-2], self.full_map.shape[-1]))
+        return row_indices, col_indices
+    
+    def get_vsqf_score(self, occupy=True):
         locs = self.full_pose.cpu().numpy()
         scores = []
         for e in range(self.num_scenes):
@@ -261,7 +283,13 @@ class Vsqf_Maps_Env:
                             int(c * 100.0 / self.args.map_resolution)]
             loc_r = min(self.full_w - 1, loc_r)
             loc_c = min(self.full_w - 1, loc_c)
-            score = self.full_map[e, :, loc_r, loc_c] 
+            if occupy:  # 重复访问区域惩罚
+                if self.visited[e, :, loc_r, loc_c] > 1.0:
+                    score = -0.01 * self.visited[e, :, loc_r, loc_c]     # 访问次数越多，惩罚越大
+                else:
+                    score = self.full_map[e, :, loc_r, loc_c]
+            else:
+                score = self.full_map[e, :, loc_r, loc_c]
             scores.append(score)
         return scores
 if __name__ == "__main__":
