@@ -266,6 +266,14 @@ class Vsqf_Maps_Env:
 
         return local_map, local_pose
     
+    def get_best_region(self):
+        
+        # TODO: 根据region选取还是根据 loc选取
+        maps_flat = self.full_map.reshape(self.num_scenes, -1)
+        flat_indices = torch.argmax(maps_flat, dim=1)
+        row_indices, col_indices = np.unravel_index(flat_indices.cpu().numpy(), (self.full_map.shape[-2], self.full_map.shape[-1]))
+        return row_indices, col_indices
+    
     def get_vsqf_score(self, occupy=True):
         locs = self.full_pose.cpu().numpy()
         scores = []
