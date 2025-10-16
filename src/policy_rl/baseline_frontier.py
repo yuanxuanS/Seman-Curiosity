@@ -219,7 +219,7 @@ class Frontier:
         if get_in_stg:
             # print(f"get in short time goal")
             pass
-        return np.array(action), self.goals, self.short_time_goals
+        return np.array(action), self.goals[env_idx], self.short_time_goals[env_idx]
     def get_determine_action(self, p_input, goal, env_idx):
         '''
         object-oriented 里面的determin policy

@@ -308,7 +308,7 @@ class Semantic_Mapping(nn.Module):
         # get geo semantic voxel
         depth = obs[:, 3, :, :]
 
-        point_cloud_t = du.get_point_cloud_from_z_t(
+        point_cloud_t = du.get_point_cloud_from_z_t(    # point_cloud_t 维度2：高度
             depth, self.camera_matrix, self.device, scale=self.du_scale)
 
         agent_view_t = du.transform_camera_view_t(

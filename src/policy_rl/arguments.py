@@ -143,7 +143,7 @@ def get_args():
                         help="Semantic prediction confidence threshold") 
     
     # Mapping
-    parser.add_argument('--global_downscaling', type=int, default=2)    # full map缩放为local map大小，可能不需要？
+    parser.add_argument('--global_downscaling', type=int, default=2)    # full_map缩放 downscaling倍数，得到local_map实际大小
     parser.add_argument('--vision_range', type=int, default=100)
     parser.add_argument('--map_resolution', type=int, default=5)        # 每一网格的实际大小
     parser.add_argument('--du_scale', type=int, default=1,

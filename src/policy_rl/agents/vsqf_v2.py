@@ -365,12 +365,6 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                 goal_x = goal_r
                 goal_y = goal_c
                 
-                st_goal = inputs['short_time_goal']
-                st_goal_r, st_goal_c = st_goal
-                st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
-                st_goal_x = st_goal_r
-                st_goal_y = st_goal_c
-
                 size = self.visited_vis.shape[0]
                 square_size = 20
                 half_size = square_size // 2
@@ -378,15 +372,31 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                     for j in range(goal_y - half_size, goal_y + half_size + 1):
                         i = min(i, size-1)
                         j = min(j, size-1)
-                        sem_map_full[i, j] = 12
+                        if not inputs['sample_stage']:
+                            sem_map_full[i, j] = 12
+                        else:
+                            sem_map_full[i, j] = 16
+                            
+                if 'short_time_goal' in inputs:
+                    st_goal = inputs['short_time_goal']
+                    st_goal_r, st_goal_c = st_goal
+                    st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
+                    st_goal_x = st_goal_r
+                    st_goal_y = st_goal_c
+
+                
                         
-                square_size = 10
-                half_size = square_size // 2
-                for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
-                    for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
-                        i = min(i, size-1)
-                        j = min(j, size-1)
-                        sem_map_full[i, j] = 12
+                    square_size = 10
+                    half_size = square_size // 2
+                    for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
+                        for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
+                            i = min(i, size-1)
+                            j = min(j, size-1)
+                            if not inputs['sample_stage']:
+                                sem_map_full[i, j] = 12
+                            else:
+                                sem_map_full[i, j] = 16
+                            
                         
 
         # 绘制语义地图
