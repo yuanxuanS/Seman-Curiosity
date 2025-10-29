@@ -47,8 +47,8 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return reward
 
-    def step_and_preprocess(self, action, inputs):
-        obs, reward, done, info = self.venv.step_and_preprocess(action, inputs)
+    def step_and_preprocess(self, action):
+        obs, reward, done, info = self.venv.step_and_preprocess(action)
         obs = torch.from_numpy(obs).float().to(self.device)
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info

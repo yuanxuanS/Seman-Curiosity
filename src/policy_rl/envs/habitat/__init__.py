@@ -13,6 +13,7 @@ from src.policy_rl.agents.vsqf import Vsqf_Env_Agent
 from src.policy_rl.agents.vsqf_v1_1 import Vsqf_v1_1_Env_Agent
 from src.policy_rl.agents.vsqf_v2 import Vsqf_v2_Env_Agent
 from src.policy_rl.agents.vsqf_v3 import Vsqf_v3_Env_Agent
+from src.policy_rl.agents.active_cam import Active_cam_Agent
 from .curio_env import Seman_Curio_Env
 from .sample_obj_env import Sample_Obj_Env
 from .utils.vector_env import VectorEnv, ThreadedVectorEnv
@@ -51,6 +52,10 @@ def make_env_fn(args, config_env, rank):
                         dataset=dataset)
     elif args.env == "vsqf_v3_exp":
         env = Vsqf_v3_Env_Agent(args=args, rank=rank,
+                        config_env=config_env,
+                        dataset=dataset)
+    elif args.env == "active_camera":
+        env = Active_cam_Agent(args=args, rank=rank,
                         config_env=config_env,
                         dataset=dataset)
     else:
@@ -136,7 +141,7 @@ def construct_envs(args):
         config_env.SIMULATOR.AGENT_0.SENSORS = agent_sensors
 
         # Reseting episodes manually, setting high max episode length in sim
-        config_env.ENVIRONMENT.MAX_EPISODE_STEPS = 10000000
+        config_env.ENVIRONMENT.MAX_EPISODE_STEPS = config_env.ENVIRONMENT.MAX_EPISODE_STEPS     # 10000000
         config_env.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = False
 
         config_env.SIMULATOR.RGB_SENSOR.WIDTH = args.env_frame_width
