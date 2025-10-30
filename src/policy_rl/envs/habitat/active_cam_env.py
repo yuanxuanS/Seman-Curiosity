@@ -66,7 +66,7 @@ class Active_cam_Env(habitat.RLEnv):
         self.noise_angle = 60
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         self.scene_name = self.scene_path.split("/")[-1].split(".")[0]
-        vis_file = f'/home/wpp/Seman-Curiosity/vismap0/{self.scene_name}_vismap.txt'
+        vis_file = f'/home/wpp/Seman-Curiosity/vismap/{self.scene_name}_vismap.txt'
         with open(vis_file, 'rb') as f:
             self.vis_map = pickle.load(f)
     def reset(self):
@@ -311,6 +311,7 @@ class Active_cam_Env(habitat.RLEnv):
                     #     valid = self.id_in_view(obs, scene_obj_id)
                         
                     if valid:
+                        self.info['goal_name'] = goal_name
                         return obs
     def filter_object(self, observations, target_obj_ids):
         '''

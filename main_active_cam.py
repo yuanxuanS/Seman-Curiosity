@@ -49,7 +49,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
     
     # clip model
     clip_model, preprocess = clip.load("ViT-L/14", device=device)
@@ -226,8 +226,9 @@ def main():
         goal_idxs = [info['goal_name'] for info in infos]
         l_scores = clip_score(images, goal_idxs)
         l_reward = l_scores - last_scores
-        l_reward = torch.where(done, (last_scores - init_scores) * 1.5, l_reward)
-        l_reward = torch.where(torch.from_numpy(wait_env), torch.zeros_like(l_reward), l_reward)
+        final_reward = torch.where((last_scores - init_scores)>0, 5 + last_scores - init_scores, last_scores - init_scores)
+        l_reward = torch.where(torch.from_numpy(done).to(device), final_reward, l_reward)
+        l_reward = torch.where(torch.from_numpy(wait_env.astype(bool)).to(device), torch.zeros_like(l_reward).to(device), l_reward)
         
         # 计算奖励后再更新 init_scores
         if l_step == args.num_local_steps - 1:
@@ -248,7 +249,10 @@ def main():
         
         # record
         cumulative_reward += l_reward
-        l_reward_mean = np.sum(l_reward.cpu().numpy()) / (l_reward.cpu().numpy() > 0).sum()
+        if wait_env.sum() < num_scenes:
+            l_reward_mean = np.sum(l_reward.cpu().numpy()) / (~wait_env.astype(bool)).sum()
+        else:
+            l_reward_mean = 0
         per_step_l_rewards.append(l_reward_mean)
         
         for e, x in enumerate(done):
