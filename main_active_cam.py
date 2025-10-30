@@ -14,6 +14,9 @@ import cv2
 import json
 from src.policy_rl.model import RL_Policy
 from  src.policy_rl import algo 
+from PIL import Image
+import clip
+from src.vqf_constants import target_coco_categories
 
 def main():
     args = get_args()
@@ -47,7 +50,30 @@ def main():
     num_episodes = int(args.num_eval_episodes)
     
     device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
-
+    
+    # clip model
+    clip_model, preprocess = clip.load("ViT-L/14", device=device)
+    from src.vqf_constants import target_coco_categories
+    
+    # text_features = {}
+    # for i in target_coco_categories.keys():
+    #     text = clip.tokenize([f"a photo contains a {i}." ]).to(device)
+    #     text_features[i] = text
+    
+    text_features = clip.tokenize([f"a photo contains a {goal}." for goal in ['chair','couch', 'bed','toilet', 'refrigerator']]).to(device)
+    def clip_score(imgs, scene_goal_idx):
+        '''
+        img: tensors
+        scene_goal_idx: list, target idx of goal, defined in target_coco_categories
+        '''
+        mapping = {"chair":0, "couch":1, "bed":2, "toilet":3, "refrigerator":4}
+        scene_goal_idx_ = [mapping[goal_idx] for goal_idx in scene_goal_idx]
+        scores = []
+        with torch.no_grad():
+            logits_per_image, logits_per_text = clip_model(imgs, text_features)
+            for i in range(num_scenes):
+                scores.append(logits_per_image[i, scene_goal_idx_[i]].item())
+        return torch.tensor(scores).to(device)
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
 
@@ -61,6 +87,7 @@ def main():
         pass # TODO: 
     
     finished = np.zeros((args.num_processes))
+    wait_env = np.zeros((args.num_processes))
     
     l_episode_rewards = []
     per_step_l_rewards = deque(maxlen=1000)
@@ -74,6 +101,22 @@ def main():
     torch.set_num_threads(1)
     envs = make_vec_envs(args)      
     obs, infos = envs.reset()   
+    
+    # process for clip
+    images = []
+    for n in range(num_scenes):
+        pil_img = Image.fromarray(obs[n, :3, ...].cpu().numpy().transpose(1,2,0).astype(np.uint8))
+        image = preprocess(pil_img).to(device)
+        images.append(image)
+    images = torch.stack(images)
+    
+    
+    last_scores = torch.zeros(num_scenes).to(device)
+    init_scores = torch.zeros(num_scenes).to(device)
+    # clip score 初始化
+    goal_idxs = [info['goal_name'] for info in infos]
+    init_scores = last_scores = clip_score(images, goal_idxs)
+    
     
     torch.set_grad_enabled(False)
     
@@ -136,9 +179,10 @@ def main():
     elif args.agent == "random":
         l_action = np.random.randint(0, 4, num_scenes)
     
+    
     # transition:
     # pred instance, get semantic masks and step env: 
-    obs, _, done, infos = envs.step_and_preprocess(l_action)
+    obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)
     l_action = torch.tensor(l_action)
     
     start = time.time()
@@ -146,8 +190,7 @@ def main():
     logging.info("Start date and time: %s", start_datetime)
     
     l_reward = torch.zeros(num_scenes).to(device)
-    last_scores = torch.zeros(num_scenes).to(device)
-    init_scores = torch.zeros(num_scenes).to(device)
+    
     
     cumulative_reward = torch.zeros(num_scenes).to(device)
     
@@ -164,17 +207,31 @@ def main():
         if finished.sum() == args.num_processes:    # eval over
             break
         
+        
         # ------------------------------------------------------------------
         # Reinitialize variables when episode ends
         l_masks = torch.FloatTensor([0 if x else 1
-                                     for x in done]).to(device)     # objecg navigation任务中， 存在不同时done
+                                     for x in done]).to(device)     # for insert 存在不同时done
+        
+
+        images = []
+        for n in range(num_scenes):
+            pil_img = Image.fromarray(obs[n, :3, ...].cpu().numpy().transpose(1,2,0).astype(np.uint8))
+            image = preprocess(pil_img).to(device)
+            images.append(image)
+        images = torch.stack(images)
+        
         
         # get reward
-        l_scores = torch.zeros(num_scenes).to(device)
+        goal_idxs = [info['goal_name'] for info in infos]
+        l_scores = clip_score(images, goal_idxs)
         l_reward = l_scores - last_scores
-        if done[0]:     
-            l_reward = (l_scores - init_scores) * 5
+        l_reward = torch.where(done, (last_scores - init_scores) * 1.5, l_reward)
+        l_reward = torch.where(torch.from_numpy(wait_env), torch.zeros_like(l_reward), l_reward)
         
+        # 计算奖励后再更新 init_scores
+        if l_step == args.num_local_steps - 1:
+            init_scores = last_scores = l_scores
         # ------------------------------------------------------------------ 
         # update local input, next state
         if args.agent == "rl":
@@ -191,10 +248,13 @@ def main():
         
         # record
         cumulative_reward += l_reward
-        l_reward_mean = np.mean(l_reward.cpu().numpy())
+        l_reward_mean = np.sum(l_reward.cpu().numpy()) / (l_reward.cpu().numpy() > 0).sum()
         per_step_l_rewards.append(l_reward_mean)
         
-        if done[0]:
+        for e, x in enumerate(done):
+            wait_env[e] = 1 if x else wait_env[e]
+            
+        if l_step == args.num_local_steps - 1:
             r_ = np.mean(cumulative_reward.cpu().numpy())
             if step % (args.log_interval*10) == 0:
                 print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
@@ -202,7 +262,8 @@ def main():
             l_episode_rewards.append(r_)
             
             l_reward = torch.zeros(num_scenes).to(device)
-            last_scores = init_scores = cumulative_reward= l_reward
+            cumulative_reward= l_reward
+            wait_env = np.zeros((args.num_processes))
             
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
@@ -229,7 +290,7 @@ def main():
         
         # transition: next state
         # pred instance, get semantic masks and step env
-        obs, _, done, infos = envs.step_and_preprocess(l_action)    # if done ,envs.reset, obs are ones after reset
+        obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
         
         # ------------------------------------------------------------------
@@ -290,7 +351,7 @@ def main():
                         np.mean(l_dist_entropies))
                 ])
                 
-            if done[0]:
+            if l_step == args.num_local_steps - 1:
                 if len(l_episode_rewards) > 0:
                     log += " ".join([
                     " episode mean/med/min/max, rew:",

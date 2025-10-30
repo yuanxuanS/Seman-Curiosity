@@ -558,11 +558,11 @@ class VectorEnv:
         else:
             raise NotImplementedError
 
-    def step_and_preprocess(self, action):
+    def step_and_preprocess(self, action, wait_env):
         self._assert_not_closed()
         self._is_waiting = True
         for e, write_fn in enumerate(self._connection_write_fns):
-            write_fn((STEP_AND_PREPROCESS, ({"action":action[e]})))
+            write_fn((STEP_AND_PREPROCESS, ({"action":action[e], "wait_env":wait_env[e]})))
         results = []
         for read_fn in self._connection_read_fns:
             results.append(read_fn())

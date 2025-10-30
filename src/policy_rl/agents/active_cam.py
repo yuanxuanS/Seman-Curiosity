@@ -67,7 +67,7 @@ class Active_cam_Agent(Active_cam_Env):
         
         return obs, info
     
-    def step_and_preprocess(self, action):
+    def step_and_preprocess(self, action, wait_env):
         """Function responsible for taking the action and
         preprocessing observations
 
@@ -77,7 +77,11 @@ class Active_cam_Agent(Active_cam_Env):
             done (bool): whether the episode has ended
             info (dict): contains timestep
         """
-
+        if wait_env > 0:
+            self.last_action = None
+            self.info["sensor_pose"] = [0., 0., 0.]
+            return np.zeros(self.obs.shape), 0., False, self.info
+        
         # act and step
         # action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         action = {'action': action}
