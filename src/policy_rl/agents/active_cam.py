@@ -63,7 +63,7 @@ class Active_cam_Agent(Active_cam_Env):
         
         # visualize
         if args.visualize or args.print_images:
-            self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
+            self.vis_image = vu.init_vis_image_only(self.goal_name, self.legend)
         
         return obs, info
     
@@ -80,6 +80,8 @@ class Active_cam_Agent(Active_cam_Env):
         if wait_env > 0:
             self.last_action = None
             self.info["sensor_pose"] = [0., 0., 0.]
+            self.timestep += 1
+            
             return np.zeros(self.obs.shape), 0., False, self.info
         
         # act and step
@@ -95,7 +97,8 @@ class Active_cam_Agent(Active_cam_Env):
         self.obs = obs
         self.info = info
 
-
+        
+            
         return obs, 0., done, info
     
     
@@ -193,9 +196,14 @@ class Active_cam_Agent(Active_cam_Env):
             return semantic_pred
         else:
             return semantic_pred
+    
+    def visualize(self, vis_info):
         
-        
-    def _visualize(self, inputs, mode="full"):
+        if self.args.visualize or self.args.print_images:
+            vis_info['timestep']=self.timestep
+            vis_info['goal_name'] = self.info['goal_name'] 
+            self._visualize(vis_info)
+    def _visualize(self, info, mode="full"):
         
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
@@ -205,147 +213,30 @@ class Active_cam_Agent(Active_cam_Env):
         if not os.path.exists(ep_dir):
             os.makedirs(ep_dir)
 
-        map_pred = inputs['map_pred']
-        exp_pred = inputs['exp_pred']
-        start_x, start_y, start_o, gx1, gx2, gy1, gy2 = inputs['pose_pred']
 
-        sem_map = inputs['sem_map_pred']        # local map
-        sem_map_full = inputs['sem_map_pred_full']
-
-        gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
-
-        sem_map += 5        # 语义id，从5开始
-        sem_map_full += 5        # 语义id，从5开始
-        
-        # local map
-        no_cat_mask = sem_map == 10     # =最后一个通道，代表没有object
-        map_mask = np.rint(map_pred) == 1       # obstacle地图
-        exp_mask = np.rint(exp_pred) == 1       # explore地图
-        vis_mask = self.visited_vis[gx1:gx2, gy1:gy2] == 1      # agent在地图上的位置
-
-        sem_map[no_cat_mask] = 0
-        m1 = np.logical_and(no_cat_mask, exp_mask)
-        sem_map[m1] = 2     # 将explore区域赋值2
-
-        m2 = np.logical_and(no_cat_mask, map_mask)
-        sem_map[m2] = 1     # obstacle区域赋值1
-        
-        sem_map[vis_mask] = 3       # 可视化区域赋值3
-        
-        # add goal
-        
-        
-        
-        # full map
-        map_pred_full = inputs['map_pred_full']
-        exp_pred_full = inputs['exp_pred_full']
-        no_cat_mask_full = sem_map_full == 10     # 最后一个通道是什么
-        map_mask_full = np.rint(map_pred_full) == 1
-        exp_mask_full = np.rint(exp_pred_full) == 1
-        vis_mask_full = self.visited_vis == 1
-
-        sem_map_full[no_cat_mask_full] = 0
-        m1_full = np.logical_and(no_cat_mask_full, exp_mask_full)
-        sem_map_full[m1_full] = 2     # 将explore区域赋值2
-
-        m2_full = np.logical_and(no_cat_mask_full, map_mask_full)
-        sem_map_full[m2_full] = 1     # obstacle区域赋值1
-
-        sem_map_full[vis_mask_full] = 3       # agent位置区域赋值3
-
-        if 'frontier_goal' in inputs:
-            if inputs['frontier_goal'] is not None:
-                goal = inputs['frontier_goal']
-                goal_r, goal_c = goal   # r,c
-                goal_x = goal_r
-                goal_y = goal_c
-                
-                st_goal = inputs['short_time_goal']
-                st_goal_r, st_goal_c = st_goal
-                st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
-                st_goal_x = st_goal_r
-                st_goal_y = st_goal_c
-
-                size = self.visited_vis.shape[0]
-                square_size = 20
-                half_size = square_size // 2
-                for i in range(goal_x - half_size, goal_x + half_size + 1):
-                    for j in range(goal_y - half_size, goal_y + half_size + 1):
-                        i = min(i, size-1)
-                        j = min(j, size-1)
-                        sem_map_full[i, j] = 12
-                        
-                square_size = 10
-                half_size = square_size // 2
-                for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
-                    for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
-                        i = min(i, size-1)
-                        j = min(j, size-1)
-                        sem_map_full[i, j] = 12
-                        
-        # pos
-        # size = map_pred_full.shape[0]
-        # square_size = 10
-        # r, c = start_y, start_x     # 转化为格子坐标
-        # start = [int(r * 100.0 / args.map_resolution),
-        #         int(c * 100.0 / args.map_resolution)]
-        # # start[1] = map_pred_full.shape[0] - start[1] 
-        # start = pu.threshold_poses(start, map_pred_full.shape)
-        # half_size = square_size // 2
-        # for i in range(start[0] - half_size, start[0] + half_size + 1):
-        #     for j in range(start[1] - half_size, start[1] + half_size + 1):
-        #         i = min(i, size-1)
-        #         j = min(j, size-1)
-        #         sem_map_full[i, j] = 17
-        # 绘制语义地图
-        color_pal = [int(x * 255.) for x in color_palette]
-        if mode == "local":
-            sem_map_vis = Image.new("P", (sem_map.shape[1],
-                                        sem_map.shape[0]))
-            sem_map_vis.putpalette(color_pal)
-            sem_map_vis.putdata(sem_map.flatten().astype(np.uint8))
-        elif mode == "full":        
-            sem_map_vis = Image.new("P", (sem_map_full.shape[1],
-                                        sem_map_full.shape[0]))
-            sem_map_vis.putpalette(color_pal)
-            sem_map_vis.putdata(sem_map_full.flatten().astype(np.uint8))
-        sem_map_vis = sem_map_vis.convert("RGB")
-        sem_map_vis = np.flipud(sem_map_vis)
-        sem_map_vis = sem_map_vis[:, :, [2, 1, 0]]
-        sem_map_vis = cv2.resize(sem_map_vis, (480, 480),
-                                interpolation=cv2.INTER_NEAREST)
-        
-        rgb_vis = cv2.resize(self.rgb_vis, (640, 480),
+        rgb_vis = cv2.resize(self.rgb_vis, (480, 480),
                                  interpolation=cv2.INTER_NEAREST)
-        self.vis_image[50:530, 15:655] = rgb_vis
-        self.vis_image[50:530, 670:1150] = sem_map_vis
+        self.vis_image[50:530, 15:495] = rgb_vis
         
-        # 绘制agent位置
-        if mode == "local":
-            pos = (
-                (start_x * 100. / args.map_resolution - gy1)        # start_x是full pose, 所以减去local bdry得到local pose
-                * 480 / map_pred.shape[0],
-                (map_pred.shape[1] - start_y * 100. / args.map_resolution + gx1)
-                * 480 / map_pred.shape[1],
-                np.deg2rad(-start_o)
-            )
-        elif mode == "full":
-            pos = (
-                (start_x * 100. / args.map_resolution)
-                * 480 / map_pred_full.shape[0],
-                (map_pred_full.shape[1] - start_y * 100. / args.map_resolution)
-                * 480 / map_pred_full.shape[1],
-                np.deg2rad(-start_o)
-            )
-            
-            
-            
-        origin = (670, 50)  
-        agent_arrow = vu.get_contour_points(pos, origin)
-        color = (int(color_palette[11] * 255),
-                 int(color_palette[10] * 255),
-                 int(color_palette[9] * 255))
-        cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
+        # text
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        fontScale = 0.3
+        color = (20, 20, 20)  # BGR
+        thickness = 1
+
+        self.vis_image[:50, :] = np.ones_like(self.vis_image[:50, :]) * 255
+        text = "t={}, goal {}, score:init-curr {:.2f}-{:.2f}, action {}, reward {:.2f}, ".format(info['timestep'], 
+                                                                                                    info['goal_name'], 
+                                                                                                    info['init score'].cpu().numpy().item(), 
+                                                                                                    info['score'].cpu().numpy().item(), 
+                                                                                                    info['action'].cpu().numpy().item(),
+                                                                                                    info['reward'].cpu().numpy().item())
+        textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
+        textX = (480 - textsize[0]) // 2 + 15
+        textY = (50 + textsize[1]) // 2
+        self.vis_image = cv2.putText(self.vis_image, text, (textX, textY),
+                                font, fontScale, color, thickness,
+                                cv2.LINE_AA)
 
         if args.visualize:
             # Displaying the image

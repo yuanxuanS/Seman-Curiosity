@@ -53,6 +53,9 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
 
+    def visualize(self, vis_data):
+        self.venv.visualize(vis_data)
+        return 
     def close(self):
         return self.venv.close()
     

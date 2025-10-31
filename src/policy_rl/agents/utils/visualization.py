@@ -23,6 +23,32 @@ def draw_line(start, end, mat, steps=25, w=1):
         mat[x - w:x + w, y - w:y + w] = 1
     return mat
 
+def init_vis_image_only(goal_name, legend):
+    vis_image = np.ones((655, 510, 3)).astype(np.uint8) * 255
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = 1
+    color = (20, 20, 20)  # BGR
+    thickness = 2
+
+    text = "Observations (Goal: {})".format(goal_name)
+    textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
+   #  textX = (640 - textsize[0]) // 2 + 15
+    textX = (480 - textsize[0]) // 2 + 15
+    textY = (50 + textsize[1]) // 2
+    vis_image = cv2.putText(vis_image, text, (textX, textY),
+                            font, fontScale, color, thickness,
+                            cv2.LINE_AA)
+
+    
+    # draw outlines
+    color = [100, 100, 100]
+    vis_image[49, 15:495] = color
+    vis_image[49, 510:990] = color
+    vis_image[50:530, 14] = color
+    vis_image[50:530, 495] = color
+
+    return vis_image
 
 def init_vis_image(goal_name, legend, mode=2):
     if mode == 2:

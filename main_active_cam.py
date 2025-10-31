@@ -52,7 +52,9 @@ def main():
     device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
     
     # clip model
+    print("loading clip")
     clip_model, preprocess = clip.load("ViT-L/14", device=device)
+    print("loading clip done.")
     from src.vqf_constants import target_coco_categories
     
     # text_features = {}
@@ -102,6 +104,7 @@ def main():
     envs = make_vec_envs(args)      
     obs, infos = envs.reset()   
     
+    
     # process for clip
     images = []
     for n in range(num_scenes):
@@ -117,7 +120,11 @@ def main():
     goal_idxs = [info['goal_name'] for info in infos]
     init_scores = last_scores = clip_score(images, goal_idxs)
     
-    
+    vis_info = None
+    if args.visualize or args.print_images:
+        vis_info = {"init score": init_scores, "score": init_scores, 'reward': torch.tensor([0]*num_scenes), 'action':torch.tensor([-1]*num_scenes)}
+        envs.visualize(vis_info)
+        
     torch.set_grad_enabled(False)
     
     # policy
@@ -185,6 +192,8 @@ def main():
     obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)
     l_action = torch.tensor(l_action)
     
+    
+    
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
     logging.info("Start date and time: %s", start_datetime)
@@ -206,35 +215,36 @@ def main():
         
         if finished.sum() == args.num_processes:    # eval over
             break
-        
-        
+
         # ------------------------------------------------------------------
         # Reinitialize variables when episode ends
         l_masks = torch.FloatTensor([0 if x else 1
                                      for x in done]).to(device)     # for insert 存在不同时done
         
-
+        ## get reward
+        # process for clip
         images = []
         for n in range(num_scenes):
             pil_img = Image.fromarray(obs[n, :3, ...].cpu().numpy().transpose(1,2,0).astype(np.uint8))
             image = preprocess(pil_img).to(device)
             images.append(image)
         images = torch.stack(images)
-        
-        
-        # get reward
-        goal_idxs = [info['goal_name'] for info in infos]
+                
         l_scores = clip_score(images, goal_idxs)
-        l_reward = l_scores - last_scores
-        final_reward = torch.where((last_scores - init_scores)>0, 5 + last_scores - init_scores, last_scores - init_scores)
+        l_reward = last_scores - l_scores
+        # penalty when lost object
+        lost_goal = np.array([info['lost_goal'] for info in infos])
+        l_reward = torch.where(torch.from_numpy(lost_goal).to(device), -5, l_reward)
+        # penalty -10 when lost object
+        final_reward = torch.where(init_scores-l_scores>0, 5 + init_scores- l_scores , init_scores- l_scores)
+        final_reward = torch.where(torch.from_numpy(lost_goal).to(device), -10, final_reward)
+        
         l_reward = torch.where(torch.from_numpy(done).to(device), final_reward, l_reward)
         l_reward = torch.where(torch.from_numpy(wait_env.astype(bool)).to(device), torch.zeros_like(l_reward).to(device), l_reward)
         
-        # 计算奖励后再更新 init_scores
-        if l_step == args.num_local_steps - 1:
-            init_scores = last_scores = l_scores
-        # ------------------------------------------------------------------ 
-        # update local input, next state
+        
+
+        # update local input with next state
         if args.agent == "rl":
             l_input = obs[:, :3, ...]       # rgb
         
@@ -245,8 +255,15 @@ def main():
                     l_action, l_action_log_prob, l_value,   # action, reward_t
                     l_reward, l_masks, extras
                 )
-        last_scores = l_scores
         
+        # if lost goal, last score remain for compare score when find goal again
+        last_scores = torch.where(torch.from_numpy(lost_goal).to(device), last_scores, l_scores)
+        
+        if args.visualize or args.print_images:
+            vis_info = {'init score': init_scores, 'score':l_scores, 'reward':l_reward, 'action':l_action}
+            envs.visualize(vis_info)
+            
+            
         # record
         cumulative_reward += l_reward
         if wait_env.sum() < num_scenes:
@@ -260,7 +277,7 @@ def main():
             
         if l_step == args.num_local_steps - 1:
             r_ = np.mean(cumulative_reward.cpu().numpy())
-            if step % (args.log_interval*10) == 0:
+            if step % (args.log_interval*10) == 9:
                 print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
                 logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
             l_episode_rewards.append(r_)
@@ -276,8 +293,8 @@ def main():
                         if len(episode_done[e]) == num_episodes:
                             finished[e] = 1
 
-        #------------------------------------new transition
-        # Sample next action
+        #-------------------------------------------------------------------new transition
+        ## Sample next action
         if args.agent == "rl":
             l_value, l_action, l_action_log_prob, l_rec_states = \
                 l_policy.act(
@@ -292,9 +309,23 @@ def main():
             l_action = np.random.randint(0, 4, num_scenes)
         
         
-        # transition: next state
-        # pred instance, get semantic masks and step env
-        obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)    # if done ,envs.reset, obs are ones after reset
+        ## transition: next state
+        if l_step == args.num_local_steps - 1:
+            obs, infos = envs.reset()
+            done  = np.array([False]*num_scenes)
+            
+            images = []
+            for n in range(num_scenes):
+                pil_img = Image.fromarray(obs[n, :3, ...].cpu().numpy().transpose(1,2,0).astype(np.uint8))
+                image = preprocess(pil_img).to(device)
+                images.append(image)
+            images = torch.stack(images)
+            
+            goal_idxs = [info['goal_name'] for e, info in enumerate(infos) ]
+            init_scores = last_scores = clip_score(images, goal_idxs)
+        else:       # if done, obs is next state or current episode
+            obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)   
+        
         l_action = torch.tensor(l_action)
         
         # ------------------------------------------------------------------

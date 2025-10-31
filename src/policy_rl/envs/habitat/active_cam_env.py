@@ -57,6 +57,7 @@ class Active_cam_Env(habitat.RLEnv):
         # episode tracking into
         self.timestep = None
         self.info = {}
+        self.info['lost_goal'] = False
         self.last_sim_location = None
         
         # episode id 
@@ -69,15 +70,17 @@ class Active_cam_Env(habitat.RLEnv):
         vis_file = f'/home/wpp/Seman-Curiosity/vismap/{self.scene_name}_vismap.txt'
         with open(vis_file, 'rb') as f:
             self.vis_map = pickle.load(f)
+            
     def reset(self):
         """Resets the environment to a new episode.
                 reset traversible initial location
         
         """
-        new_scene = self.episode_no % self.args.num_train_episodes == 0
+        new_scene = True
+        # self.episode_no % self.args.num_train_episodes == 0
         # Initializations
         self.timestep = 0
-        # self.episode_no += 1
+        self.episode_no += 1        # for image save in visualize
 
         if new_scene:
             obs = super().reset()
@@ -159,12 +162,13 @@ class Active_cam_Env(habitat.RLEnv):
         self.map_obj_origin = scene_info[floor_idx]['origin']
 
         cat_counts = sem_map.sum(2).sum(1)
-        possible_cats = target_cls_id_in_scene      # 0-5类别
-        possible_cats_ = target_cls_id_in_scene.copy()
+        possible_cats = list(self.vis_map[self.scene_name][floor_idx].keys())
+        # possible_cats = target_cls_id_in_scene      # 0-5类别
+        # possible_cats_ = target_cls_id_in_scene.copy()
         
-        for i in possible_cats_:
-            if cat_counts[i + 1] == 0:      # 从0-5的类别中，如果有一个类别的数量为0，则去除这个类别
-                possible_cats.remove(i)
+        # for i in possible_cats_:
+        #     if cat_counts[i + 1] == 0:      # 从0-5的类别中，如果有一个类别的数量为0，则去除这个类别
+        #         possible_cats.remove(i)
 
         object_boundary = args.success_dist # TODO：
         
@@ -175,7 +179,7 @@ class Active_cam_Env(habitat.RLEnv):
                 eps = eps - 1
                 continue
             
-            goal_idx = np.random.choice(possible_cats)
+            goal_idx = random.choice(possible_cats)
 
             for key, value in target_coco_categories.items():      # 找到目标的类别名
                 if value == goal_idx:
@@ -193,12 +197,16 @@ class Active_cam_Env(habitat.RLEnv):
             # 在语义地图上得到物体区域
             goal_map_ = sem_map[goal_idx + 1]
             connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
-            object_ids = list(np.unique(connected_region[connected_region > 0]))
+            # object_ids = list(np.unique(connected_region[connected_region > 0]))
 
+            object_ids = list(self.vis_map[self.scene_name][floor_idx][goal_idx].keys())
             # if len(object_ids) > 0:
             #     objects_info[(self.scene_count, episode_id)][pcat]  = {}
             # 如果有多个物体，取其中一个物体
             while not loc_found:
+                if len(object_ids) == 0:
+                    break
+                    
                 object_id = random.choice(object_ids)
                 
                 goal_map_one = np.zeros_like(goal_map_)
@@ -247,6 +255,7 @@ class Active_cam_Env(habitat.RLEnv):
                 
                 vis_map = self.vis_map[self.scene_name][floor_idx][goal_idx][object_id]
                 if vis_map.sum() < 10:
+                    object_ids.remove(object_id)
                     continue
                 
                 row_idx, col_idx = np.where(vis_map > 0)
@@ -305,13 +314,16 @@ class Active_cam_Env(habitat.RLEnv):
                             task=self._env.task,
                     ))
                     # if object_scene_cnt == 0:
-                    valid, self.scene_target_id = self.is_valid_datapoint(obs, goal_name, target_coco_categories)
+                    valid, self.scene_target_id, goal_name_ = self.is_valid_datapoint(obs, goal_name, target_coco_categories)
                     
                     # else:
                     #     valid = self.id_in_view(obs, scene_obj_id)
                         
                     if valid:
-                        self.info['goal_name'] = goal_name
+                        self.info['goal_name'] = goal_name_
+                        self.info['target_id'] = self.scene_target_id
+                        self.info['lost_goal'] = False
+                        self._env.sim.set_agent_state(loc, quat_yaw)
                         return obs
     def filter_object(self, observations, target_obj_ids):
         '''
@@ -344,14 +356,14 @@ class Active_cam_Env(habitat.RLEnv):
                 if obj.category.name() == category:
                     num_occ_pixels = np.where(semantic == id)[0].shape[0]
                     if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
-                        return True, int(obj.id[1:])  
+                        return True, int(obj.id[1:]), obj.category.name()
                 else:
                     if candidate_cate != None:
                         if obj.category.name() in candidate_cate.keys():
                             num_occ_pixels = np.where(semantic == id)[0].shape[0]
                             if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
-                                return True, int(obj.id[1:])  
-        return False, None
+                                return True, int(obj.id[1:]), obj.category.name()
+        return False, None, None
     def map_coord_to_real(self, map_coord):
         map_coord_y, map_coord_x = map_coord
         min_x, min_y = self.map_obj_origin / 100.0
@@ -564,7 +576,7 @@ class Active_cam_Env(habitat.RLEnv):
                                 action={'action': 0, 'action_args':{}},
                                 task=self._env.task,
                         ))
-                        valid, self.scene_target_id = self.is_valid_datapoint(obs, goal_name, None)
+                        valid, self.scene_target_id, _  = self.is_valid_datapoint(obs, goal_name, None)
                 
                         if valid:
                             vis_map[point[0], point[1]] = 1
@@ -625,6 +637,9 @@ class Active_cam_Env(habitat.RLEnv):
 
         self.timestep += 1
         self.info['time'] = self.timestep
+        
+        # if lost goal
+        self.info['lost_goal'] = self.info['target_id'] not in obs['semantic']
 
         return state, 0., done, self.info
     
