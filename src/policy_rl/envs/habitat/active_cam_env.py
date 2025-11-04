@@ -55,11 +55,12 @@ class Active_cam_Env(habitat.RLEnv):
         self.scene_path = None  
         self.scene_name = None   
         # episode tracking into
-        self.timestep = None
+        self.timestep = 0
         self.info = {}
         self.info['lost_goal'] = False
         self.last_sim_location = None
-        
+        self.obs_info = None
+        self.has_captured = False
         # episode id 
         self.episode_no = 0
 
@@ -79,15 +80,19 @@ class Active_cam_Env(habitat.RLEnv):
         new_scene = True
         # self.episode_no % self.args.num_train_episodes == 0
         # Initializations
-        self.timestep = 0
+        self.timestep = 1
         self.episode_no += 1        # for image save in visualize
 
         if new_scene:
             obs = super().reset()
         
+        
+            
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
         # 计算vismap时调用
+        # if self.split == 'val':
+        #     obs = self.initial_val_data()
         # self.nav_pts = self.get_navigable_points()
         # self.get_visible_maps()
         
@@ -96,7 +101,10 @@ class Active_cam_Env(habitat.RLEnv):
         else:
             obs = self.initial_possible_loc()       # train时，随机生成初始位置
 
-
+        if self.args.save_samples:
+            # paths = self.save_data(obs)
+            self.obs_info = obs
+            
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
@@ -110,6 +118,7 @@ class Active_cam_Env(habitat.RLEnv):
         self.info['sensor_pose'] = [0., 0., 0.]
         self.info['semantic_gt'] = None
 
+        self.has_captured = False
         return state, self.info
     
     def get_navigable_points(self):
@@ -127,7 +136,7 @@ class Active_cam_Env(habitat.RLEnv):
 
         if self.scene_path != self.last_scene_path: # 如果reset时加载新的环境
             episodes_file = self.episodes_dir + \
-                "content/{}_episodes.json.gz".format(scene_name)
+                "content_activecam/{}_episodes.json.gz".format(scene_name)
 
             print("Loading episodes from: {}".format(episodes_file))
             with gzip.open(episodes_file, 'r') as f:
@@ -146,6 +155,16 @@ class Active_cam_Env(habitat.RLEnv):
         
         self._env.sim.set_agent_state(pos, rot)
         obs = self._env.sim.get_observations_at(pos, rot)
+        obs.update(
+                        self._env.task.sensor_suite.get_observations(
+                            observations=obs,
+                            episode=self._env.current_episode,
+                            action={'action': 0, 'action_args':{}},
+                            task=self._env.task,
+                    ))
+        self.info['goal_name'] = episode['object_category']
+        self.info['target_id'] = episode['object_id']
+        self.info['lost_goal'] = False
         return obs
     
     def initial_possible_loc(self):
@@ -163,12 +182,7 @@ class Active_cam_Env(habitat.RLEnv):
 
         cat_counts = sem_map.sum(2).sum(1)
         possible_cats = list(self.vis_map[self.scene_name][floor_idx].keys())
-        # possible_cats = target_cls_id_in_scene      # 0-5类别
-        # possible_cats_ = target_cls_id_in_scene.copy()
-        
-        # for i in possible_cats_:
-        #     if cat_counts[i + 1] == 0:      # 从0-5的类别中，如果有一个类别的数量为0，则去除这个类别
-        #         possible_cats.remove(i)
+
 
         object_boundary = args.success_dist # TODO：
         
@@ -177,7 +191,7 @@ class Active_cam_Env(habitat.RLEnv):
             if len(possible_cats) == 0:
                 print("No valid objects for {}".format(floor_height))
                 eps = eps - 1
-                continue
+                break
             
             goal_idx = random.choice(possible_cats)
 
@@ -205,6 +219,8 @@ class Active_cam_Env(habitat.RLEnv):
             # 如果有多个物体，取其中一个物体
             while not loc_found:
                 if len(object_ids) == 0:
+                    possible_cats.remove(goal_idx)
+                    self.vis_map[self.scene_name][floor_idx].pop(goal_idx)
                     break
                     
                 object_id = random.choice(object_ids)
@@ -254,8 +270,20 @@ class Active_cam_Env(habitat.RLEnv):
                 # vis_map = np.zeros_like(possible_starting_locs)
                 
                 vis_map = self.vis_map[self.scene_name][floor_idx][goal_idx][object_id]
+                # 筛选一定距离内的
+                ii, jj = np.indices(vis_map.shape)
+                # 3. 计算每个点到 (r, c) 的距离的平方
+                #    (ii - r)**2 + (jj - c)**2
+                #    这里利用了 NumPy 的广播机制
+                dist_sq = (ii - obj_center[0])**2 + (jj - obj_center[1])**2
+                # 4. 比较距离的平方和半径的平方
+                radius_grid = 5.5  * 20.0
+                mask = dist_sq < radius_grid**2
+                vis_map = vis_map * mask
+                
                 if vis_map.sum() < 10:
                     object_ids.remove(object_id)
+                    self.vis_map[self.scene_name][floor_idx][goal_idx].pop(object_id)
                     continue
                 
                 row_idx, col_idx = np.where(vis_map > 0)
@@ -456,6 +484,213 @@ class Active_cam_Env(habitat.RLEnv):
                     break
         return list(boundary)
 
+    def initial_val_data(self):
+        args = self.args
+        
+        data_episodes = []
+        
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        print(f"scene {scene_name}")
+        
+        scene_info = self.dataset_info[scene_name]
+        map_resolution = args.map_resolution
+
+        floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
+        floor_height = scene_info[floor_idx]['floor_height']
+        sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
+        self.map_obj_origin = scene_info[floor_idx]['origin']
+
+        cat_counts = sem_map.sum(2).sum(1)
+        possible_cats = list(self.vis_map[self.scene_name][floor_idx].keys())
+
+
+        object_boundary = args.success_dist # TODO：
+        
+        episodes_cnt = 0
+        for iter in range(2000):
+            data_dict = {}
+            data_dict['episode_id'] = episodes_cnt
+            data_dict['scene_id'] = f'gibson_semantic/{scene_name}.glb'
+            data_dict['floor_id'] = floor_idx
+        
+            # 得到合适的目标物体：到该目标的距离可行
+            if len(possible_cats) == 0:
+                print("No valid objects for {}".format(floor_height))
+                eps = eps - 1
+                break
+            
+            goal_idx = random.choice(possible_cats)
+
+            # 找到目标的类别名
+            for key, value in target_coco_categories.items():      
+                if value == goal_idx:
+                    goal_name = key
+                    break
+            
+            # 得到可行点
+            selem = skimage.morphology.disk(2)
+            traversible = skimage.morphology.binary_dilation(
+                sem_map[0], selem) != True      # obstacles: 3W/4W
+            traversible = 1 - traversible   # free space: <1W/4w
+            
+            planner = FMMPlanner(traversible)
+            
+            # 在语义地图上得到物体区域
+            goal_map_ = sem_map[goal_idx + 1]
+            connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
+            # object_ids = list(np.unique(connected_region[connected_region > 0]))
+
+            object_ids = list(self.vis_map[self.scene_name][floor_idx][goal_idx].keys())
+            # if len(object_ids) > 0:
+            #     objects_info[(self.scene_count, episode_id)][pcat]  = {}
+            # 如果有多个物体，取其中一个物体
+            
+            # loc_found = False
+            # while not loc_found:
+            if len(object_ids) == 0:
+                possible_cats.remove(goal_idx)
+                continue
+                
+            object_id = random.choice(object_ids)
+            
+            goal_map_one = np.zeros_like(goal_map_)
+            goal_map_one[connected_region == object_id] = 1
+            
+            # 得到：在真实世界坐标下，该物体的中心
+            rows, cols = np.where(goal_map_one > 0)
+            obj_center = (rows.min() + rows.max()) / 2, (cols.min() + cols.max()) / 2
+            obj_center_y, obj_center_x = self.map_coord_to_real(obj_center)
+            obj_center_real =  obj_center_y, floor_height,  obj_center_x
+
+            selem = skimage.morphology.disk(
+                int(object_boundary * 100. / map_resolution))
+            
+            # goal_map = skimage.morphology.binary_dilation(
+            #     goal_map_one, selem) != True       
+            # goal_map = 1 - goal_map     # 目标物体的地图
+            goal_map = goal_map_one
+        
+            planner.set_multi_goal(goal_map)
+            # 选择距离目标一定范围的可行点
+            m1 = sem_map[0] > 0     # free space
+            m2 = planner.fmm_dist > (object_boundary - object_boundary) * 20.0  #      
+            m3 = planner.fmm_dist < (5.5 - object_boundary) * 20.0
+
+            possible_starting_locs = np.logical_and(m1, m2)     # 在距离目标在一定距离范围内，选初始位置
+            possible_starting_locs = np.logical_and(
+                possible_starting_locs, m3) * 1.
+            if possible_starting_locs.sum() != 0:
+                loc_found = True
+            else:
+                print("Invalid object: {} / {} / {} / {}".format(
+                    self.scene_name, floor_height, goal_name, object_id))
+                continue
+                
+            # 过滤能看到物体的位置点
+            loc_found = False       
+            visible_pts = []
+            map_obs = 1-sem_map[0]
+            goal_map_one_dil = skimage.morphology.binary_dilation(
+                    goal_map_one, selem)
+            map_obs[goal_map_one_dil > 0] = 0
+            
+            vis_map = self.vis_map[self.scene_name][floor_idx][goal_idx][object_id]
+            # 筛选一定距离内的
+            ii, jj = np.indices(vis_map.shape)
+            # 3. 计算每个点到 (r, c) 的距离的平方
+            #    (ii - r)**2 + (jj - c)**2
+            #    这里利用了 NumPy 的广播机制
+            dist_sq = (ii - obj_center[0])**2 + (jj - obj_center[1])**2
+            # 4. 比较距离的平方和半径的平方
+            radius_grid = 5.5  * 20.0
+            mask = dist_sq < radius_grid**2
+            vis_map = vis_map * mask
+            
+            if vis_map.sum() < 10:
+                object_ids.remove(object_id)
+                self.vis_map[self.scene_name][floor_idx][goal_idx].pop(object_id)
+                continue
+            
+            row_idx, col_idx = np.where(vis_map > 0)
+            
+            loc_found = False
+            while not loc_found:
+                i = random.choice(range(len(row_idx)))
+                r = row_idx[i]
+                c = col_idx[i]
+                point_real = self.map_coord_to_real((r, c))
+                point = (r, c)
+                
+                # 位置在同一层且可达
+                # if abs(point_real[1] - floor_height) < args.floor_thr / 100.0:    # 不用筛选是否同一层，只要可达即可
+                #     pass
+                # else:
+                #     continue
+                
+                pts_shift = np.array(point_real) - np.array([obj_center_y, obj_center_x])
+                dc = pts_shift[1]     # 
+                dr = pts_shift[0]
+
+                # 5.5m范围内
+                distances = np.sqrt((dr * dr) + (dc * dc))
+                if distances > 5.5:
+                    continue
+                
+                # 移动agent到采样点
+                agent_state = self._env.sim.get_agent_state(0)
+                loc = np.array([point_real[0], floor_height, point_real[1]])   # 设置agent位置
+                agent_state.position = loc
+                
+                # YAW calculation - rotate to object
+                agent_to_obj = np.array(obj_center_real) - agent_state.position
+                agent_local_forward = np.array([0, 0, -1.0]) # y, z, x; 假设agent朝向相机朝向
+                flat_to_obj = np.array([agent_to_obj[0], 0.0, agent_to_obj[2]])
+                flat_dist_to_obj = np.linalg.norm(flat_to_obj)
+                flat_to_obj /= flat_dist_to_obj     # agent和object之间的向量归一化
+
+                det = (flat_to_obj[0] * agent_local_forward[2]- agent_local_forward[0] * flat_to_obj[2])        # 叉积：得到向量，方向决定了转向
+                turn_angle = math.atan2(det, np.dot(agent_local_forward, flat_to_obj))      # 计算agent的朝向和朝向object的向量之间夹角，计算agent朝向object的角度
+                # 增加一定角度的随机扰动
+                noise_angle = 0 if goal_name == "toilet" else self.noise_angle
+                angle_noise = random.randint(-noise_angle, noise_angle) * math.pi / 180     # -30-30度
+                quat_yaw = quat_from_angle_axis(turn_angle + angle_noise, np.array([0, 1.0, 0]))  # 绕z轴旋转角度
+                # Set agent yaw rotation to look at object
+                agent_state.rotation = quat_yaw
+                # check valid
+                obs = self._env.sim.get_observations_at(loc, quat_yaw)
+                if self.scene_name in self.filtered_scene_obj:
+                    obs = self.filter_object(obs, self.filtered_scene_obj[self.scene_name])
+                obs.update(
+                    self._env.task.sensor_suite.get_observations(
+                        observations=obs,
+                        episode=self._env.current_episode,
+                        action={'action': 0, 'action_args':{}},
+                        task=self._env.task,
+                ))
+                # if object_scene_cnt == 0:
+                valid, self.scene_target_id, goal_name_ = self.is_valid_datapoint(obs, goal_name, None)
+                
+                # else:
+                #     valid = self.id_in_view(obs, scene_obj_id)
+                    
+                if valid:
+                    data_dict['start_position'] = loc.tolist()
+                    data_dict['start_rotation'] = quaternion.as_float_array(quat_yaw).tolist()
+                    data_dict['object_category'] = goal_name_
+                    data_dict['object_id'] = self.scene_target_id
+                    loc_found = True
+            
+            if loc_found:
+                data_episodes.append(data_dict)
+                episodes_cnt += 1
+        
+        # save
+        episodes_file = self.episodes_dir + \
+                "content_activecam/{}_episodes.json.gz".format(scene_name)
+        with gzip.open(episodes_file, 'wt', encoding='utf-8') as gz_file:
+            json.dump({'episodes': data_episodes, }, gz_file)
+        print(f'create data done， length {len(data_episodes)}')
     def get_visible_maps(self):
         vis_data = {}
                 
@@ -629,13 +864,13 @@ class Active_cam_Env(habitat.RLEnv):
         
         # save samples(before resize)
         if self.args.save_samples:
-            paths = self.save_data(obs)
+            # paths = self.save_data(obs)
+            self.obs_info = obs
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
 
-        self.timestep += 1
         self.info['time'] = self.timestep
         
         # if lost goal
@@ -643,14 +878,28 @@ class Active_cam_Env(habitat.RLEnv):
 
         return state, 0., done, self.info
     
-    def save_data(self, observations):
+    def get_obs_info(self):
+        return self.obs_info
+    
+    def save_data(self, obs_info, capture):
+        if not capture:
+            return None
+        
+        if self.has_captured:
+            return ""
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
                                         args.exp_name)
         data_dir = '{}/episodes_data/'.format(dump_dir)
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)
-        paths = save_obs(data_dir, self.rank, self.episode_no, observations, self.timestep)
+            os.makedirs(f"./imgs/{self.args.exp_name}/", exist_ok=True)
+        paths = save_obs(data_dir, self.rank, self.episode_no, obs_info, self.timestep)
+        self.has_captured = True
+        
+        img_str = f"./imgs/{self.args.exp_name}/env_{self.rank:02d}_episode_{self.episode_no:06d}_step_{self.timestep:05d}.png"
+        cv2.imwrite(img_str, obs_info['rgb'].astype(np.uint8))
+        
         return paths
     
     def get_reward_range(self):
@@ -671,7 +920,7 @@ class Active_cam_Env(habitat.RLEnv):
         if action['action'] == 0:
             return True
         
-        return self._env._episode_over
+        return self.timestep >= self._env._max_episode_steps
     
     def get_info(self, observations):
         return self.info

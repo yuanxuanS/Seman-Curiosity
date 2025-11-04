@@ -87,8 +87,9 @@ class Active_cam_Agent(Active_cam_Env):
         # act and step
         # action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         action = {'action': action}
+        
         obs, _, done, info = super().step(action)       # 4,256,256
-
+        self.timestep += 1
         
         
         # preprocess obs
@@ -96,7 +97,7 @@ class Active_cam_Agent(Active_cam_Env):
         self.last_action = action['action']     
         self.obs = obs
         self.info = info
-
+        
         
             
         return obs, 0., done, info
@@ -220,7 +221,7 @@ class Active_cam_Agent(Active_cam_Env):
         
         # text
         font = cv2.FONT_HERSHEY_SIMPLEX
-        fontScale = 0.3
+        fontScale = 0.4
         color = (20, 20, 20)  # BGR
         thickness = 1
 

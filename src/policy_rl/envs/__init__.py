@@ -53,6 +53,14 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
 
+    def get_obs_info(self):
+        obs_info = self.venv.get_obs_info()
+        return obs_info
+    
+    def save_data(self, obs_info, capture):
+        self.venv.save_data(obs_info, capture)
+        return
+    
     def visualize(self, vis_data):
         self.venv.visualize(vis_data)
         return 

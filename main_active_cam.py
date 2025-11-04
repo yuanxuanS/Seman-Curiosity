@@ -49,7 +49,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
     
     # clip model
     print("loading clip")
@@ -85,6 +85,9 @@ def main():
         episode_done = []
         for _ in range(args.num_processes):
             episode_done.append(deque(maxlen=num_episodes))
+            
+        # for saving obs
+        obs_info = None
     else:
         pass # TODO: 
     
@@ -184,8 +187,15 @@ def main():
             )
         l_action = l_action.cpu().numpy()
     elif args.agent == "random":
-        l_action = np.random.randint(0, 4, num_scenes)
+        l_action = np.random.randint(0, 5, num_scenes)
     
+    if args.eval:
+        obs_info = envs.get_obs_info()
+        capture = [False]*num_scenes
+        for e in range(num_scenes):
+            if l_action[e] == 0:
+                capture[e] = True
+        envs.save_data(obs_info, capture)
     
     # transition:
     # pred instance, get semantic masks and step env: 
@@ -213,8 +223,9 @@ def main():
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
         
-        if finished.sum() == args.num_processes:    # eval over
-            break
+        
+            
+        
 
         # ------------------------------------------------------------------
         # Reinitialize variables when episode ends
@@ -242,6 +253,9 @@ def main():
         l_reward = torch.where(torch.from_numpy(done).to(device), final_reward, l_reward)
         l_reward = torch.where(torch.from_numpy(wait_env.astype(bool)).to(device), torch.zeros_like(l_reward).to(device), l_reward)
         
+        
+        if finished.sum() == args.num_processes:    # eval over
+            break
         
 
         # update local input with next state
@@ -282,16 +296,21 @@ def main():
                 logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
             l_episode_rewards.append(r_)
             
+            if args.eval:
+                for e in range(num_scenes):
+                    episode_done[e].append(True)
+                    if len(episode_done[e]) == num_episodes:
+                        finished[e] = 1
             l_reward = torch.zeros(num_scenes).to(device)
             cumulative_reward= l_reward
             wait_env = np.zeros((args.num_processes))
             
-            if args.eval:
-                for e, x in enumerate(done):    # if done, maps from new obs
-                    if x:
-                        episode_done[e].append(True)
-                        if len(episode_done[e]) == num_episodes:
-                            finished[e] = 1
+        # if args.eval:
+        #     for e, x in enumerate(done):    # if done, maps from new obs
+        #         if x:
+        #             episode_done[e].append(True)
+        #             if len(episode_done[e]) == num_episodes:
+        #                 finished[e] = 1
 
         #-------------------------------------------------------------------new transition
         ## Sample next action
@@ -306,8 +325,16 @@ def main():
                 )
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
-            l_action = np.random.randint(0, 4, num_scenes)
+            l_action = np.random.randint(0, 5, num_scenes)
         
+        if args.eval:
+            obs_info_ = envs.get_obs_info()
+            obs_info = [obs_info[e] if lost_goal[e] else obs_info_[e] for e in range(num_scenes)]
+            capture = [False]*num_scenes
+            for e in range(num_scenes):
+                if l_action[e] == 0 or done[e]:
+                    capture[e] = True
+            envs.save_data(obs_info, capture)
         
         ## transition: next state
         if l_step == args.num_local_steps - 1:
@@ -325,6 +352,9 @@ def main():
             init_scores = last_scores = clip_score(images, goal_idxs)
         else:       # if done, obs is next state or current episode
             obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)   
+        
+        
+        
         
         l_action = torch.tensor(l_action)
         
