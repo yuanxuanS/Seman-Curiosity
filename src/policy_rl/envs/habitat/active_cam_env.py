@@ -874,7 +874,14 @@ class Active_cam_Env(habitat.RLEnv):
         self.info['time'] = self.timestep
         
         # if lost goal
-        self.info['lost_goal'] = self.info['target_id'] not in obs['semantic']
+        if self.info['target_id'] in obs['semantic']:
+            mask = obs['semantic'] == self.info['target_id']
+            if mask.sum() >= 1000:
+                self.info['lost_goal'] = False
+            else:
+                self.info['lost_goal'] = True
+        else:
+            self.info['lost_goal'] = False
 
         return state, 0., done, self.info
     
