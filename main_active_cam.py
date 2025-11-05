@@ -87,7 +87,7 @@ def main():
             episode_done.append(deque(maxlen=num_episodes))
             
         # for saving obs
-        obs_info = None
+        obs_info = init_obs_info = None
     else:
         pass # TODO: 
     
@@ -190,7 +190,7 @@ def main():
         l_action = np.random.randint(0, 5, num_scenes)
     
     if args.eval:
-        obs_info = envs.get_obs_info()
+        obs_info = init_obs_info = obs_info_ = envs.get_obs_info()
         capture = [False]*num_scenes
         for e in range(num_scenes):
             if l_action[e] == 0:
@@ -328,8 +328,8 @@ def main():
             l_action = np.random.randint(0, 5, num_scenes)
         
         if args.eval:
-            obs_info_ = envs.get_obs_info()
-            obs_info = [obs_info[e] if lost_goal[e] else obs_info_[e] for e in range(num_scenes)]
+            
+            obs_info = [init_obs_info[e] if lost_goal[e] else obs_info_[e] for e in range(num_scenes)]
             capture = [False]*num_scenes
             for e in range(num_scenes):
                 if l_action[e] == 0 or done[e]:
@@ -353,7 +353,10 @@ def main():
         else:       # if done, obs is next state or current episode
             obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)   
         
-        
+        if args.eval:
+            obs_info_ = envs.get_obs_info()
+            if l_step == args.num_local_steps - 1:
+                init_obs_info = obs_info_
         
         
         l_action = torch.tensor(l_action)
