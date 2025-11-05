@@ -881,7 +881,7 @@ class Active_cam_Env(habitat.RLEnv):
             else:
                 self.info['lost_goal'] = True
         else:
-            self.info['lost_goal'] = False
+            self.info['lost_goal'] = True
 
         return state, 0., done, self.info
     
