@@ -73,7 +73,7 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         
         return obs, info
     
-    def step_and_preprocess(self, action, inputs):
+    def step_and_pre(self, action, inputs):
         """Function responsible for taking the action and
         preprocessing observations
 
@@ -128,6 +128,10 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
 
         return obs, 0., done, info
     
+    def update_collision_map(self, vis_input):
+        shape = self.collision_map.shape[-2:]
+        self.collision_map = np.zeros((shape[0], shape[1]))
+        self.collision_map[vis_input['map_pred_full'] > 0.5] = 1
     
     
     def _preprocess_obs(self, obs, info, use_seg=True):
@@ -368,14 +372,36 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                 size = self.visited_vis.shape[0]
                 square_size = 20
                 half_size = square_size // 2
+                
                 for i in range(goal_x - half_size, goal_x + half_size + 1):
-                    for j in range(goal_y - half_size, goal_y + half_size + 1):
-                        i = min(i, size-1)
-                        j = min(j, size-1)
-                        if not inputs['sample_stage']:
-                            sem_map_full[i, j] = 12
-                        else:
-                            sem_map_full[i, j] = 16
+                    j = goal_y
+                    if not inputs['sample_stage']:
+                        sem_map_full[i, j] = 12
+                        sem_map_full[i, j-1] = 12
+                        sem_map_full[i, j+1] = 12
+                    else:
+                        sem_map_full[i, j] = 16
+                        sem_map_full[i, j-1] = 16
+                        sem_map_full[i, j+1] = 16
+                
+                for j in range(goal_y - half_size, goal_y + half_size + 1):
+                    i = goal_x
+                    if not inputs['sample_stage']:
+                        sem_map_full[i, j] = 12
+                        sem_map_full[i-1, j] = 12
+                        sem_map_full[i+1, j] = 12
+                    else:
+                        sem_map_full[i, j] = 16
+                        sem_map_full[i-1, j] = 16
+                        sem_map_full[i+1, j] = 16
+                # for i in range(goal_x - half_size, goal_x + half_size + 1):
+                #     for j in range(goal_y - half_size, goal_y + half_size + 1):
+                #         i = min(i, size-1)
+                #         j = min(j, size-1)
+                #         if not inputs['sample_stage']:
+                #             sem_map_full[i, j] = 12
+                #         else:
+                #             sem_map_full[i, j] = 16
                             
                 if 'short_time_goal' in inputs:
                     st_goal = inputs['short_time_goal']

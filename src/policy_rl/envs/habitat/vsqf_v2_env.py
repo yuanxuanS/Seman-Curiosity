@@ -13,7 +13,7 @@ from ..utils.fmm_planner import FMMPlanner
 import json
 import gzip
 from src.vqf_constants import target_coco_categories_mapping, target_coco_categories, category_id_maps, target_cls_id_in_scene
-
+import cv2
 class Vsqf_v2_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
@@ -60,7 +60,8 @@ class Vsqf_v2_Env(habitat.RLEnv):
                 reset traversible initial location
         
         """
-        new_scene = self.episode_no % self.args.num_train_episodes == 0
+        new_scene = True 
+        # self.episode_no % self.args.num_train_episodes == 0
         # Initializations
         self.timestep = 0
         self.episode_no += 1
@@ -298,7 +299,7 @@ class Vsqf_v2_Env(habitat.RLEnv):
     
 
 
-    def get_done(self, observations):
+    def get_done(self, observations, *args):
         if self.info['time'] >= self.args.max_episode_length - 1:       # 
             done = True
         else:

@@ -64,7 +64,7 @@ class FMMPlanner():
         dd = skfmm.distance(traversible_ma, dx=1)   # 计算等高线，值为距离
         dd = ma.filled(dd, np.max(dd) + 1)      # 将False区域都赋值为最大值
         self.fmm_dist = dd
-        return
+        return goal_x, goal_y
 
     def set_multi_goal(self, goal_map):
         traversible_ma = ma.masked_values(self.traversible * 1, 0)  # 可通行1, 其他0

@@ -48,6 +48,7 @@ ACTION_SPACE_COMMAND = "action_space"
 CALL_COMMAND = "call"
 EPISODE_COMMAND = "current_episode"
 STEP_AND_PREPROCESS = "step_and_preprocess"
+STEP_AND_PRE = "step_and_pre"
 GET_OBS_INFO = "get_obs_info"
 SAVE_DATA = "save_data"
 COUNT_EPISODES_COMMAND = "count_episodes"
@@ -57,6 +58,8 @@ GET_OBS_SPACE= "get_obs_space"
 GET_ACTION_SPACE= "get_action_space"
 GET_REWARD = "get_reward"
 VISUALIZE_COMMAND = "visualize"
+UPDATE_COLLISION_MAP = "update_collision_map"
+
 def _make_env_fn(
     config: Config, dataset: Optional[habitat.Dataset] = None, rank: int = 0
 ) -> Env:
@@ -220,6 +223,15 @@ class VectorEnv:
                 elif command == EPISODE_COMMAND:
                     connection_write_fn(env.current_episode)
 
+                elif command == STEP_AND_PRE:
+                    observations, reward, done, info = \
+                            env.step_and_pre(**data)
+                    if auto_reset_done and done:
+                        observations, info = env.reset()
+                    connection_write_fn((observations, reward, done, info))
+                elif command == UPDATE_COLLISION_MAP:
+                    env.update_collision_map(data)
+                    connection_write_fn(None)
                 elif command == STEP_AND_PREPROCESS:
                     observations, reward, done, info = \
                             env.step_and_preprocess(**data)
@@ -573,6 +585,19 @@ class VectorEnv:
             write_fn((VISUALIZE_COMMAND, ({"vis_info":{k:v[e] for k,v in vis_info.items()}})))
         self._is_waiting = False
         return
+    
+    def step_and_pre(self, action, inputs):
+        self._assert_not_closed()
+        self._is_waiting = True
+        for e, write_fn in enumerate(self._connection_write_fns):
+            write_fn((STEP_AND_PRE, ({"action":action[e], "inputs":inputs[e],})))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+        obs, rews, dones, infos = zip(*results)
+        self._is_waiting = False
+        return np.stack(obs), np.stack(rews), np.stack(dones), infos
+    
     def step_and_preprocess(self, action, wait_env):
         self._assert_not_closed()
         self._is_waiting = True
@@ -585,6 +610,17 @@ class VectorEnv:
         self._is_waiting = False
         return np.stack(obs), np.stack(rews), np.stack(dones), infos
 
+    def update_collision_map(self, inputs):
+        self._assert_not_closed()
+        self._is_waiting = True
+        for e, write_fn in enumerate(self._connection_write_fns):
+            write_fn((UPDATE_COLLISION_MAP, inputs[e]))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+        self._is_waiting = False
+        return
+    
     def save_data(self, obs_info, capture):
         self._assert_not_closed()
         self._is_waiting = True
