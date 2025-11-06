@@ -299,7 +299,7 @@ class Semantic_Mapping(nn.Module):
             self.screen_h // self.du_scale * self.screen_w // self.du_scale
         ).float().to(self.device)
 
-    def forward(self, obs, pose_obs, maps_last, poses_last):
+    def forward(self, obs, pose_obs, maps_last, poses_last, return_curr=False):
         '''
         obs: 0-2: rgb, 3:depth, 4...: semantic
         '''
@@ -423,8 +423,10 @@ class Semantic_Mapping(nn.Module):
 
         map_pred, _ = torch.max(maps2, 1)
 
-        return fp_map_pred, map_pred, pose_pred, current_poses
-
+        if return_curr:
+            return fp_map_pred, map_pred, pose_pred, current_poses, translated
+        else:
+            return fp_map_pred, map_pred, pose_pred, current_poses
 
 if __name__ == "__main__":
     import gym
