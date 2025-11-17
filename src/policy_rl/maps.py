@@ -90,6 +90,20 @@ class Maps_Env:
             self.local_pose[e] = self.full_pose[e] - \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
     
+    def patch_agent_region(self, patch, radius=30):
+        for e in range(self.num_scenes):
+            if patch[e]:
+                locs = self.local_pose[e].cpu().numpy()
+                
+                r, c = locs[1], locs[0]
+                loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                                int(c * 100.0 / self.args.map_resolution)]
+
+                r_coords, c_coords = np.indices(self.local_map.shape[-2:])
+                dist_sq = (r_coords - loc_r)**2 + (c_coords - loc_c)**2
+                agent_region = dist_sq <= radius**2
+                self.local_map[e,1, ...][agent_region] = 1.0
+            
     def _init_map_and_pose_for_env(self, e):
         self.full_map[e].fill_(0.)
         self.curr_full_map.fill_(0.)
@@ -213,22 +227,22 @@ class Maps_Env:
             self.semantic_map(obs, poses, self.local_map, self.local_pose, True)
         
         # check floor
-        locs = local_pose.cpu().numpy()
-        for e in range(self.num_scenes):
-            r, c = locs[e, 1], locs[e, 0]
-            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
-                            int(c * 100.0 / self.args.map_resolution)]
-            if 'on_floor' in infos[e] and infos[e]['on_floor']:
-                # set obstacle on map to avoid go to floor
-                square_size = 20
-                size = local_map[e].shape[-1]
-                r_start = loc_r
-                r_end = min(loc_r + square_size, size)
-                c_start = loc_c
-                c_end = min(loc_c + square_size, size)
-                local_map[e, 0, r_start:r_end, c_start:c_end] = 1.
+        # locs = local_pose.cpu().numpy()
+        # for e in range(self.num_scenes):
+        #     r, c = locs[e, 1], locs[e, 0]
+        #     loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+        #                     int(c * 100.0 / self.args.map_resolution)]
+        #     if 'on_floor' in infos[e] and infos[e]['on_floor']:
+        #         # set obstacle on map to avoid go to floor
+        #         square_size = 20
+        #         size = local_map[e].shape[-1]
+        #         r_start = loc_r
+        #         r_end = min(loc_r + square_size, size)
+        #         c_start = loc_c
+        #         c_end = min(loc_c + square_size, size)
+        #         local_map[e, 0, r_start:r_end, c_start:c_end] = 1.
                 
-                infos[e]['on_floor'] = False
+        #         infos[e]['on_floor'] = False
         # update 2-3: curr and past maps
         locs = local_pose.cpu().numpy()
         self.pose_inputs[:, :3] = locs + self.origins

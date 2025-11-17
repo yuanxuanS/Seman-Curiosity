@@ -134,6 +134,45 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         self.collision_map[vis_input['map_pred_full'] > 0.5] = 1
     
     
+    def get_mask_id(self, semantic, category, mask):
+        '''
+        在视野中是否有指定类别的物体, 且和mask重合
+        semantic值为object id; 只要id对应的object为目标类别即可；
+        用于开启检测，因此不限制范围
+        '''
+                
+        for id in np.unique(semantic):
+            if id > 0:
+                # 查找对应的object
+                obj = self.habitat_env.sim.semantic_scene.objects[id]
+                if obj.category.name() == category:
+                    if semantic.shape[0] != mask.shape[0]:
+                        semantic =  cv2.resize(semantic.astype(np.uint8), mask.shape)
+                    semantic_mask = semantic == id
+                    intersect = semantic_mask * mask
+                    if intersect.sum() > 0.5*mask.sum():
+                        return True, int(obj.id[1:])
+                    # if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
+                    
+        return False, None
+    
+    def get_object_id(self, semantic, category,):
+        '''
+        在视野中是否有指定类别的物体 
+        semantic值为object id; 只要id对应的object为目标类别即可；
+        用于开启检测，因此不限制范围
+        '''
+                
+        for id in np.unique(semantic):
+            if id > 0:
+                # 查找对应的object
+                obj = self.habitat_env.sim.semantic_scene.objects[id]
+                if obj.category.name() == category:
+                    num_occ_pixels = np.where(semantic == id)[0].shape[0]
+                    # if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
+                    return True, int(obj.id[1:])
+        return False, None
+    
     def _preprocess_obs(self, obs, info, use_seg=True):
         args = self.args
         obs = obs.transpose(1, 2, 0)
@@ -181,16 +220,59 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         # if pred objects, pred vsqf and Orient, (在depth处理之前)
         obj = self.filter_instance(obj)
         if info['sample_stage']:
-            if info['sample_step'] > 70:    # sample stage ends
+            # if info['sample_step'] > 70:    # sample stage ends
+            if self.found_classes[info['target_class']]['rgbs'] == 5:
+            # if info['sample_num'] == 5:      # 限制采集样本数
                 info['sample_stage'] = False
                 info['sample_step'] = 0
                 print("sample stage ends")
+                self.sampled_num += 1
+                self.found_classes[info['target_class']]['num'] += 1
+                    
+                    
             else:       # sample stage continues
                 info['sample_step'] += 1
                 info['find_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256)) 
+            # # 检测到其他类别物体，放入候选
+            # if len(obj) > 0:
+            #     if len(obj) > 1:        # 选置信度最高
+            #         scores = obj.scores
+            #         idx = obj.scores.argmax()
+            #     else:
+            #         idx = 0
+            #     mask = obj.pred_masks[idx, ...].cpu().numpy()
+            #     cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
+            #     has_obj, obj_id = self.get_object_id(info['semantic'], cls_name)
+            #     target_cond = (info['found_classes'][cls_name]['num'] < 2) and \
+            #                 (obj_id not in info['found_classes'][cls_name]['obj_id']) and \
+            #                 has_obj
+            #     if target_cond:
+            #         rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
+            #         rgb_obj = rgb_t * mask[:, :, None]
+            #         depth_t = cv2.resize(depth, (256, 256)) 
+            #         depth_obj = depth_t * mask    # 单位cm
+            #         candidates_dict = {"class": cls_name, "rgb": rgb_obj, 'depth':depth_obj[None, ...], "obj_id": obj_id}
+            #         info['candidates'].append(candidates_dict)
+                    
+            #         info['found_classes'][cls_name]['num'] += 1
+            #         info['found_classes'][cls_name]['obj_id'].append(obj_id)
+
+            #         info['find_cand_goal'] = True
+            #         info['cand_class'] = cls_name
+            #         info['cand_obj_id'] = obj_id
+            #     else:
+            #         info['find_cand_goal'] = False
+            #         info['cand_class'] = None
+            #         info['cand_obj_id'] = None
+            # else:
+            #     info['find_cand_goal'] = False
+            #     info['cand_class'] = None
+            #     info['cand_obj_id'] = None
+            
         else:
+            
             # maskrcnn检测到时开启sample stage
             if len(obj) > 0:
                 if len(obj) > 1:        # 选置信度最高
@@ -201,9 +283,23 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                 mask = obj.pred_masks[idx, ...].cpu().numpy()
                 
                 cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
-                if not (cls_name in info['found_classes']):   # 之前没找到过该类物体
-                    # 存储物体信息， 避免重复查找
-                    info['found_classes'].append(cls_name)
+                has_obj, obj_id = self.get_mask_id(info['semantic'], cls_name, mask)
+                
+                # target_cond = info['found_classes'][cls_name]['num'] < 1 and \
+                #     obj_id not in info['found_classes'][cls_name]['obj_id'] and \
+                #         has_obj
+                
+                                    # obj_id not in self.found_classes[cls_name]['obj_id'] and \
+                # target_cond = (self.found_classes[cls_name]['num'] < 1 or \
+                #     (self.found_classes[cls_name]['num'] == 1 and self.found_classes[cls_name]['rgbs'] < 5)) and \
+                #         has_obj
+                target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
+                if target_cond:   # 之前没找到过该类物体
+                    # info['found_classes'][cls_name]['num'] += 1
+                    # info['found_classes'][cls_name]['obj_id'].append(obj_id)
+                    
+                    self.found_classes[cls_name]['obj_id'].append(obj_id)
+                    
                     
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
@@ -218,22 +314,46 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                     # 
                     info['sample_stage'] = True
                     info['sample_step'] += 1
-                else:       # 同类物体，不处理
+                    info['target_class'] = cls_name
+                else:       # 采集过的物体，不处理
                     info['find_goal'] = False
                     info['rgb_obj'] = np.zeros((256, 256, 3))
                     info['depth_obj'] = np.zeros((1, 256, 256))     
                     
                     info['sample_stage'] = False
                     info['sample_step'] = 0
-                    
+                # info['find_cand_goal'] = False
+                # info['cand_class'] = None
+                # info['cand_obj_id'] = None
             else:
+                # # 从候选队列选择目标
+                # if len(self.info['candidates']) > 0:
+                #     print("from candidate objects")
+                #     candidates_dict = self.info['candidates'].pop(0)
+                #     info['find_goal'] = True
+                #     info['get_cand_goal'] = True
+                #     info['rgb_obj'] = candidates_dict['rgb']
+                #     info['depth_obj'] = candidates_dict['depth']
+                #     info['sample_stage'] = True
+                #     info['sample_step'] = 1
+                #     info['sample_num'] = 0
+                #     info['cand_class'] = candidates_dict['class']
+                #     info['cand_obj_id'] = candidates_dict['obj_id']
+                # else:
                 info['find_goal'] = False
+                # info['get_cand_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256))     
                 
                 info['sample_stage'] = False
                 info['sample_step'] = 0
+                info['sample_num'] = 0
+                info['target_class'] = None
                 
+                # info['find_cand_goal'] = False
+                # info['cand_class'] = None
+                # info['cand_obj_id'] = None
+            
             
         return state, info
     

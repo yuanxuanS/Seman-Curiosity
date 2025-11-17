@@ -93,11 +93,11 @@ class Frontier:
             self.last_loc[e] = self.curr_loc[e]
             self.curr_loc[e] = [start_x, start_y, start_o]
             
-            if self.rotation_counts[e] < 10:        
-                action = 2  # left
-                actions.append(action)
-                self.rotation_counts[e] += 1
-                continue
+            # if self.rotation_counts[e] < 10:        
+            #     action = 2  # left
+            #     actions.append(action)
+            #     self.rotation_counts[e] += 1
+            #     continue
             
             # check if need replan (arrive goal or no goal)
             x2, y2, _ = self.curr_loc[e]
@@ -162,10 +162,10 @@ class Frontier:
         self.last_loc[env_idx] = self.curr_loc[env_idx]
         self.curr_loc[env_idx] = [start_x, start_y, start_o]
             
-        if self.rotation_counts[env_idx] < 10:        
-            action = 2  # left
-            self.rotation_counts[env_idx] += 1
-            return action, None, None
+        # if self.rotation_counts[env_idx] < 10:        
+        #     action = 2  # left
+        #     self.rotation_counts[env_idx] += 1
+        #     return action, None, None
         
         # check if need replan (arrive goal or no goal)
         x2, y2, _ = self.curr_loc[env_idx]

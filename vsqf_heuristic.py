@@ -29,6 +29,8 @@ class vsqf_heuristic:
         self.visited_goal = None
         self.replan = None
         
+        self.rotation_counts = None
+        
     def reset(self):
         self.planners = [None for _ in range(self.num_scenes)]
         
@@ -53,8 +55,13 @@ class vsqf_heuristic:
 
         self.visited_goal = np.zeros((self.num_scenes, map_shape[0], map_shape[1])).astype(bool)
         self.replan = [True for _ in range(self.num_scenes)]
+        self.arrive_goal = [False for _ in range(self.num_scenes)]
         self.vis_masks = np.ones((self.num_scenes, map_shape[0], map_shape[1]))
-    
+        
+        self.vsqf_goals = [[0, 0] for _ in range(self.num_scenes)]
+          
+        self.rotation_counts = [0]*self.num_scenes
+        self.sample_num = [0]*self.num_scenes       
 
     def get_best_region(self, vsqf_map, vis_inputs, update_vis_map):
         '''
@@ -91,17 +98,17 @@ class vsqf_heuristic:
         start = pu.threshold_poses(start, exp_maps.shape[-2:])
         
         
-        # 连通域分割，只在位置连通区域选目标
+        # 连通域分割，只在agent位置连通范围
         map_masks = []
         for e, p_input in enumerate(vis_inputs):
             
             exp_maps_ = exp_maps[e]
-            exp_maps_[int(start[0]) - 1: int(start[0])+2,       # 所在位置为可行区
-                      int(start[1]) - 1: int(start[1]) + 2] = 1.
+            exp_maps_[int(start[0]) - 5: int(start[0])+5,       # 所在位置为可行区
+                      int(start[1]) - 5: int(start[1]) + 5] = 1.
             map_mask = np.ones_like(exp_maps[e])
-            connected_colli, num_coli = skimage.morphology.label(exp_maps_, connectivity=1, return_num=True)
-            for id in range(1, num_coli):
-                region_ = (connected_colli== id).astype(bool)
+            connected_colli2, num_coli2 = skimage.morphology.label(exp_maps_, connectivity=1, return_num=True)
+            for id in range(1, num_coli2):
+                region_ = (connected_colli2== id).astype(bool)
                 if region_[start[0], start[1]] > 0:
                     map_mask = region_
                     break
@@ -110,7 +117,7 @@ class vsqf_heuristic:
         map_masks = torch.stack(map_masks)
         
         # 在可行区上，且当前位置连通的可行区上选择目标
-        exp_maps = exp_maps * map_mask
+        exp_maps = exp_maps * map_masks
         
         # vsqf选定目标物体周围的可视区, 此时exp_maps为连通区域; object_maps为和初始目标物体重叠的物体
         # sem_map = [torch.from_numpy(skimage.morphology.dilation(np.rint(v_ip['sem_map_pred_full']), selem_s)) for v_ip in vis_inputs]
@@ -132,64 +139,87 @@ class vsqf_heuristic:
                         tgt_id = id
             tgt_map = connected_colli== tgt_id    
             tgt_maps.append(torch.from_numpy(tgt_map))
+            v_ip['target_map'] = torch.from_numpy(tgt_map)
             
         tgt_maps = torch.stack(tgt_maps)
         
+        # 在explore map上，且目标的可视范围内选择
         for e in range(obs_maps.shape[0]):
-            if update_vis_map[e]:
+            # invalid_goal_last = self.vsqf_goals[e][0] == self.vsqf_goals[e][1] and self.vsqf_goals[e][0] < 5
+            if (vis_inputs[e]['sample_stage'] and self.replan[e]) or (update_vis_map[e] and vis_inputs[e]['sample_stage']):         # 
                 self.vis_masks[e] = get_visibility_mask_reverse(tgt_maps[e], exp_maps[e], obs_maps[e])
  
         vsqf_map_ = vsqf_map.squeeze(1).cpu() * torch.from_numpy((1 - self.visited_goal.astype(int)))   # 去掉已经到达过的goal区域
         vsqf_map_ = vsqf_map_ * exp_maps * self.vis_masks
         
-        
-        # 选最大值
-        # goals_map = nms(vsqf_map_, max_predictions=1)
-        # goals = []
-        # for i in range(exp_maps.shape[0]):
-        #     goal = torch.where(goals_map[i] > 0)
-        #     if len(goal[0]) > 0:
-        #         goals.append([int(goal[0][i]), int(goal[1][i])])
-        #     else:
-        #         goals.append([0,0])
-                
         maps_flat = vsqf_map_.reshape(self.num_scenes, -1)
         max_flat_indices = torch.argmax(maps_flat, dim=1)
         row_indices, col_indices = np.unravel_index(max_flat_indices.cpu().numpy(), (vsqf_map.shape[-2], vsqf_map.shape[-1]))
         
         goals = [[row_indices[i], col_indices[i]] for i in range(self.num_scenes)]
-        self.vsqf_goals = [goals[i] if self.replan[i] else self.vsqf_goals[i] for i in range(self.num_scenes)]
-        return goals
+        for i in range(self.num_scenes):
+            invalid_goal_cond = self.vis_masks[i].sum() == 0 and vis_inputs[i]['sample_stage']
+            if self.replan[i] or invalid_goal_cond:
+                self.vsqf_goals[i] =goals[i]
+           
+                
+        return self.vsqf_goals
     
-    def get_actions(self, goals, vis_inputs):
+    
+    def get_actions(self, vis_inputs):
         
         actions = [None for _ in range(self.num_scenes)]
         for e, p_input in enumerate(vis_inputs):
+            
+            # if self.rotation_counts[e] < 5:        
+            #     actions[e] =1       # left
+            #     self.rotation_counts[e] += 1
+            #     continue
+            if self.rotation_counts[e] < 10:        
+                actions[e] = 2
+                self.rotation_counts[e] += 1
+                continue
+            
             if p_input['sample_stage']:
-                actions[e], new_goal, get_in_goal, stop = self.get_actions_with_vsqf(p_input, e, goals[e])
-                if new_goal[0] == self.vsqf_goals[e][0] and new_goal[1] == self.vsqf_goals[e][1]:
-                    pass
-                else:
-                    self.vsqf_goals[e] = new_goal 
-                    p_input['frontier_goal'] = new_goal
-                
-                self.frontier_policy.collision_map[e] = self.collision_map[e]
-                self.frontier_policy.curr_loc[e] = self.curr_loc[e]
-                self.frontier_policy.last_loc[e] = self.last_loc[e]
-                self.frontier_policy.col_width[e] = self.col_width[e]
-                if get_in_goal or stop:
-                    # self.visited_goal[e, self.vsqf_goals[e][0] - 5:self.vsqf_goals[e][0] + 5, 
-                    #                   self.vsqf_goals[e][1]-5:self.vsqf_goals[e][1]+5] = 1
+                if self.arrive_goal[e] and not self.replan[e]:
                     
-                    sigma=(5.0,5.0)
-                    gaussian=False
-                    mu = torch.tensor([[self.vsqf_goals[e][1], self.vsqf_goals[e][0]]]).float()
-                    visited_  = neighborhoods(mu, self.map_shape[0], self.map_shape[1], sigma, gaussian=gaussian)
-                    self.visited_goal[e] = visited_.squeeze(0).numpy().astype(bool) | self.visited_goal[e].astype(bool)
-                    print(f"get in vsqf goal")
-                    self.replan[e] = True
-                else:
-                    self.replan[e] = False
+                    actions[e], self.replan[e] = self.rotate_to_object(p_input, e, self.vsqf_goals[e])
+                    print(f"arrive and rotation with {actions[e]}")
+                    if actions[e] == 3:
+                        self.sample_num[e] += 1
+                    if actions[e] == 3 and self.sample_num[e] == 5:
+                        self.visited_goal[e] = np.zeros((self.map_shape[0], self.map_shape[1])).astype(bool)
+                        self.sample_num[e] = 0
+                else:   # arrive and replan, not arrive and not replan
+                    
+                    actions[e], new_goal, replan_whole,  get_in_goal = self.get_actions_with_vsqf(p_input, e, self.vsqf_goals[e])
+                    if new_goal[0] == self.vsqf_goals[e][0] and new_goal[1] == self.vsqf_goals[e][1]:
+                        pass
+                    else:
+                        self.vsqf_goals[e] = new_goal 
+                        p_input['frontier_goal'] = new_goal
+                    
+                    self.frontier_policy.collision_map[e] = self.collision_map[e]
+                    self.frontier_policy.curr_loc[e] = self.curr_loc[e]
+                    self.frontier_policy.last_loc[e] = self.last_loc[e]
+                    self.frontier_policy.col_width[e] = self.col_width[e]
+                    if get_in_goal:
+
+                        sigma=(1.5,1.5)
+                        gaussian=True
+                        mu = torch.tensor([[self.vsqf_goals[e][1], self.vsqf_goals[e][0]]]).float()
+                        visited_  = neighborhoods(mu, self.map_shape[0], self.map_shape[1], sigma, gaussian=gaussian)
+                        self.visited_goal[e] = visited_.squeeze(0).numpy().astype(bool) | self.visited_goal[e].astype(bool)
+                        print(f"get in vsqf goal")
+                        self.arrive_goal[e] = True
+                        self.replan[e] = False
+                    else:
+                        if replan_whole:        # 当前点已经不可达，重新规划目标
+                            self.replan[e] = True
+                        else:
+                            self.replan[e] = False
+                        self.arrive_goal[e] = False
+                    
             else:
                 action, goal, short_time_goal = self.frontier_policy.get_action_one_env(p_input, e)
                 actions[e] = int(action)
@@ -201,9 +231,46 @@ class vsqf_heuristic:
                 self.curr_loc[e] = self.frontier_policy.curr_loc[e]
                 self.last_loc[e] = self.frontier_policy.last_loc[e]
                 self.col_width[e] = self.frontier_policy.col_width[e]
+
             self.last_actions[e] = actions[e]
         return actions
     
+    def rotate_to_object(self, vis_inputs, env_idx, goal):
+        
+        # obj loca
+        target_ = vis_inputs['target_map']
+        r_idxs, c_idxs = np.where(target_ > 0)
+        target_r, target_c = int(r_idxs.mean()), int(c_idxs.mean())
+        
+        # agent loc, orientation
+        start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
+            vis_inputs['pose_pred']     # x,y,o为全局，如果要用局部的，需要减去局部原点gx1, gy1
+        r, c = start_y, start_x     # 转化为格子坐标
+        start = [int(r * 100.0 / self.args.map_resolution),
+                 int(c * 100.0 / self.args.map_resolution)]
+        start = pu.threshold_poses(start, target_.shape)
+        
+        
+        # vector, vector orientation
+        angle_st_goal = math.degrees(math.atan2(target_r - start[0],
+                                                target_c - start[1]))
+        angle_agent = (start_o) % 360.0
+        if angle_agent > 180:
+            angle_agent -= 360
+
+        relative_angle = (angle_agent - angle_st_goal) % 360.0
+        if relative_angle > 180:
+            relative_angle -= 360
+
+        
+        if relative_angle > self.args.turn_angle / 2.:
+            action = 2  #3  # Right
+        elif relative_angle < -self.args.turn_angle / 2.:
+            action = 1  #2  # Left
+        else:
+            return 3, True      # capture
+        return action, False
+
     def get_actions_with_vsqf(self, vis_inputs, env_idx, goal):
         
         def add_boundary(mat, value=1):
@@ -311,7 +378,7 @@ class vsqf_heuristic:
             
             
         state = [start[0] - x1 + 1, start[1] - y1 + 1]
-        stg_x, stg_y, get_in_goal, stop = self.planners[env_idx].get_short_term_goal(state)
+        stg_x, stg_y, replan_whole, stop = self.planners[env_idx].get_short_term_goal(state)
 
         stg_x, stg_y = stg_x + x1 - 1, stg_y + y1 - 1
         
@@ -333,4 +400,4 @@ class vsqf_heuristic:
             action = 0  #1  # Forward
             
         #
-        return action, new_goal, get_in_goal, stop
+        return action, new_goal, replan_whole, stop

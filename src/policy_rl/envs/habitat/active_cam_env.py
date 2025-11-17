@@ -103,7 +103,8 @@ class Active_cam_Env(habitat.RLEnv):
 
         if self.args.save_samples:
             # paths = self.save_data(obs)
-            self.obs_info = obs
+            pass
+        self.obs_info = obs
             
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
@@ -865,7 +866,8 @@ class Active_cam_Env(habitat.RLEnv):
         # save samples(before resize)
         if self.args.save_samples:
             # paths = self.save_data(obs)
-            self.obs_info = obs
+            pass
+        self.obs_info = obs
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
