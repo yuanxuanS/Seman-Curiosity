@@ -9,7 +9,10 @@ import torch
 import math
 import skimage
 import random
-
+from torch import Tensor
+from src.policy_rl.utils.pointnav_policy import WrappedPointNavResNetPolicy
+from src.policy_rl.utils.geometry_utils import rho_theta
+from src.policy_rl.utils.obs_transforms import image_resize
 class Frontier:
     '''
     frontier baseline on full map
@@ -40,11 +43,19 @@ class Frontier:
         self.stuck_cnt = None
         self.stuck_goal = None
         
-        # self.obs_shape = None
         
         # initializations for planning:
         self.selem = skimage.morphology.disk(3)
         
+        # navigation
+        pointnav_policy_path = "/home/wpp/Seman-Curiosity/data/pointnav_w"
+        self._pointnav_policy = WrappedPointNavResNetPolicy(pointnav_policy_path)
+        self._last_goal = np.zeros(2)
+        self._depth_image_shape = (224, 224)
+        self._pointnav_stop_radius= 0.9
+        self._called_stop = False
+        self.device = "cuda:0"
+
     def reset(self, env_nums):
         args = self.args
         self.env_nums = env_nums
@@ -55,6 +66,7 @@ class Frontier:
                      args.map_size_cm // args.map_resolution)
         self.collision_map = np.zeros((env_nums, map_shape[0], map_shape[1]))
         self.visited = np.zeros((env_nums, map_shape[0], map_shape[1]))
+        self.selected_goal = np.zeros((env_nums, map_shape[0], map_shape[1]))
         # self.visited_vis = np.zeros(map_shape)
         
         self.col_width = [1]*env_nums
@@ -82,6 +94,10 @@ class Frontier:
 
         self.invalid_goal = [False]*env_nums
         self.invalid_goal_loc = [[]]*env_nums
+        
+        self._pointnav_policy.reset()
+        self._last_goal = np.zeros(2)
+        self._called_stop = False
     def get_actions(self, vis_inputs):
         
         actions = []
@@ -180,9 +196,11 @@ class Frontier:
         else:
             # replan if get close to goal
             goal_r, goal_c = self.goals[env_idx][0], self.goals[env_idx][1]
-            if abs(goal_c - start[1]) < 10 and abs(goal_r - start[0]) < 10:     # for grid distance
+            dis = pu.get_l2_distance(goal_c, start[1], goal_r, start[0])
+            if dis < 15:     # for grid distance
                 self.replan[env_idx] = True
                 print(f"get in goal {self.replan[env_idx]}")
+                self.selected_goal[env_idx, goal_r-2:goal_r+2, goal_c-2:goal_c+2] = 1.
             else:
                 self.replan[env_idx] = self.counts[env_idx] >= 50       # if long time
                 
@@ -202,7 +220,7 @@ class Frontier:
             gain_fmap = self.get_frontier_gains(fmap, p_input, lagst_contrs)
             goal = self.sample_frontier(gain_fmap, env_idx)
             self.goals[env_idx] = goal
-            # print(f"replan in env :{env_idx}, goal {goal}")
+            print(f"replan in env :{env_idx}, goal {goal}")
         else:
             goal = self.goals[env_idx]
 
@@ -225,14 +243,11 @@ class Frontier:
         object-oriented 里面的determin policy
             goal: r, c
         '''
-        # convert goal to goal map            
-        # goal_map = np.zeros((self.map_shape[1], self.map_shape[0]))
-        # goal_map[goal[0], goal[1]] = 1
             
         action, short_time_goal, get_in_goal, get_in_stg = self._plan(p_input, goal, env_idx)
         return action, short_time_goal, get_in_goal, get_in_stg
         
-    def _plan(self, planner_inputs, goal, env_idx):
+    def _plan(self, planner_input, goal, env_idx):
         """Function responsible for planning
 
         Args:
@@ -249,14 +264,13 @@ class Frontier:
         """
         args = self.args
 
-        # self.last_loc[env_idx] = self.curr_loc[env_idx]
-
-        # Get Map prediction
-        map_pred = np.rint(planner_inputs['map_pred_full'])
-
+        # obstacle map
+        map_pred = np.rint(planner_input['map_pred_full'])
+        exp_pred = np.rint(planner_input['exp_pred_full'])     # explore map
+        
         # Get pose prediction and global policy planning window
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
-            planner_inputs['pose_pred']     # x,y,o为全局，如果要用局部的，需要减去局部原点gx1, gy1
+            planner_input['pose_pred']     # x,y,o为全局，如果要用局部的，需要减去局部原点gx1, gy1
         gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
         planning_window = [gx1, gx2, gy1, gy2]
 
@@ -265,8 +279,6 @@ class Frontier:
                  int(c * 100.0 / args.map_resolution)]
         start = pu.threshold_poses(start, map_pred.shape)
 
-        # self.visited[env_idx, gx1:gx2, gy1:gy2][start[0] - 0:start[0] + 1,
-        #                                start[1] - 0:start[1] + 1] = 1
         self.visited[env_idx, :, :][start[0] - 0:start[0] + 1,
                                        start[1] - 0:start[1] + 1] = 1       # 记录agent走过的轨迹
 
@@ -310,8 +322,15 @@ class Frontier:
                                                     self.collision_map[env_idx].shape)
                         self.collision_map[env_idx, r, c] = 1
 
-        exp_pred = np.rint(planner_inputs['exp_pred_full'])
+        # convert to gps coord
+        # goal_gps = [goal[0] - self.map_shape[0] / 2.0, goal[1] - self.map_shape[1] / 2.0]
+        # goal_gps_real = [goal_gps[0] * self.args.map_resolution / 100, goal_gps[1] * self.args.map_resolution / 100]
         
+        action = self._pointnav(np.array(goal), planner_input)
+        # -1: stop, 0: forward, 1:left, 2:right
+        self.last_actions[env_idx] = action
+        return action, None, action==-1, action==-1
+    
         
         stg, stop, get_in_goal = self._get_stg(exp_pred, map_pred, start, goal,
                                   planning_window, env_idx)
@@ -352,12 +371,57 @@ class Frontier:
             action = 1  #2  # Left
         else:
             action = 0  #1  # Forward
-            
+        
         # check stuck
         self.last_actions[env_idx] = action
         return action, stg, get_in_goal, stop
 
-    
+    def _pointnav(self, goal: np.ndarray, info: dict = {},) -> Tensor:
+        """
+        Calculates rho and theta from the robot's current position to the goal using the
+        gps and heading sensors within the observations and the given goal, then uses
+        it to determine the next action to take using the pre-trained pointnav policy.
+
+        Args:
+            goal (np.ndarray): The goal to navigate to as (x, y), where x and y are in
+                meters.
+            stop (bool): Whether to stop if we are close enough to the goal.
+
+        """
+        num_steps = info['time']
+        masks = torch.tensor([num_steps != 10], dtype=torch.bool, device=self.device)        #   rotation 10 times
+        if not np.array_equal(goal, self._last_goal):
+            if np.linalg.norm(goal - self._last_goal) > 0.1:        # 和上一个目标距离大时才作为目标
+                self._pointnav_policy.reset()
+                masks = torch.zeros_like(masks)
+            self._last_goal = goal
+        # robot_xy = info["robot_xy"]
+        # heading = info["robot_heading"][0]
+        robot_loc = info['pose_pred'][:2]   # full pose, [c,r], real
+        robot_loc_map = [int(robot_loc[0] * 100.0 / self.args.map_resolution),
+                        int(robot_loc[1] * 100.0 / self.args.map_resolution)]
+        heading = math.radians(info['pose_pred'][2])        # 地图上朝向，逆时针为正
+        goal_ = np.array([goal[1], goal[0]])
+        rho, theta = rho_theta(np.array(robot_loc_map),  heading,  goal_)
+        rho = rho * self.args.map_resolution / 100.     # m
+        rho_theta_tensor = torch.tensor([[rho, theta]], device=self.device, dtype=torch.float32)
+        obs_pointnav = {
+            "depth": image_resize(
+                info["depth"][None, ...],
+                (self._depth_image_shape[0], self._depth_image_shape[1]),
+                channels_last=True,
+                interpolation_mode="area",
+            ).to(self.device),
+            "pointgoal_with_gps_compass": rho_theta_tensor.to(self.device),
+        }
+        # self._policy_info["rho_theta"] = np.array([rho, theta])
+        if rho < self._pointnav_stop_radius:
+            self._called_stop = True
+            return -1        # TODO stop
+        action = self._pointnav_policy.act(obs_pointnav, masks, deterministic=False)
+        # 0：stop,1: forward,2:left,3: right  ——> -1,0,1,2
+        return action.cpu().numpy()[0][0] - 1
+        
     def _get_stg(self, exp_map, obs_map, start, goal, planning_window, env_idx):
         """Get short-term goal"""
         '''
@@ -421,7 +485,8 @@ class Frontier:
             get a frontier goal with max gain
                 gains_fmap: 1, full_w, full_h
         '''
-
+        gains_fmap[self.selected_goal[env_idx] > 0] = -100
+        # mask selected goal
         gfmap = gains_fmap.squeeze(0)
         # flat_indices = np.where(gfmap.flatten() > 1)[0]
         # random_index = random.choice(flat_indices)
@@ -464,7 +529,8 @@ class Frontier:
         # unexp_floor_map = unexp_floor_map.cpu().numpy()
         
         out_area_pfs = None
-            
+        
+        # explore map
         exp_map = np.rint(p_input["exp_pred_full"])
         unk_map = 1 - exp_map
         

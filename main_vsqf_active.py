@@ -22,6 +22,7 @@ from src.policy_rl.agents.utils.orient_prediction import Orient_pred
 from PIL import Image
 from vqf_train import visualize
 from vsqf_heuristic import vsqf_heuristic
+from src.vqf_constants import target_coco_categories
 def main():
     args = get_args()
     
@@ -101,7 +102,7 @@ def main():
     magnify, magnify_num = args.magnify, args.magnify_num
     vsqf_pred = Vsqf_pred(device, magnify, magnify_num)
     orient_pred = Orient_pred(device)
-    vsqf_heu = vsqf_heuristic(args, num_scenes)
+    vsqf_heu = vsqf_heuristic(args, num_scenes, device)
     vsqf_heu.reset()
     
     # inference vsqf and azimuth
@@ -122,6 +123,14 @@ def main():
     local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map
     
+    # candidate_obj_maps = {target:{} for target in target_coco_categories}
+    # find_cand_goal = torch.tensor([infos[env_idx]['find_cand_goal'] for env_idx in range(num_scenes)])
+    # get_cand_goal = torch.tensor([infos[env_idx]['get_cand_goal'] for env_idx in range(num_scenes)])
+    # cand_class = [infos[env_idx]['cand_class'] for env_idx in range(num_scenes)]
+    # cand_obj_id = [infos[env_idx]['cand_obj_id'] for env_idx in range(num_scenes)]
+
+    
+
     # for visualize
     full_map = maps.full_map
     curr_full_map = maps.curr_full_map
@@ -144,10 +153,16 @@ def main():
         p_input['vsqf_map'] = local_vsqf_map[e, :, :, :].cpu().numpy()
         p_input['vsqf_map_full'] = full_vsqf_map[e, :, :, :].cpu().numpy()
         if find_goal[e]:
+            # if get_cand_goal[e]:
+            #     curr_object_map = candidate_obj_maps[cand_class[e]][cand_obj_id]
+            # else:
             curr_full_map[e, -1, :, :] = 1e-5
             curr_object_map = curr_full_map[e, 4:, :, :].argmax(0).cpu().numpy()
-            p_input['object_map_full'] = curr_object_map
         else:
+            # if find_cand_goal[e]:
+            #     curr_full_map[e, -1, :, :] = 1e-5
+            #     curr_object_map = curr_full_map[e, 4:, :, :].argmax(0).cpu().numpy()
+            #     candidate_obj_maps[cand_class[e]][cand_obj_id[e]] = curr_object_map
             if not infos[e]['sample_stage']:
                 curr_object_map = np.ones_like(p_input['vsqf_map_full'])
         p_input['object_map_full'] = curr_object_map
@@ -231,27 +246,42 @@ def main():
     elif args.agent == "frontier":
         l_policy = Frontier(args)
         l_policy.reset(num_scenes)
+        for e, p_input in enumerate(vis_inputs):
+            p_input['depth'] = infos[e]['depth']
+            p_input['time'] = infos[e]['time']
+            p_input['sample_stage'] = False
         l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
         for e, p_input in enumerate(vis_inputs):
-            if args.visualize or args.print_images:
-                p_input["frontier_goal"] = goals[e]
-                p_input["short_time_goal"] = short_time_goals[e]
+            # if args.visualize or args.print_images:
+            p_input["frontier_goal"] = goals[e]
+            # p_input["short_time_goal"] = short_time_goals[e]
+            
     elif args.agent == "vsqf_heuristic":
         # select goal according to vsqf map
         
         update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
+        for e, p_input in enumerate(vis_inputs):
+            p_input['sample_step'] = infos[e]['sample_step']
+            p_input['sample_stage'] = infos[e]['sample_stage']
+            p_input['robot_xy'] = infos[e]['robot_xy']
+            p_input['robot_heading'] = infos[e]['robot_heading']
+            p_input['depth'] = infos[e]['depth']
+            p_input['time'] = infos[e]['time']
         goals = vsqf_heu.get_best_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
         for e, p_input in enumerate(vis_inputs):
             # if args.visualize or args.print_images:
             if infos[e]['sample_stage']:
                 p_input["frontier_goal"] = goals[e]
             
-            p_input['sample_stage'] = infos[e]['sample_stage']
+            
         
         
         # return action with planner
-        l_action = vsqf_heu.get_actions(find_goal, vis_inputs)
-        
+        l_action = vsqf_heu.get_actions(vis_inputs)
+    
+    timestep = [infos[env_idx]['time'] for env_idx in range(num_scenes)]
+    patch = [True if timestep[e] == 0 else False for e in range(num_scenes)]
+    maps.patch_agent_region(patch)
     # transition:
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_pre(l_action, vis_inputs)
@@ -278,6 +308,9 @@ def main():
     local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map
     
+    
+    finish_sample = [infos[env_idx]['finished'] for env_idx in range(num_scenes)]
+    
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
     logging.info("Start date and time: %s", start_datetime)
@@ -295,6 +328,10 @@ def main():
         logging.info(f"training frames is {args.num_training_frames}")
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
+        
+        # 
+        patch = [True if timestep[e] == 0 else False for e in range(num_scenes)]
+        maps.patch_agent_region(patch)
         
         if finished.sum() == args.num_processes:    # eval over
             break
@@ -353,8 +390,10 @@ def main():
                 for e, x in enumerate(done):    # if done, maps from new obs
                     if x:
                         episode_done[e].append(True)
-                        if len(episode_done[e]) == num_episodes:
+                        # if len(episode_done[e]) == num_episodes:
+                        if finish_sample[e]:
                             finished[e] = 1
+                            pass
 
             if args.agent == "frontier":
                 l_policy.reset(num_scenes)
@@ -374,7 +413,7 @@ def main():
         elif args.agent == "random":
             l_action = np.random.randint(0, 8, num_scenes)
 
-        if step%500 == 250:
+        if step%50 == 0:
             maps.filter_obstacle_map()
             for e, p_input in enumerate(vis_inputs):
                 p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()                
@@ -404,34 +443,53 @@ def main():
             p_input['vsqf_map'] = local_vsqf_map[e, :, :, :].cpu().numpy()
             p_input['vsqf_map_full'] = full_vsqf_map[e, :, :, :].cpu().numpy()                  
             if find_goal[e]:
+                # if get_cand_goal[e]:
+                #     curr_object_map = candidate_obj_maps[cand_class[e]][cand_obj_id[e]]
+                # else:
                 curr_full_map[e, -1, :, :] = 1e-5
                 curr_object_map = curr_full_map[e, 4:, :, :].argmax(0).cpu().numpy()
             else:
+                # if find_cand_goal[e]:
+                #     curr_full_map[e, -1, :, :] = 1e-5
+                #     curr_object_map = curr_full_map[e, 4:, :, :].argmax(0).cpu().numpy()
+                #     candidate_obj_maps[cand_class[e]][cand_obj_id[e]] = curr_object_map
                 if not infos[e]['sample_stage']:
                     curr_object_map = np.ones_like(curr_object_map)
             p_input['object_map_full'] = curr_object_map
             
         if args.agent == "frontier":  # must be after updating vis_inputs
+            for e, p_input in enumerate(vis_inputs):
+                p_input['depth'] = infos[e]['depth']
+                p_input['time'] = infos[e]['time']
+                p_input['sample_stage'] = False
             l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
-            if args.visualize or args.print_images:
-                for e, p_input in enumerate(vis_inputs):
-                    p_input["frontier_goal"] = goals[e]
-                    p_input["short_time_goal"] = short_time_goals[e]
+            # if args.visualize or args.print_images:
+            for e, p_input in enumerate(vis_inputs):
+                p_input["frontier_goal"] = goals[e]
+                # p_input["short_time_goal"] = short_time_goals[e]
+                
         if args.agent == "vsqf_heuristic":
             # select goal according to vsqf map
             update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
+            for e, p_input in enumerate(vis_inputs):
+                p_input['sample_step'] = infos[e]['sample_step']
+                p_input['sample_stage'] = infos[e]['sample_stage']
+                p_input['robot_xy'] = infos[e]['robot_xy']
+                p_input['robot_heading'] = infos[e]['robot_heading']
+                p_input['depth'] = infos[e]['depth']
+                p_input['time'] = infos[e]['time']
             goals = vsqf_heu.get_best_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
             for e, p_input in enumerate(vis_inputs):
                 # if args.visualize or args.print_images:
                 if infos[e]['sample_stage']:
                     p_input["frontier_goal"] = goals[e]
-                    # p_input["short_time_goal"] = short_time_goals[e]
-                p_input['sample_stage'] = infos[e]['sample_stage']
+                
             # return action with planner
-            l_action = vsqf_heu.get_actions(goals, vis_inputs)
+            l_action = vsqf_heu.get_actions(vis_inputs)
         
         # transition: next state
-        if l_step == args.num_local_steps - 1:
+        # if l_step == args.num_local_steps - 1:
+        if done[0]:
             obs, infos = envs.reset()
             done  = np.array([False]*num_scenes)
         else:
@@ -444,7 +502,7 @@ def main():
                 maps._init_map_and_pose_for_env(e)
                 vsqf_maps._init_map_and_pose_for_env(e)
                 print(f"Env {e}'s episode over in {step} step, {l_step} local step, reset maps")
-                
+                vsqf_heu.reset()
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)
         full_pose = maps.full_pose
@@ -467,7 +525,13 @@ def main():
         local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
         full_vsqf_map = vsqf_maps.full_map
         
+        # find_cand_goal = torch.tensor([infos[env_idx]['find_cand_goal'] for env_idx in range(num_scenes)])
+        # get_cand_goal = torch.tensor([infos[env_idx]['get_cand_goal'] for env_idx in range(num_scenes)])
+        # cand_class = [infos[env_idx]['cand_class'] for env_idx in range(num_scenes)]
+        # cand_obj_id =[infos[env_idx]['cand_obj_id'] for env_idx in range(num_scenes)]
         
+        timestep = [infos[env_idx]['time'] for env_idx in range(num_scenes)]
+        finish_sample = [infos[env_idx]['finished'] for env_idx in range(num_scenes)]
         
         # ------------------------------------------------------------------
         # Training

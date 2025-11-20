@@ -217,7 +217,8 @@ def main():
         # 转化为周围节点的坐标偏置 bias_r, bias_c
         
     elif args.agent == "random":
-        l_action = np.random.randint(0, 3, num_scenes)
+        # l_action = np.random.randint(0, 3, num_scenes)
+        l_action = np.random.randint(0, 8, num_scenes)
     elif args.agent == "frontier":
         l_policy = Frontier(args)
         l_policy.reset(num_scenes)
@@ -360,7 +361,7 @@ def main():
                 )
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
-            l_action = np.random.randint(0, 3, num_scenes)
+            l_action = np.random.randint(0, 8, num_scenes)
 
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]

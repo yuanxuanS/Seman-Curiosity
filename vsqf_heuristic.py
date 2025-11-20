@@ -6,14 +6,18 @@ from src.policy_rl.baseline_frontier import Frontier
 import torch
 import cv2
 import skimage
+from src.policy_rl.utils.geometry_utils import rho_theta
+from src.policy_rl.utils.obs_transforms import image_resize
 
 from vsqf_utils import get_visibility_mask, get_visibility_mask_reverse, nms, neighborhoods
+from src.policy_rl.utils.pointnav_policy import WrappedPointNavResNetPolicy
 
 class vsqf_heuristic:
-    def __init__(self, args, num_scenes):
+    def __init__(self, args, num_scenes, device):
         self.planners = [None for _ in range(num_scenes)]
         self.args = args
         self.num_scenes = num_scenes
+        self.device = device
         
         self.frontier_policy = Frontier(args)
         self.frontier_policy.reset(num_scenes)
@@ -27,9 +31,19 @@ class vsqf_heuristic:
         
         # vsqf map
         self.visited_goal = None
+        self.mask_sigma = np.ones(self.num_scenes) * 1.5
         self.replan = None
-        
+        self.cand_goals_map = [None]*5
+         
         self.rotation_counts = None
+        
+        # pointnav
+        pointnav_policy_path = "/home/wpp/Seman-Curiosity/data/pointnav_w"
+        self._pointnav_policy = WrappedPointNavResNetPolicy(pointnav_policy_path)
+        self._last_goal = np.zeros(2)
+        self._depth_image_shape = (224, 224)
+        self._pointnav_stop_radius= 0.3
+        self._called_stop = False
         
     def reset(self):
         self.planners = [None for _ in range(self.num_scenes)]
@@ -54,14 +68,19 @@ class vsqf_heuristic:
         self.visited = np.zeros((self.num_scenes, map_shape[0], map_shape[1]))
 
         self.visited_goal = np.zeros((self.num_scenes, map_shape[0], map_shape[1])).astype(bool)
+        self.mask_sigma = np.ones(self.num_scenes) * 1.5
         self.replan = [True for _ in range(self.num_scenes)]
         self.arrive_goal = [False for _ in range(self.num_scenes)]
         self.vis_masks = np.ones((self.num_scenes, map_shape[0], map_shape[1]))
         
         self.vsqf_goals = [[0, 0] for _ in range(self.num_scenes)]
-          
+        self.cand_goals_map = [torch.zeros((map_shape[0], map_shape[1])) for _ in range(self.num_scenes)]
         self.rotation_counts = [0]*self.num_scenes
-        self.sample_num = [0]*self.num_scenes       
+        self.sample_num = [0]*self.num_scenes     
+        
+        # pointnav
+        self._last_goal = np.zeros(2)  
+        self._pointnav_policy.reset()
 
     def get_best_region(self, vsqf_map, vis_inputs, update_vis_map):
         '''
@@ -91,17 +110,19 @@ class vsqf_heuristic:
         exp_maps = exp_maps * (1 - obs_maps.type(torch.int))
         
         
-        start_x, start_y, start_o, gx1, gx2, gy1, gy2 = p_input['pose_pred']
-        r, c = start_y, start_x     # 转化为格子坐标
-        start = [int(r * 100.0 / self.args.map_resolution),
-                int(c * 100.0 / self.args.map_resolution)]
-        start = pu.threshold_poses(start, exp_maps.shape[-2:])
+        
         
         
         # 连通域分割，只在agent位置连通范围
         map_masks = []
         for e, p_input in enumerate(vis_inputs):
             
+            start_x, start_y, start_o, gx1, gx2, gy1, gy2 = p_input['pose_pred']
+            r, c = start_y, start_x     # 转化为格子坐标
+            start = [int(r * 100.0 / self.args.map_resolution),
+                    int(c * 100.0 / self.args.map_resolution)]
+            start = pu.threshold_poses(start, exp_maps.shape[-2:])
+        
             exp_maps_ = exp_maps[e]
             exp_maps_[int(start[0]) - 5: int(start[0])+5,       # 所在位置为可行区
                       int(start[1]) - 5: int(start[1]) + 5] = 1.
@@ -122,7 +143,7 @@ class vsqf_heuristic:
         # vsqf选定目标物体周围的可视区, 此时exp_maps为连通区域; object_maps为和初始目标物体重叠的物体
         # sem_map = [torch.from_numpy(skimage.morphology.dilation(np.rint(v_ip['sem_map_pred_full']), selem_s)) for v_ip in vis_inputs]
         tgt_maps = []
-        for v_ip in vis_inputs:
+        for e, v_ip in enumerate(vis_inputs):
             sem_map_ = skimage.morphology.dilation(v_ip['sem_map_pred_full'] < 5, selem_l)
             connected_colli, num_coli = skimage.morphology.label(sem_map_, connectivity=1, return_num=True)
             obj_map = v_ip['object_map_full'] < 5       # TODO 可以增加指定类别通道
@@ -149,19 +170,44 @@ class vsqf_heuristic:
             if (vis_inputs[e]['sample_stage'] and self.replan[e]) or (update_vis_map[e] and vis_inputs[e]['sample_stage']):         # 
                 self.vis_masks[e] = get_visibility_mask_reverse(tgt_maps[e], exp_maps[e], obs_maps[e])
  
+        exp_maps = exp_maps * self.vis_masks
+        exp_size = exp_maps.sum(1).sum(1)
+        # 如果区域小，则选5个候选点
+        self.mask_sigma = np.where(exp_size > 800, 1.5, 0.8)
+            
         vsqf_map_ = vsqf_map.squeeze(1).cpu() * torch.from_numpy((1 - self.visited_goal.astype(int)))   # 去掉已经到达过的goal区域
-        vsqf_map_ = vsqf_map_ * exp_maps * self.vis_masks
+        vsqf_map_ = vsqf_map_ * exp_maps
         
-        maps_flat = vsqf_map_.reshape(self.num_scenes, -1)
-        max_flat_indices = torch.argmax(maps_flat, dim=1)
-        row_indices, col_indices = np.unravel_index(max_flat_indices.cpu().numpy(), (vsqf_map.shape[-2], vsqf_map.shape[-1]))
+        goals = [None]*self.num_scenes
+        for e in range(self.num_scenes):
+            if exp_size[e] > 800:      # 仅选一个
+                maps_flat = vsqf_map_[e].reshape(1, -1)
+                max_flat_indices = torch.argmax(maps_flat, dim=1)
+                row_indices, col_indices = np.unravel_index(max_flat_indices.cpu().numpy(), (vsqf_map.shape[-2], vsqf_map.shape[-1]))
         
-        goals = [[row_indices[i], col_indices[i]] for i in range(self.num_scenes)]
+                goals[e] = [row_indices[0], col_indices[0]]
+            else:
+                if vsqf_map_[e].sum() == 0:
+                    maps_flat = self.cand_goals_map[e].reshape(1, -1)
+                else:
+                    cand_goals_map = nms(vsqf_map_[e][None, ...], 
+                        max_predictions=5, 
+                        sigma=(self.mask_sigma[e], self.mask_sigma[e]),
+                        gaussian=True)
+                    self.cand_goals_map[e] = cand_goals_map if (cand_goals_map > 0).sum() ==5 else self.cand_goals_map[e]
+                    maps_flat = (vsqf_map_[e] * cand_goals_map).reshape(1, -1)
+                max_flat_indices = torch.argmax(maps_flat, dim=1)
+                row_indices, col_indices = np.unravel_index(max_flat_indices.cpu().numpy(), (vsqf_map.shape[-2], vsqf_map.shape[-1]))
+                goals[e] = [row_indices[0], col_indices[0]]
+                    
+                    
+                
         for i in range(self.num_scenes):
             invalid_goal_cond = self.vis_masks[i].sum() == 0 and vis_inputs[i]['sample_stage']
             if self.replan[i] or invalid_goal_cond:
                 self.vsqf_goals[i] =goals[i]
-           
+
+            # 如果本次无效，则从候选点中选择
                 
         return self.vsqf_goals
     
@@ -205,12 +251,16 @@ class vsqf_heuristic:
                     self.frontier_policy.col_width[e] = self.col_width[e]
                     if get_in_goal:
 
-                        sigma=(1.5,1.5)
+                        sigma=(self.mask_sigma[e], self.mask_sigma[e])
                         gaussian=True
                         mu = torch.tensor([[self.vsqf_goals[e][1], self.vsqf_goals[e][0]]]).float()
                         visited_  = neighborhoods(mu, self.map_shape[0], self.map_shape[1], sigma, gaussian=gaussian)
                         self.visited_goal[e] = visited_.squeeze(0).numpy().astype(bool) | self.visited_goal[e].astype(bool)
                         print(f"get in vsqf goal")
+                        # pointnav
+                        self._pointnav_policy.reset()
+                        self._last_goal = np.zeros(2) 
+                        
                         self.arrive_goal[e] = True
                         self.replan[e] = False
                     else:
@@ -221,11 +271,13 @@ class vsqf_heuristic:
                         self.arrive_goal[e] = False
                     
             else:
+                # reset 
+                self.cand_goals_map[e] = torch.zeros((self.map_shape[0], self.map_shape[1]))
                 action, goal, short_time_goal = self.frontier_policy.get_action_one_env(p_input, e)
                 actions[e] = int(action)
                 
                 p_input["frontier_goal"] = goal
-                p_input["short_time_goal"] = short_time_goal
+                # p_input["short_time_goal"] = short_time_goal
                     
                 self.collision_map[e] = self.frontier_policy.collision_map[e]
                 self.curr_loc[e] = self.frontier_policy.curr_loc[e]
@@ -271,7 +323,7 @@ class vsqf_heuristic:
             return 3, True      # capture
         return action, False
 
-    def get_actions_with_vsqf(self, vis_inputs, env_idx, goal):
+    def get_actions_with_vsqf(self, vis_input, env_idx, goal):
         
         def add_boundary(mat, value=1):
             
@@ -282,12 +334,12 @@ class vsqf_heuristic:
         
         selem = skimage.morphology.disk(3)
         
-        sem_map = np.rint(vis_inputs['sem_map_pred_full']< 5)
+        sem_map = np.rint(vis_input['sem_map_pred_full']< 5)
         sem_map = skimage.morphology.dilation(sem_map.astype(bool), selem)
-        exp_map = np.rint(vis_inputs['exp_pred_full'])
+        exp_map = np.rint(vis_input['exp_pred_full'])
         exp_map =  skimage.morphology.dilation(exp_map, selem)
         # 过滤噪声
-        obs_map = np.rint(vis_inputs['map_pred_full'])
+        obs_map = np.rint(vis_input['map_pred_full'])
         connected_colli, num_coli = skimage.morphology.label(obs_map, connectivity=1, return_num=True)
         for id in range(num_coli):
                 region_ = (connected_colli== id).astype(bool)
@@ -297,7 +349,7 @@ class vsqf_heuristic:
                         
         # obs_map = skimage.morphology.dilation(obs_map, selem)
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
-            vis_inputs['pose_pred']     # x,y,o为全局，如果要用局部的，需要减去局部原点gx1, gy1
+            vis_input['pose_pred']     # x,y,o为全局，如果要用局部的，需要减去局部原点gx1, gy1
         r, c = start_y, start_x     # 转化为格子坐标
         start = [int(r * 100.0 / self.args.map_resolution),
                  int(c * 100.0 / self.args.map_resolution)]
@@ -350,6 +402,41 @@ class vsqf_heuristic:
                         [r, c] = pu.threshold_poses([r, c],
                                                     self.collision_map[env_idx].shape)
                         self.collision_map[env_idx, r, c] = 1
+        
+        # pointnav navigation
+        num_steps = vis_input['sample_step']
+        masks = torch.tensor([num_steps != 1], dtype=torch.bool, device=self.device)        #   rotation 10 times
+        if not np.array_equal(goal, self._last_goal):
+            if np.linalg.norm(np.array(goal) - np.array(self._last_goal)) > 0.1:        # 和上一个目标距离大时才作为目标
+                self._pointnav_policy.reset()
+                masks = torch.zeros_like(masks)
+            self._last_goal = goal
+        robot_loc = vis_input['pose_pred'][:2]   # full pose, [c,r], real
+        robot_loc_map = [int(robot_loc[0] * 100.0 / self.args.map_resolution),
+                        int(robot_loc[1] * 100.0 / self.args.map_resolution)]
+        heading = math.radians(vis_input['pose_pred'][2])        # 地图上朝向，逆时针为正
+        goal_ = np.array([goal[1], goal[0]])
+        rho, theta = rho_theta(np.array(robot_loc_map),  heading,  goal_)
+        rho = rho * self.args.map_resolution / 100.     # m
+        rho_theta_tensor = torch.tensor([[rho, theta]], device=self.device, dtype=torch.float32)
+        obs_pointnav = {
+            "depth": image_resize(
+                vis_input["depth"][None, ...],
+                (self._depth_image_shape[0], self._depth_image_shape[1]),
+                channels_last=True,
+                interpolation_mode="area",
+            ).to(self.device),
+            "pointgoal_with_gps_compass": rho_theta_tensor.to(self.device),
+        }
+        # self._policy_info["rho_theta"] = np.array([rho, theta])
+        if rho < self._pointnav_stop_radius:
+            self._called_stop = True
+            print("get in vsqf goal")
+            return -1, goal, True, True
+        action = self._pointnav_policy.act(obs_pointnav, masks, deterministic=False).cpu().numpy()[0][0] - 1
+        # 0：stop,1: forward,2:left,3: right  ——> -1,0,1,2
+        return action, goal, action ==-1,  action ==-1
+        
         
         x1, y1, = 0, 0
         x2, y2 = exp_map.shape

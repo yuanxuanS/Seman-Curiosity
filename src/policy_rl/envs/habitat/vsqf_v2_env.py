@@ -54,8 +54,27 @@ class Vsqf_v2_Env(habitat.RLEnv):
         # episode id 
         self.episode_no = 0
 
-        self.found_classes = {target:{'num':0, "obj_id":[], "rgbs":0} for target in target_coco_categories.keys()}
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        scene_info = self.dataset_info[scene_name]
+        floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
+        sem_map = scene_info[floor_idx]['sem_map']
+        cat_counts = sem_map.sum(2).sum(1)
         
+        possible_cats = target_cls_id_in_scene
+        possible_cats_ = target_cls_id_in_scene.copy()
+        
+        for i in possible_cats_:
+            if cat_counts[i + 1] == 0:      # 从0-5的类别中，如果有一个类别的数量为0，则去除这个类别
+                possible_cats.remove(i)
+        
+        self.found_classes = {}
+        for target, id in target_coco_categories.items():
+            if id in possible_cats:
+                self.found_classes[target] = {'num':0, "obj_id":[], "rgbs":0}
+        
+        # 
+        self._camera_height = config_env.SIMULATOR.AGENT_0.HEIGHT
     def reset(self):
         """Resets the environment to a new episode.
                 reset traversible initial location
@@ -93,12 +112,22 @@ class Vsqf_v2_Env(habitat.RLEnv):
         #vsqf 
         self.info['sample_stage'] = False
         self.info['sample_step'] = 0
-        self.info['found_classes'] = {target:{'num':0, "obj_id":[]} for target in target_coco_categories.keys()}
+        # self.info['found_classes'] = {target:{'num':0, "obj_id":[]} for target in target_coco_categories.keys()}
         # self.info['candidates'] = []
         self.info['semantic'] = obs['semantic']
         
         # 每个episode最多采2个
         self.sampled_num = 0
+        
+        x, y = obs["gps"]
+        robot_yaw = obs["compass"]
+        # Habitat GPS makes west negative, so flip y
+        robot_position = np.array([x, -y, self._camera_height])
+        robot_xy = robot_position[:2]
+        self.info['robot_xy'] = robot_xy
+        self.info['robot_heading'] = robot_yaw
+        self.info['depth'] = depth
+        
         return state, self.info
     
     def load_episode_loc(self):
@@ -127,6 +156,13 @@ class Vsqf_v2_Env(habitat.RLEnv):
         
         self._env.sim.set_agent_state(pos, rot)
         obs = self._env.sim.get_observations_at(pos, rot)
+        obs.update(
+                self._env.task.sensor_suite.get_observations(
+                    observations=obs,
+                    episode=self._env.current_episode,
+                    action={'action': 0, 'action_args':{}},
+                    task=self._env.task,
+            ))
         return obs
     
     def initial_possible_loc(self):
@@ -216,7 +252,13 @@ class Vsqf_v2_Env(habitat.RLEnv):
         rot = quaternion.from_rotation_vector(rvec)
         self._env.sim.set_agent_state(pos, rot)
         obs = self._env.sim.get_observations_at(pos, rot)
-        
+        obs.update(
+                self._env.task.sensor_suite.get_observations(
+                    observations=obs,
+                    episode=self._env.current_episode,
+                    action={'action': 0, 'action_args':{}},
+                    task=self._env.task,
+            ))
         self.map_obj_origin = map_obj_origin
         
         return obs
@@ -237,13 +279,13 @@ class Vsqf_v2_Env(habitat.RLEnv):
                 obj = self.habitat_env.sim.semantic_scene.objects[id]
                 if obj.category.name() == category:
                     num_occ_pixels = np.where(semantic == id)[0].shape[0]
-                    if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
+                    if num_occ_pixels > 0.001 * semantic.shape[-1]*semantic.shape[-1]:
                         return True, int(obj.id[1:]), obj.category.name()
                 else:
                     if candidate_cate != None:
                         if obj.category.name() in candidate_cate.keys():
                             num_occ_pixels = np.where(semantic == id)[0].shape[0]
-                            if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
+                            if num_occ_pixels > 0.001 * semantic.shape[-1]*semantic.shape[-1]:
                                 return True, int(obj.id[1:]), obj.category.name()
         return False, None, None
 
@@ -268,26 +310,6 @@ class Vsqf_v2_Env(habitat.RLEnv):
         # step
         obs, _, done, _ = super().step(action)
  
-        # reset location if on floor
-        # last_sim_location_z = self.this_sim_location_z
-        # this_sim_location_z, this_sim_rot = self.get_sim_location_z()
-        # self.info['on_floor'] = (abs(this_sim_location_z - last_sim_location_z) > 0.1)
-        # if self.info['on_floor']:
-        #     x, y, o = self.this_sim_location    # not update, thus 'this_sim_'
-        #     z = self.this_sim_location_z
-        #     pos = np.array([-y, z, -x])
-        #     self._env.sim.set_agent_state(pos, self.this_sim_rot)
-        #     obs = self._env.sim.get_observations_at(pos, self.this_sim_rot)
-        #     obs.update(
-        #         self._env.task.sensor_suite.get_observations(
-        #             observations=obs,
-        #             episode=self._env.current_episode,
-        #             action={'action': 0, 'action_args':{}},
-        #             task=self._env.task,
-        #     ))
-        # get newest pose( especially after checking if on floor)
-        # self.last_sim_location = self.this_sim_location
-        # self.this_sim_location = self.get_sim_location()
         self.last_sim_location_z = self.this_sim_location_z
         self.last_sim_rot = self.this_sim_rot
         self.this_sim_location_z, self.this_sim_rot = self.get_sim_location_z()
@@ -312,8 +334,17 @@ class Vsqf_v2_Env(habitat.RLEnv):
         self.info['time'] = self.timestep
         self.info['semantic'] = obs['semantic']
 
-        found_ = [self.found_classes[target]['num']==1 and self.found_classes[target]['rgbs']==5 for target in target_coco_categories.keys()]
-        self.info['finished'] = np.array(found_).sum() == len(target_coco_categories)
+        found_ = [self.found_classes[target]['num']==1 and self.found_classes[target]['rgbs']==5 for target in self.found_classes.keys()]
+        self.info['finished'] = np.array(found_).sum() == len(self.found_classes)
+        
+        x, y = obs["gps"]
+        robot_yaw = obs["compass"]
+        # Habitat GPS makes west negative, so flip y
+        robot_position = np.array([x, -y, self._camera_height])
+        robot_xy = robot_position[:2]
+        self.info['robot_xy'] = robot_xy
+        self.info['robot_heading'] = robot_yaw
+        self.info['depth'] = depth
         return state, 0., done, self.info
     
     def save_data(self, observations):

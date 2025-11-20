@@ -14,7 +14,7 @@ from torch import Tensor
 habitat_version = ""
 
 try:
-    breakpoint()
+    # breakpoint()
     import habitat
     from habitat_baselines.rl.ddppo.policy import PointNavResNetPolicyV2
     # from src.policy_rl.utils.non_habitat_policy.nh_pointnav_policy import PointNavResNetPolicy
@@ -62,7 +62,7 @@ class WrappedPointNavResNetPolicy:
     def __init__(
         self,
         ckpt_path: str,
-        device: Union[str, torch.device] = "cuda",
+        device: Union[str, torch.device] = "cuda:0",
     ):
         if isinstance(device, str):
             device = torch.device(device)
@@ -222,7 +222,7 @@ def move_obs_to_device(
             observations[k] = torch.from_numpy(v).to(device=device, dtype=tensor_dtype)
             if unsqueeze:
                 observations[k] = observations[k].unsqueeze(0)
-
+        
     return observations
 
 

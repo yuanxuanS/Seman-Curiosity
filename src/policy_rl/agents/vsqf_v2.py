@@ -150,7 +150,7 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                         semantic =  cv2.resize(semantic.astype(np.uint8), mask.shape)
                     semantic_mask = semantic == id
                     intersect = semantic_mask * mask
-                    if intersect.sum() > 0.5*mask.sum():
+                    if intersect.sum() > 0.1*mask.sum():
                         return True, int(obj.id[1:])
                     # if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
                     
@@ -235,41 +235,6 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                 info['find_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256)) 
-            # # 检测到其他类别物体，放入候选
-            # if len(obj) > 0:
-            #     if len(obj) > 1:        # 选置信度最高
-            #         scores = obj.scores
-            #         idx = obj.scores.argmax()
-            #     else:
-            #         idx = 0
-            #     mask = obj.pred_masks[idx, ...].cpu().numpy()
-            #     cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
-            #     has_obj, obj_id = self.get_object_id(info['semantic'], cls_name)
-            #     target_cond = (info['found_classes'][cls_name]['num'] < 2) and \
-            #                 (obj_id not in info['found_classes'][cls_name]['obj_id']) and \
-            #                 has_obj
-            #     if target_cond:
-            #         rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
-            #         rgb_obj = rgb_t * mask[:, :, None]
-            #         depth_t = cv2.resize(depth, (256, 256)) 
-            #         depth_obj = depth_t * mask    # 单位cm
-            #         candidates_dict = {"class": cls_name, "rgb": rgb_obj, 'depth':depth_obj[None, ...], "obj_id": obj_id}
-            #         info['candidates'].append(candidates_dict)
-                    
-            #         info['found_classes'][cls_name]['num'] += 1
-            #         info['found_classes'][cls_name]['obj_id'].append(obj_id)
-
-            #         info['find_cand_goal'] = True
-            #         info['cand_class'] = cls_name
-            #         info['cand_obj_id'] = obj_id
-            #     else:
-            #         info['find_cand_goal'] = False
-            #         info['cand_class'] = None
-            #         info['cand_obj_id'] = None
-            # else:
-            #     info['find_cand_goal'] = False
-            #     info['cand_class'] = None
-            #     info['cand_obj_id'] = None
             
         else:
             
@@ -285,15 +250,10 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                 cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
                 has_obj, obj_id = self.get_mask_id(info['semantic'], cls_name, mask)
                 
-                # target_cond = info['found_classes'][cls_name]['num'] < 1 and \
-                #     obj_id not in info['found_classes'][cls_name]['obj_id'] and \
-                #         has_obj
-                
-                                    # obj_id not in self.found_classes[cls_name]['obj_id'] and \
-                # target_cond = (self.found_classes[cls_name]['num'] < 1 or \
-                #     (self.found_classes[cls_name]['num'] == 1 and self.found_classes[cls_name]['rgbs'] < 5)) and \
-                #         has_obj
-                target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
+                if cls_name in self.found_classes.keys():
+                    target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
+                else:
+                    target_cond = False
                 if target_cond:   # 之前没找到过该类物体
                     # info['found_classes'][cls_name]['num'] += 1
                     # info['found_classes'][cls_name]['obj_id'].append(obj_id)

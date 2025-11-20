@@ -90,7 +90,7 @@ class Maps_Env:
             self.local_pose[e] = self.full_pose[e] - \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
     
-    def patch_agent_region(self, patch, radius=30):
+    def patch_agent_region(self, patch, radius=28):
         for e in range(self.num_scenes):
             if patch[e]:
                 locs = self.local_pose[e].cpu().numpy()

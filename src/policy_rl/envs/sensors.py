@@ -103,7 +103,7 @@ class ObjectDetectorGT(habitat.Sensor):
             if id_object not in self.mapping:
                 continue
 
-            if (mask_cleaned == id_object).sum() < 1000:
+            if (mask_cleaned == id_object).sum() < 0.001 * w * h:
                 continue
             habitat_id = self._convert_matterport_to_coco_labels(
                 self.mapping[id_object]
@@ -175,3 +175,4 @@ class AgentPositionSensor(habitat.Sensor):
             'position': self._sim.get_agent_state().position,
             'orientation': self._sim.get_agent_state().rotation,
         }
+        

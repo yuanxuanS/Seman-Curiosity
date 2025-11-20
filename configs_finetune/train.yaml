@@ -3,16 +3,19 @@ defaults:
   - training: pipeline_gt #pipeline_semantic
   - hydra: default
 
-notes: vsqf_v3_1
+notes: vsqf_active
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
 
 # data
-sample_path:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v3_1_eval/episodes_data
+sample_path:  /home/wpp/Seman-Curiosity/exps/dump/vsqf_active_0/episodes_data
+# /home/wpp/Seman-Curiosity/exps/dump/activecam_lost2/episodes_data_300epi
+# /home/wpp/Seman-Curiosity/exps/dump/random_eval_relost/episodes_data
+# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v3_1_eval/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random4vsqf/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v1_eval_re/episodes_data
 
 
-testset_path: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/vsqf_test_val5/data
+testset_path: /home/wpp/Seman-Curiosity/data/vsqf_test_val5/data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/fix_test640/data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_eval_best_sample/episodes_data
 # 
@@ -25,8 +28,8 @@ checkpoint_path:
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-01-29/01-29-16-33-01_gt_consensus_vanilla_bs_16_notes_In640/checkpoints/epoch=09.ckpt
 
 # training device
-gpus: [3,]   # 指定gpu: [1,2,3] 多gpu训练  
+gpus: [0,]   # 指定gpu: [1,2,3] 多gpu训练  
 
-base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity
+base_dir: /home/wpp/Seman-Curiosity/
 
 
