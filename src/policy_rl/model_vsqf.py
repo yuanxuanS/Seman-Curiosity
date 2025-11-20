@@ -10,6 +10,7 @@ from .utils.model import get_grid, ChannelPool, Flatten, NNBase
 from .envs.utils import depth_utils as du
 import math
 import itertools
+import cv2
 
 class VSQF_Mapping(nn.Module):
 
@@ -33,8 +34,8 @@ class VSQF_Mapping(nn.Module):
         vr = int(diameter // self.resolution)       # vsqf vision range
 
         # 直接生成坐标轴数组， x向右，y向下
-        x = np.arange(2.5, diameter, 5)
-        y = np.arange(2.5, diameter, 5)
+        x = np.arange(0, diameter, self.resolution)
+        y = np.arange(0, diameter, self.resolution)
         xx, yy = np.meshgrid(x, y, indexing='xy')
         self.coords = np.column_stack((xx.ravel(), yy.ravel())) # coords: num * 2, 实际坐标值（单位m）
         self.distance_center = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]    # distance_center: [n_distance_bin], 距离分区的中心
@@ -59,6 +60,7 @@ class VSQF_Mapping(nn.Module):
     def reset(self):
         coords = self.coords.copy()
         
+        # obj坐标系，向右x，向下y； 极坐标方向向上，逆时针增加
         # 根据半径填充不同区域
         dy = coords[:, 0] - self.center[0]       # x为行索引，y方向
         dx = coords[:, 1] - self.center[1]
@@ -72,11 +74,11 @@ class VSQF_Mapping(nn.Module):
         dis_bins = torch.tensor([0] + dis_list + [float('inf')], dtype=torch.float32)
         dist_idx = torch.bucketize(distance_array, dis_bins, right=True) - 1
         # 过滤无效索引 (距离超出 dis3 或角度无效)
-        valid_mask = (dist_idx > 0) & (dist_idx < len(dis_list))  # 有效区域掩码
+        valid_mask = (dist_idx > 0) & (dist_idx < len(dis_list))  # 圆的有效区域掩码
         dist_idx = dist_idx[valid_mask] - 1
         
         # 根据角度计算每个坐标所属角度区间
-        angle_rad = torch.atan2(torch.from_numpy(-dx[valid_mask]), torch.from_numpy(-dy[valid_mask]))    # 极坐标方向为x正，逆时针；弧度 [-π, π]
+        angle_rad = torch.atan2(torch.from_numpy(-dx[valid_mask]), torch.from_numpy(-dy[valid_mask]))    # (y, x) 极坐标方向为x正，逆时针；弧度 [-π, π]; 在obj坐标系：x向右，y向下，极坐标方向为-y，逆时针增加
         # angle_rad = angle_rad[valid_mask]
         angle_deg = (angle_rad * 180 / math.pi)
         angle_deg = angle_deg % 360  # 转换为 [0°, 360°)
@@ -182,6 +184,7 @@ class VSQF_Mapping(nn.Module):
         '''
         B = vsqf.shape[0]
         
+        # obj坐标系每个坐标点的vsqf value
         values, coords = self.splat_value_in_field(vsqf)
         feat = values[:, None, ...]     # B*nF*nPt
 
@@ -191,13 +194,14 @@ class VSQF_Mapping(nn.Module):
         XY= XY.transpose(0, 2, 1)      # b X n_dim=2 X length
         XY = torch.from_numpy(XY)
         
+        # 在object coord中，x方向向右，y向下； obj（圆心）为原点
         quality_field = self.splat_field_in_map(
             self.init_grid.to(feat.device) * 0., feat, XY.to(feat.device)
         )       # B*1*vr*vr
         
-        # 转到azimuth角度
+        # obj的vsqf field在agent坐标系的朝向
         obj_pose = torch.zeros(B, 3)
-        obj_pose[:, 2] = -azimuth
+        obj_pose[:, 2] = 90 - (180-azimuth)       # 在agent坐标系中,agent朝向为极坐标方向，逆时针增加； 180-a为obj在agent极坐标中的角度，转为grid_sample函数要求的坐标系：90-
         obj_pose = obj_pose.to(self.device)
         rot_mat, trans_mat = get_grid(obj_pose, quality_field.size(),
                                         self.device)

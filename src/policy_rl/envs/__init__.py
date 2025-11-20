@@ -53,6 +53,9 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
 
+    def update_collision_map(self, inputs):
+        self.venv.update_collision_map(inputs)
+        
     def close(self):
         return self.venv.close()
     

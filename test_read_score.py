@@ -4,10 +4,10 @@ import numpy as np
 pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/obj_samples/"
 K = 5
 
-with open(pth + "Corozal_objects_value_clip.pkl", "rb") as f:
+with open(pth + "Darden_objects_value_clip.pkl", "rb") as f:
     object_clip = pickle.load(f)
 
-with open(pth + "Corozal_objects_index.pkl", "rb") as f:
+with open(pth + "Darden_objects_index.pkl", "rb") as f:
     object_index = pickle.load(f)
 
 

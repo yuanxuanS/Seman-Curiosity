@@ -73,6 +73,11 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         
         return obs, info
     
+    def update_collision_map(self, vis_input):
+        shape = self.collision_map.shape[-2:]
+        self.collision_map = np.zeros((shape[0], shape[1]))
+        self.collision_map[vis_input['map_pred_full'] > 0.5] = 1
+        
     def step_and_preprocess(self, action, inputs):
         """Function responsible for taking the action and
         preprocessing observations

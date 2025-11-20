@@ -263,8 +263,8 @@ class Semantic_Mapping(nn.Module):
         super(Semantic_Mapping, self).__init__()
 
         self.device = args.device
-        self.screen_h = args.frame_height
-        self.screen_w = args.frame_width
+        self.screen_h = args.env_frame_height
+        self.screen_w = args.env_frame_width
         self.resolution = args.map_resolution
         self.z_resolution = args.map_resolution
         self.map_size_cm = args.map_size_cm // args.global_downscaling

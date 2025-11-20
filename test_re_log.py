@@ -3,9 +3,10 @@ import re
 import matplotlib.pyplot as plt
 
 # 日志文件路径（替换为实际路径）
-note = "vsqf_v3_2"
-reward =    "dis reward"       # "vsqf reward" #    #  "episode mean reward" #
-log_file_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/rl_vsqf_v4_1.log"
+note = "vsqf_v1_4_re_conti"
+reward ="score abs r" #"episode mean reward" #"dis reward"       # "vsqf reward" #    # 
+log_file_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/rl_vsqf_v1_4_re_conti.log"
+# "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/rl_vsqf_v1_2.log"
 # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/rl_vsqf_v3_1.log"
 # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/logs/expv7.log"
 # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/rl_vsqf_v3_0.log"

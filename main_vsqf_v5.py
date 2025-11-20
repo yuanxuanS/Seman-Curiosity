@@ -357,6 +357,13 @@ def main():
         elif args.agent == "random":
             l_action = np.random.randint(0, 3, num_scenes)
 
+        if step%500 == 250:
+            maps.filter_obstacle_map()
+            for e, p_input in enumerate(vis_inputs):
+                p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()                
+                p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
+            envs.update_collision_map(vis_inputs)
+        
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):

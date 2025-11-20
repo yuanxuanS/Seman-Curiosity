@@ -53,6 +53,10 @@ def make_env_fn(args, config_env, rank):
         env = Vsqf_v3_Env_Agent(args=args, rank=rank,
                         config_env=config_env,
                         dataset=dataset)
+    elif args.env == "vsqf_v5_exp":
+        env = Vsqf_v3_Env_Agent(args=args, rank=rank,
+                        config_env=config_env,
+                        dataset=dataset)
     else:
         env = Seman_Curio_Env(args=args, rank=rank,     # TODO
                              config_env=config_env,

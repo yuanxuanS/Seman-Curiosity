@@ -192,8 +192,10 @@ class HabitatDataModule(pl.LightningDataModule):
         return dataset
         
 class GTDataModule(HabitatDataModule):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, specify_pkl="", specify_num=0, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.specify_pkl = specify_pkl
+        self.specify_num = specify_num
         
     def prepare_data(self):
         ''' no need to implement'''
@@ -222,11 +224,21 @@ class GTDataModule(HabitatDataModule):
         
         inputs = sampler.get_env_episode_and_steps_dense_list()     
         filter_empty_instances = []
-        
+        if self.specify_pkl:
+            with open(self.specify_pkl, "rb") as fp:
+                sorted_samples = pickle.load(fp)
+            sorted_samples_lst = [(sample[0], sample[1], sample[2]) for sample in sorted_samples]   # env, episode, step
+            sorted_samples_lst = sorted_samples_lst[:self.specify_num]
+            
         for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
             instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
-
-            filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+            if self.specify_pkl:
+                if (env, ep, step) in sorted_samples_lst:
+                    filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+                else:
+                    filter_empty_instances.append(False)
+            else:            
+                filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
 
 
         return BbsgtDataset(

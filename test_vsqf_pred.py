@@ -193,7 +193,6 @@ def init_segment(args):
     model = load_model(config_file, grounded_checkpoint, bert_base_uncased_path, device=device)
     
     # initialize SAM
-    print(device)
     if use_sam_hq:
         predictor = SamPredictor(sam_hq_model_registry[sam_version](checkpoint=sam_hq_checkpoint).to(device))
     else:
@@ -215,7 +214,7 @@ def pred_mask(predictor, boxes, image, device):
     return masks
 
 # @profile
-def pred_segment(args, rgb, model, predictor, env_epi_step):
+def pred_segment_withdepth(args, rgb, depth, model, predictor, step):
     '''
     args: dict
     rgb : numpy.array, h,w,c
@@ -241,7 +240,7 @@ def pred_segment(args, rgb, model, predictor, env_epi_step):
     # visualize raw image
     # image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
 
-        # load image
+    # load image
     image_pil, image = image_from_numpy(rgb)
     
     # run grounding dino model
@@ -251,7 +250,7 @@ def pred_segment(args, rgb, model, predictor, env_epi_step):
 
 
     image = rgb #cv2.imread(image_path)
-    print(rgb.shape)
+    # print(rgb.shape)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     predictor.set_image(image)
 
@@ -259,26 +258,35 @@ def pred_segment(args, rgb, model, predictor, env_epi_step):
     H, W = size[1], size[0]
     
     for i in range(boxes_filt.size(0)):
-        print("before:", boxes_filt)
+        # print("before:", boxes_filt)
         boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
         boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
         boxes_filt[i][2:] += boxes_filt[i][:2]
-    print("after:", boxes_filt)
+    # print("after:", boxes_filt)
     
     boxes_filt = boxes_filt.cpu()   # resize为图像大小范围
     
     masks = pred_mask(predictor, boxes_filt, image, device)
 
-    print(masks.shape)
+    # print(masks.shape)
+    cnt = 0
+    for mask in masks:
+        rgb_obj = rgb * mask[0].unsqueeze(-1).cpu().numpy()
+        cv2.imwrite(args['output_dir'] + f"/rgb_obj_{step}_{cnt}_eqpmt2.png", rgb_obj)
+        depth_obj = depth * mask[0].cpu().numpy()
+        cv2.imwrite(args['output_dir'] + f"/depth_obj_{step}_{cnt}_eqpmt2.png", depth_obj)
+        depth_mean = depth_obj.sum() / mask[0].cpu().numpy().sum()
+        print(f"depth mean of step {step}_{cnt} is {depth_mean}")
+        cnt += 1
     # draw output image
     # plt.figure(figsize=(10, 10))
     # plt.imshow(image)
     # for mask in masks:
-    #     show_mask(mask.cpu().numpy(), plt.gca(), random_color=True)
+    #     show_mask(mask.cpu().numpy(), plt.gca(), ranwdom_color=True)
     # for box, label in zip(boxes_filt, pred_phrases):
     #     show_box(box.numpy(), plt.gca(), label)
 
-    # env, episode, step = env_epi_step
+    
 
     # plt.axis('off')
     # plt.savefig(
@@ -362,14 +370,6 @@ def segment_args():
     parser.add_argument("--bert_base_uncased_path", type=str, required=False, help="bert_base_uncased model path, default=False")
     args = parser.parse_args()
     return args
-# if __name__ == "__main__":
-
-#     args = segment_args()
-    
-#     rgb = cv2.imread("/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data_orig_imgs/epi1_env0_step0.png")
-#     print(rgb.shape)
-#     pred_segment(args, rgb)
-#     pass
 
     
 
@@ -380,22 +380,21 @@ def main():
     with open(gsam_config, 'r') as f:
         seg_args = yaml.load(f, Loader=yaml.FullLoader)
 
-    # dataset_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data"
-    # sampler = SampleLoader(dataset_path)
-
-    seg_args['output_dir'] = "./outputs_vsqf/"
+    seg_args['text_prompt'] = "chair"
+    seg_args['output_dir'] = "./outputs_vsqf_3/"
     model, predictor = init_segment(seg_args)
 
-    sample_lst = [[0, 1, 10]]   # env, epi, step
-    # for idx in sample_lst:
-    #     env, episode, step = idx
-        # rgb = sampler.get_sample(env, episode, step, "rgb").data
-
-    img_pth = ""
-    rgb = cv2.imread(img_pth)
-
-    env, episode, step = 0, 0, 0
-    annos = pred_segment(seg_args, rgb, model, predictor, [env, episode, step])
+    dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/images/examples/imgs3/"
+    
+    steps = [7,8,9]
+    for step in steps:
+        img_pth = dir+f"/t_rgb_{step}.png"
+        depth_pth = dir+f"/t_depth_{step}.png"
+        rgb = cv2.imread(img_pth)
+        depth = cv2.imread(depth_pth, cv2.IMREAD_UNCHANGED)
+        depth = depth * 0.001
+    
+        pred_segment_withdepth(seg_args, rgb, depth, model, predictor, step)
         # break
 if __name__ == "__main__":
     main()

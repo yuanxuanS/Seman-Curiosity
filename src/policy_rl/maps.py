@@ -3,6 +3,7 @@ from src.policy_rl.model import Semantic_Mapping
 import numpy as np
 from .arguments import get_args
 from .envs import make_vec_envs
+import skimage
 
 class Maps_Env:
     def __init__(self, args):
@@ -277,6 +278,32 @@ class Maps_Env:
         self.local_pose = local_pose
 
         return local_map, local_pose
+
+    def filter_obstacle_map(self):
+        # local
+        device = self.local_map.device
+        obstacle_local = self.local_map[:, 0:1, :, :].cpu().numpy() > 0.5
+        for i in range(self.local_map.shape[0]):
+            obs_local = obstacle_local[i, 0:1, :, :]
+            connected_colli, num_coli = skimage.morphology.label(obs_local, connectivity=1, return_num=True)
+            for id in range(num_coli):
+                region_ = (connected_colli== id).astype(bool)
+                if region_.sum() < 50:
+                    # set small collision region to traversible
+                    obs_local[region_] = 0
+            self.local_map[i, 0:1, :, :] = torch.from_numpy(obs_local).to(device)
+        
+        # full
+        obstacle_full = self.full_map[:, 0:1, :, :].cpu().numpy() > 0.5
+        for i in range(self.full_map.shape[0]):
+            obs_full = obstacle_full[i, 0:1, :, :]
+            connected_colli, num_coli = skimage.morphology.label(obs_full, connectivity=1, return_num=True)
+            for id in range(num_coli):
+                region_ = (connected_colli== id).astype(bool)
+                if region_.sum() < 50:
+                    # set small collision region to traversible
+                    obs_full[region_] = 0
+            self.full_map[i, 0:1, :, :] = torch.from_numpy(obs_full).to(device)
     
     def sum_of_semantic_map(self):
         # get semantic channels: 4:
