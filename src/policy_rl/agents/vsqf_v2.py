@@ -73,7 +73,7 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         
         return obs, info
     
-    def step_and_pre(self, action, inputs):
+    def step_and_pre(self, action, inputs, wait_env):
         """Function responsible for taking the action and
         preprocessing observations
 
@@ -83,6 +83,13 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
             done (bool): whether the episode has ended
             info (dict): contains timestep
         """
+        if wait_env > 0:
+            self.last_action = None
+            self.info["sensor_pose"] = [0., 0., 0.]
+            self.timestep += 1
+            
+            return np.zeros(self.obs.shape), 0., False, self.info
+        
         # visualize 
         self.last_loc = self.curr_loc
         # Get Map prediction

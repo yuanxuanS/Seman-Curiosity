@@ -3,17 +3,17 @@ defaults:
   - training: pipeline_gt #pipeline_semantic
   - hydra: default
 
-notes: t_activecam_sample2
+notes: vsqfactive1
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
 
 # data
-sample_path:  /home/wpp/Seman-Curiosity/exps/dump/activecam_lost2/episodes_data
+sample_path:  /home/wpp/Seman-Curiosity/exps/dump/vsqfactive1_rand/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v3_1_eval/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random4vsqf/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v1_eval_re/episodes_data
 
 # 要测试的目标数据集
-testset_path: /home/wpp/Seman-Curiosity/exps/dump/activecam_lost2/episodes_data_50epi
+testset_path: /home/wpp/Seman-Curiosity/exps/dump/vsqfactive1_rand/episodes_data
 # 
 
 # training params
@@ -24,7 +24,7 @@ checkpoint_path:
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps_finetune/2025-01-29/01-29-16-33-01_gt_consensus_vanilla_bs_16_notes_In640/checkpoints/epoch=09.ckpt
 
 # training device
-gpus: [1,]   # 指定gpu: [1,2,3] 多gpu训练  
+gpus: [2,]   # 指定gpu: [1,2,3] 多gpu训练  
 
 base_dir: /home/wpp/Seman-Curiosity/
 

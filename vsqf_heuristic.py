@@ -82,7 +82,7 @@ class vsqf_heuristic:
         self._last_goal = np.zeros(2)  
         self._pointnav_policy.reset()
 
-    def get_best_region(self, vsqf_map, vis_inputs, update_vis_map):
+    def get_random_region(self, vsqf_map, vis_inputs, update_vis_map):
         '''
         vsqf_map: env*1*w*h
         vis_inputs: env number, dict
@@ -108,9 +108,6 @@ class vsqf_heuristic:
         obs_maps = torch.stack(obs_maps)             
 
         exp_maps = exp_maps * (1 - obs_maps.type(torch.int))
-        
-        
-        
         
         
         # 连通域分割，只在agent位置连通范围
@@ -141,7 +138,121 @@ class vsqf_heuristic:
         exp_maps = exp_maps * map_masks
         
         # vsqf选定目标物体周围的可视区, 此时exp_maps为连通区域; object_maps为和初始目标物体重叠的物体
-        # sem_map = [torch.from_numpy(skimage.morphology.dilation(np.rint(v_ip['sem_map_pred_full']), selem_s)) for v_ip in vis_inputs]
+
+        tgt_maps = []
+        for e, v_ip in enumerate(vis_inputs):
+            sem_map_ = skimage.morphology.dilation(v_ip['sem_map_pred_full'] < 5, selem_l)
+            connected_colli, num_coli = skimage.morphology.label(sem_map_, connectivity=1, return_num=True)
+            obj_map = v_ip['object_map_full'] < 5       # TODO 可以增加指定类别通道
+            
+            # 语义地图上和obj_map重叠的，重叠面积最大的为目标物体
+            tgt_id = None
+            max_area = -1
+            for id in range(1, num_coli+1):
+                region_ = (connected_colli== id).astype(bool)
+                intersect = region_ * obj_map
+                if intersect.sum() > 0:
+                    if intersect.sum() > max_area:
+                        max_area = intersect.sum()
+                        tgt_id = id
+            tgt_map = connected_colli== tgt_id    
+            tgt_maps.append(torch.from_numpy(tgt_map))
+            v_ip['target_map'] = torch.from_numpy(tgt_map)
+            
+        tgt_maps = torch.stack(tgt_maps)
+        
+        # 在explore map上，且目标的可视范围内选择
+        for e in range(obs_maps.shape[0]):
+            # invalid_goal_last = self.vsqf_goals[e][0] == self.vsqf_goals[e][1] and self.vsqf_goals[e][0] < 5
+            if (vis_inputs[e]['sample_stage'] and self.replan[e]) or (update_vis_map[e] and vis_inputs[e]['sample_stage']):         # 
+                self.vis_masks[e] = get_visibility_mask_reverse(tgt_maps[e], exp_maps[e], obs_maps[e])
+ 
+        exp_maps = exp_maps * self.vis_masks
+        exp_size = exp_maps.sum(1).sum(1)
+        # 如果区域小，则选5个候选点
+        self.mask_sigma = np.where(exp_size > 800, 1.5, 0.8)
+            
+        vsqf_map_ = vsqf_map.squeeze(1).cpu() * torch.from_numpy((1 - self.visited_goal.astype(int)))   # 去掉已经到达过的goal区域
+        vsqf_map_ = vsqf_map_ * exp_maps
+        
+        goals = [None]*self.num_scenes
+        for e in range(self.num_scenes):
+            valid_map = vsqf_map_[e] > 0
+            row_indices, col_indices = np.where(valid_map.cpu().numpy())
+            if len(row_indices) >0:
+                rand_idx = np.random.randint(0, len(row_indices))
+                goals[e] = [row_indices[rand_idx], col_indices[rand_idx]]
+            else:
+                goals[e] = [0, 0]
+                
+                    
+                
+        for i in range(self.num_scenes):
+            invalid_goal_cond = self.vis_masks[i].sum() == 0 and vis_inputs[i]['sample_stage']
+            if self.replan[i] or invalid_goal_cond:
+                self.vsqf_goals[i] =goals[i]
+
+            # 如果本次无效，则从候选点中选择
+                
+        return self.vsqf_goals
+    
+    def get_best_region(self, vsqf_map, vis_inputs, update_vis_map):
+        '''
+        vsqf_map: env*1*w*h
+        vis_inputs: env number, dict
+        '''
+        selem_s = skimage.morphology.disk(1)
+        selem_l = skimage.morphology.disk(3)
+        exp_maps = [torch.from_numpy(skimage.morphology.dilation(np.rint(v_ip['exp_pred_full']), selem_s)) for v_ip in vis_inputs]
+        # exp_maps = [torch.from_numpy(np.rint(v_ip['exp_pred_full'])) for v_ip in vis_inputs]
+        exp_maps = torch.stack(exp_maps)
+        
+        
+        # 过滤obs上的噪声
+        obs_maps = []
+        for e, p_input in enumerate(vis_inputs):
+            obs_map = skimage.morphology.dilation(np.rint(p_input['map_pred_full']), selem_s)
+            connected_colli, num_coli = skimage.morphology.label(obs_map, connectivity=1, return_num=True)
+            for id in range(num_coli+1):
+                    region_ = (connected_colli== id).astype(bool)
+                    if region_.sum() < 50:
+                        # set small collision region to traversible
+                        obs_map[region_] = 0
+            obs_maps.append(torch.from_numpy(obs_map))
+        obs_maps = torch.stack(obs_maps)             
+
+        exp_maps = exp_maps * (1 - obs_maps.type(torch.int))
+        
+        
+        # 连通域分割，只在agent位置连通范围
+        map_masks = []
+        for e, p_input in enumerate(vis_inputs):
+            
+            start_x, start_y, start_o, gx1, gx2, gy1, gy2 = p_input['pose_pred']
+            r, c = start_y, start_x     # 转化为格子坐标
+            start = [int(r * 100.0 / self.args.map_resolution),
+                    int(c * 100.0 / self.args.map_resolution)]
+            start = pu.threshold_poses(start, exp_maps.shape[-2:])
+        
+            exp_maps_ = exp_maps[e]
+            exp_maps_[int(start[0]) - 5: int(start[0])+5,       # 所在位置为可行区
+                      int(start[1]) - 5: int(start[1]) + 5] = 1.
+            map_mask = np.ones_like(exp_maps[e])
+            connected_colli2, num_coli2 = skimage.morphology.label(exp_maps_, connectivity=1, return_num=True)
+            for id in range(1, num_coli2):
+                region_ = (connected_colli2== id).astype(bool)
+                if region_[start[0], start[1]] > 0:
+                    map_mask = region_
+                    break
+            map_masks.append(torch.from_numpy(map_mask))
+            
+        map_masks = torch.stack(map_masks)
+        
+        # 在可行区上，且当前位置连通的可行区上选择目标
+        exp_maps = exp_maps * map_masks
+        
+        # vsqf选定目标物体周围的可视区, 此时exp_maps为连通区域; object_maps为和初始目标物体重叠的物体
+
         tgt_maps = []
         for e, v_ip in enumerate(vis_inputs):
             sem_map_ = skimage.morphology.dilation(v_ip['sem_map_pred_full'] < 5, selem_l)

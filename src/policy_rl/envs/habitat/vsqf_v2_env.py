@@ -72,7 +72,8 @@ class Vsqf_v2_Env(habitat.RLEnv):
         for target, id in target_coco_categories.items():
             if id in possible_cats:
                 self.found_classes[target] = {'num':0, "obj_id":[], "rgbs":0}
-        
+        if scene_name == "Wiconisco":
+            self.found_classes.pop("toilet")
         # 
         self._camera_height = config_env.SIMULATOR.AGENT_0.HEIGHT
     def reset(self):
@@ -100,11 +101,13 @@ class Vsqf_v2_Env(habitat.RLEnv):
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
+        
         self.last_sim_location = None
         self.this_sim_location = self.get_sim_location()
         print(f"initial pose: {self.this_sim_location[0]}, {self.this_sim_location[1]}, {self.this_sim_location[2]}")
         self.last_sim_location_z = None
         self.this_sim_location_z, self.this_sim_rot = self.get_sim_location_z()
+        
         # Set info
         self.info['time'] = self.timestep
         self.info['sensor_pose'] = [0., 0., 0.]
@@ -115,6 +118,9 @@ class Vsqf_v2_Env(habitat.RLEnv):
         # self.info['found_classes'] = {target:{'num':0, "obj_id":[]} for target in target_coco_categories.keys()}
         # self.info['candidates'] = []
         self.info['semantic'] = obs['semantic']
+        
+        found_ = [self.found_classes[target]['num']==1 and self.found_classes[target]['rgbs']==5 for target in self.found_classes.keys()]
+        self.info['finished'] = np.array(found_).sum() == len(self.found_classes)
         
         # 每个episode最多采2个
         self.sampled_num = 0
@@ -127,7 +133,6 @@ class Vsqf_v2_Env(habitat.RLEnv):
         self.info['robot_xy'] = robot_xy
         self.info['robot_heading'] = robot_yaw
         self.info['depth'] = depth
-        
         return state, self.info
     
     def load_episode_loc(self):
@@ -320,7 +325,7 @@ class Vsqf_v2_Env(habitat.RLEnv):
         # save samples(before resize)
         if self.args.save_samples:
             if action['action'] == 4:
-                if self.has_target(obs, self.info['target_class'],) and self.found_classes[self.info['target_class']]['rgbs'] < 5:
+                if self.has_target(obs, self.info['target_class'],)[0] and self.found_classes[self.info['target_class']]['rgbs'] < 5:
                 # and self.info['sample_num'] < 5:
                     # self.info['sample_num'] += 1
                     self.found_classes[self.info['target_class']]['rgbs'] +=1

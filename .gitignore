@@ -9,6 +9,7 @@ third_parties/detectron2/
 third_parties/GroundingDINO/
 # third_parties/detectron2/
 third_parties/Orient_Anything/
+third_parties/pyntcloud/
 outputs/
 images/
 env_orients/

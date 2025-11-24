@@ -586,11 +586,11 @@ class VectorEnv:
         self._is_waiting = False
         return
     
-    def step_and_pre(self, action, inputs):
+    def step_and_pre(self, action, inputs, wait_env):
         self._assert_not_closed()
         self._is_waiting = True
         for e, write_fn in enumerate(self._connection_write_fns):
-            write_fn((STEP_AND_PRE, ({"action":action[e], "inputs":inputs[e],})))
+            write_fn((STEP_AND_PRE, ({"action":action[e], "inputs":inputs[e], "wait_env":wait_env[e]})))
         results = []
         for read_fn in self._connection_read_fns:
             results.append(read_fn())

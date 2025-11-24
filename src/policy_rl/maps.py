@@ -106,7 +106,7 @@ class Maps_Env:
             
     def _init_map_and_pose_for_env(self, e):
         self.full_map[e].fill_(0.)
-        self.curr_full_map.fill_(0.)
+        self.curr_full_map[e].fill_(0.)
         self.full_pose[e].fill_(0.)
         self.full_pose[e, :2] = self.args.map_size_cm / 100.0 / 2.0
 
@@ -176,7 +176,7 @@ class Maps_Env:
                 local_map[e]
             
             if curr_local_map is not None:
-                self.curr_full_map.fill_(0.)
+                self.curr_full_map[e].fill_(0.)
                 self.curr_full_map[e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = \
                     curr_local_map[e]
                 
