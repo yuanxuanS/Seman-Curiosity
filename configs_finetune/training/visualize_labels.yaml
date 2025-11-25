@@ -6,7 +6,8 @@ transform_type: none
 
 exp_name_training: visualize_lbs
 
-visualize: True
+visualize: False
+compute_uncertainty: True
 ############################# not used
 
 cls_loss: focal # cross_entropy   # 
