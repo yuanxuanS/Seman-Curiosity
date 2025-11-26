@@ -14,7 +14,10 @@ import json
 import gzip
 from src.vqf_constants import target_coco_categories_mapping, target_coco_categories, category_id_maps, target_cls_id_in_scene
 import cv2
-class Vsqf_v2_Env(habitat.RLEnv):
+import magnum as mn
+
+
+class Vsqf_active_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
     metrics.
@@ -34,17 +37,18 @@ class Vsqf_v2_Env(habitat.RLEnv):
         with bz2.BZ2File(dataset_info_file, 'rb') as f:
             self.dataset_info = cPickle.load(f)
             
-        # Specifying action and observation space
-        self.action_space = gym.spaces.Discrete(3)
+        # Specifying camera action space and observation space
+        self.action_space = gym.spaces.Discrete(5)      # camera action space
         self.observation_space = gym.spaces.Box(0, 255,
-                                                (3, args.frame_height,
-                                                 args.frame_width),
+                                                (3, args.camera_frame_height,
+                                                 args.camera_frame_width),
                                                 dtype='uint8')
 
         # Scene info
         self.last_scene_path = None
         self.scene_path = None  
         self.scene_name = None   
+        
         # episode tracking into
         self.timestep = None
         self.info = {}
@@ -53,6 +57,14 @@ class Vsqf_v2_Env(habitat.RLEnv):
         # episode id 
         self.episode_no = 0
 
+        # camera policy
+        self.info['lost_goal'] = False
+        self.info['camera_stage'] = False
+        self.info['camera_step'] = 0
+        self.init_obs = None
+        # self.has_captured = False
+        
+        # existing target class
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         scene_name = self.scene_path.split("/")[-1].split(".")[0]
         scene_info = self.dataset_info[scene_name]
@@ -73,8 +85,8 @@ class Vsqf_v2_Env(habitat.RLEnv):
                 self.found_classes[target] = {'num':0, "obj_id":[], "rgbs":0}
         if scene_name == "Wiconisco":
             self.found_classes.pop("toilet")
-        # 
-        self._camera_height = config_env.SIMULATOR.AGENT_0.HEIGHT
+        
+        
     def reset(self):
         """Resets the environment to a new episode.
                 reset traversible initial location
@@ -96,7 +108,14 @@ class Vsqf_v2_Env(habitat.RLEnv):
         else:
             obs = self.initial_possible_loc()       # train时，随机生成初始位置
 
-
+        # camera policy
+        self.info['lost_goal'] = False
+        self.info['camera_stage'] = False
+        self.info['camera_step'] = 0
+        self.init_obs = None
+        # self.has_captured = False
+        
+        
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
@@ -114,24 +133,18 @@ class Vsqf_v2_Env(habitat.RLEnv):
         #vsqf 
         self.info['sample_stage'] = False
         self.info['sample_step'] = 0
-        # self.info['found_classes'] = {target:{'num':0, "obj_id":[]} for target in target_coco_categories.keys()}
-        # self.info['candidates'] = []
         self.info['semantic'] = obs['semantic']
         
+        # sample ends or not
         found_ = [self.found_classes[target]['num']==1 and self.found_classes[target]['rgbs']==5 for target in self.found_classes.keys()]
         self.info['finished'] = np.array(found_).sum() == len(self.found_classes)
         
         # 每个episode最多采2个
         self.sampled_num = 0
         
-        x, y = obs["gps"]
-        robot_yaw = obs["compass"]
-        # Habitat GPS makes west negative, so flip y
-        robot_position = np.array([x, -y, self._camera_height])
-        robot_xy = robot_position[:2]
-        self.info['robot_xy'] = robot_xy
-        self.info['robot_heading'] = robot_yaw
         self.info['depth'] = depth
+        
+        
         return state, self.info
     
     def load_episode_loc(self):
@@ -167,6 +180,7 @@ class Vsqf_v2_Env(habitat.RLEnv):
                     action={'action': 0, 'action_args':{}},
                     task=self._env.task,
             ))
+        
         return obs
     
     def initial_possible_loc(self):
@@ -299,7 +313,15 @@ class Vsqf_v2_Env(habitat.RLEnv):
         Args:
             action (dict):
                 dict with following keys:
-                    'action' (int): 1: forward, 2: left, 3: right
+                    'action' (int): 0: stop and start camera policy
+                                    1: forward, 
+                                    2: left, 
+                                    3: right
+                                    4: camera capture
+                                    5: camera left
+                                    6: camera right
+                                    7: camera up
+                                    8: camera down
 
         Returns:
             obs (ndarray): RGBD observations (4 x H x W)
@@ -309,8 +331,10 @@ class Vsqf_v2_Env(habitat.RLEnv):
                          evaluation metric info
         """
 
-        # action = action["action"]
 
+        # action=-1, camera start, reset action to 0
+        camera_start = True if action['action'] == -1 else False
+        action['action'] = 0 if action['action'] == -1 else action['action']
         # step
         obs, _, done, _ = super().step(action)
  
@@ -321,37 +345,76 @@ class Vsqf_v2_Env(habitat.RLEnv):
         dx, dy, do = self.get_pose_change()     # update last_sim_location and this_sim_location
         self.info['sensor_pose'] = [dx, dy, do]
         
-        # save samples(before resize)
-        if self.args.save_samples:
-            if action['action'] == 4:
-                if self.has_target(obs, self.info['target_class'],)[0] and self.found_classes[self.info['target_class']]['rgbs'] < 5:
-                # and self.info['sample_num'] < 5:
-                    # self.info['sample_num'] += 1
-                    self.found_classes[self.info['target_class']]['rgbs'] +=1
-                    paths = self.save_data(obs)
-
-        rgb = obs['rgb'].astype(np.uint8)
-        depth = obs['depth']
-        state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
-
+        
         self.timestep += 1
         self.info['time'] = self.timestep
-        self.info['semantic'] = obs['semantic']
-
         found_ = [self.found_classes[target]['num']==1 and self.found_classes[target]['rgbs']==5 for target in self.found_classes.keys()]
         self.info['finished'] = np.array(found_).sum() == len(self.found_classes)
-        
-        x, y = obs["gps"]
-        robot_yaw = obs["compass"]
-        # Habitat GPS makes west negative, so flip y
-        robot_position = np.array([x, -y, self._camera_height])
-        robot_xy = robot_position[:2]
-        self.info['robot_xy'] = robot_xy
-        self.info['robot_heading'] = robot_yaw
+
+        # cam state; when in camera stage, return init camera state for map
+        if self.info['sample_stage'] and self.info['camera_stage']:
+            return_obs = self.init_obs[0]
+        else:
+            return_obs = obs
+        rgb = return_obs['rgb'].astype(np.uint8)
+        depth = return_obs['depth']
+        state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
+
         self.info['depth'] = depth
+        self.info['semantic'] = return_obs['semantic']
+
+        # update camera stage
+        if self.info['sample_stage']:
+            goal_name = self.info['target_class']
+            if self.info['camera_stage']:
+                if action['action'] !=4 and self.info['camera_step'] <10:
+                    pass  # 动作不是capture且采集步数未到10步，继续active camera
+                    self.info['camera_step'] += 1
+                    # update cam obs
+                    rgb_ = obs['rgb'].astype(np.uint8)
+                    depth_ = obs['depth']
+                    state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
+                    self.info['cam_obs'] = state_
+                else:
+                    valid, self.scene_target_id, goal_name_ = self.has_target(obs, goal_name)
+                    if valid:
+                        paths = self.save_data(obs, self.timestep)
+                    else:
+                        paths = self.save_data(self.init_obs[0], self.init_obs[1])      # 存初始步的
+                    self.found_classes[goal_name]['rgbs'] +=1
+                    
+                    # reset camera to original orientation
+                    self.reset_camera()
+                    
+                    self.info['camera_stage']  = False
+                    self.info['camera_step'] = 0
+                    self.init_obs = None
+            else:
+
+                if camera_start:   
+                    # 进一步判断是否开启camera stage
+                    if self.has_target(obs, goal_name)[0] and \
+                        self.found_classes[goal_name]['rgbs'] < 5:
+                            self.info['camera_stage'] = True
+                            self.init_obs = [obs, self.timestep]
+                            
+                            rgb_ = obs['rgb'].astype(np.uint8)
+                            depth_ = obs['depth']
+                            state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
+                            self.info['cam_obs'] = state_
+                            print("start camera stage")
+                            
         return state, 0., done, self.info
     
-    def save_data(self, observations):
+    
+    def reset_camera(self):
+        agent_state = self._env.sim.get_agent_state(0)
+        sensor_names = list(self._env.sim.agents[0]._sensors.keys())
+        for sensor_name in sensor_names:
+            sensor = self._env.sim.agents[0]._sensors[sensor_name].node
+            sensor.rotation = mn.Quaternion(mn.Vector3(0,0,0), 1)
+    
+    def save_data(self, observations, timestep):
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
                                         args.exp_name)
@@ -359,7 +422,7 @@ class Vsqf_v2_Env(habitat.RLEnv):
         if not os.path.exists(data_dir):
             os.mkdir(data_dir)
         
-        paths = save_obs(data_dir, self.rank, self.episode_no, observations, self.timestep)
+        paths = save_obs(data_dir, self.rank, self.episode_no, observations, timestep)
         
         if not os.path.exists(f"./imgs/{self.args.exp_name}"):
             os.mkdir(f"./imgs/{self.args.exp_name}")
@@ -378,13 +441,17 @@ class Vsqf_v2_Env(habitat.RLEnv):
 
 
     def get_done(self, observations, *args):
-        if self.info['sample_stage'] and \
-            self.info['sample_step'] > 150 and \
+        if (self.info['sample_stage']) and \
+            self.info['sample_step'] > 200 and \
             self.found_classes[self.info['target_class']]['rgbs'] < 5:
-        # self.info['sample_num'] < 5:  # 采集失效
+        ## 采集失效
             return True
-        if self.info['time'] >= self.args.max_episode_length - 1 and not self.info['sample_stage']:       # 
+        
+        # 500步结束且不在采集时间
+        if self.info['time'] >= self.args.max_episode_length - 1 and not (self.info['sample_stage']):       # 
             return True
+        
+        # 采集完两个目标
         if self.sampled_num == 2:
             return True
         return False

@@ -1,7 +1,6 @@
 
 from src.policy_rl.arguments import get_args
 import torch
-from torchvision import transforms
 import numpy as np
 import os
 import logging
@@ -54,9 +53,11 @@ def main():
     # Logging and loss variables
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
+    
     device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
-    
+    #  l_masks, not used. episode length不同时使用
+    l_masks = torch.ones(num_scenes).float().to(device)
 
     best_l_reward = -np.inf
 
@@ -77,13 +78,14 @@ def main():
     per_step_rewards = deque(maxlen=1000)
     
 
-    # Init environments
+    # Starting environments
     torch.set_num_threads(1)
     envs = make_vec_envs(args)      
+    
 
     torch.set_grad_enabled(False)
 
-    ## Initializing Maps
+    # Initializing Maps
     # Full map consists of multiple channels containing the following:
     # 1. Obstacle Map
     # 2. Exploread Area
@@ -92,54 +94,26 @@ def main():
     # 5,6,7,.. : Semantic Categories
     maps = Maps_Env(args)
     
-    ## Initializing VSQF Maps
+    # Initializing VSQF Maps
     vsqf_maps = Vsqf_Maps_Env(args)
     
-    ## initialize vsqf, orient predictor
+    # initialize vsqf, orient predictor
     magnify, magnify_num = args.magnify, args.magnify_num
     vsqf_pred = Vsqf_pred(device, magnify, magnify_num)
     orient_pred = Orient_pred(device)
-    ## init vsqf algorithm
+    # init algorithm
     vsqf_heu = vsqf_heuristic(args, num_scenes, device)
     vsqf_heu.reset()
     
     # init current obj map for goal computation
     curr_object_maps = [np.ones((maps.full_w, maps.full_h))] * num_scenes
     
-    ## active cam policy
-    l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
-    l_action_space = envs.get_action_space()[0]
-    l_hidden_size = args.local_hidden_size
-    camera_policy = RL_Policy(l_observation_space.shape, l_action_space,
-                        model_type=1,
-                        base_kwargs={'recurrent': args.use_recurrent_local,
-                                    'hidden_size': l_hidden_size,
-                                    'num_sem_categories': args.num_sem_categories
-                                    }).to(device)
-    # Storage:
-    l_rollouts = GlobalRolloutStorage(args.num_local_steps,
-                                    num_scenes, l_observation_space.shape,
-                                    l_action_space, camera_policy.rec_state_size,
-                                    0).to(device)
-    extras = torch.zeros(num_scenes, 0)
-    res = transforms.Compose(
-            [
-            # transforms.ToPILImage(),
-             transforms.Resize((args.camera_frame_height, args.camera_frame_width),
-                               interpolation=Image.NEAREST)])
-    #  l_masks, not used. episode length不同时使用
-    l_masks = torch.ones(num_scenes).float().to(device)
-    
-    if args.load != "0":
-        print("Loading model {}".format(args.load))
-        logging.info("Loading model {}".format(args.load))
-        state_dict = torch.load(args.load,
-                                map_location=lambda storage, loc: storage)
-        camera_policy.load_state_dict(state_dict)
-    if args.eval:
-        camera_policy.eval()
     ## ------------------start------------------
     obs, infos = envs.reset()   # obs: rgb +depth + categories 16 TODO: ?
+    
+    # camera policy
+    # Get policy input
+    l_input = obs[:, :3, ...]
     
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
@@ -211,9 +185,10 @@ def main():
         for e, p_input in enumerate(vis_inputs):
             p_input['sample_step'] = infos[e]['sample_step']
             p_input['sample_stage'] = infos[e]['sample_stage']
+            p_input['robot_xy'] = infos[e]['robot_xy']
+            p_input['robot_heading'] = infos[e]['robot_heading']
             p_input['depth'] = infos[e]['depth']
             p_input['time'] = infos[e]['time']
-            p_input['camera_stage'] = infos[e]['camera_stage']
         goals = vsqf_heu.get_random_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
         for e, p_input in enumerate(vis_inputs):
             if infos[e]['sample_stage']:
@@ -222,61 +197,35 @@ def main():
         # return action with planner
         l_action = vsqf_heu.get_actions(vis_inputs)
     elif args.agent == "frontier":
-        nav_policy = Frontier(args)
-        nav_policy.reset(num_scenes)
+        l_policy = Frontier(args)
+        l_policy.reset(num_scenes)
         for e, p_input in enumerate(vis_inputs):
             p_input['depth'] = infos[e]['depth']
             p_input['time'] = infos[e]['time']
             p_input['sample_stage'] = False
-        l_action, goals, short_time_goals = nav_policy.get_actions(vis_inputs)        
+        l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
         for e, p_input in enumerate(vis_inputs):
             # if args.visualize or args.print_images:
             p_input["frontier_goal"] = goals[e]
             # p_input["short_time_goal"] = short_time_goals[e]
             
     elif args.agent == "vsqf_heuristic":
-        # run camera policy
-        camera_action = np.zeros(num_scenes)
-        for e in range(num_scenes):
-            if infos[e]['camera_stage']:
-                if infos[e]['camera_step'] == 0:
-                    # camera policy
-                    l_input_env = infos[e]['cam_obs'][e, :3, ...]
-                    l_input_env = res(l_input_env)
-                    l_rollouts.obs[0][e].copy_(l_input_env)   #
-                    ind = 0
-                else:
-                    ind = infos[e]['camera_step']
-                # Run camera policy
-                l_value, camera_action_, l_action_log_prob, l_rec_states = \
-                    camera_policy.act(
-                        l_rollouts.obs[ind],
-                        l_rollouts.rec_states[ind],
-                        l_rollouts.masks[ind],
-                        extras=l_rollouts.extras[ind],
-                        deterministic=False
-                    )
-                camera_action[e] = camera_action_.cpu().numpy()
-            else:
-                l_rollouts.reset()
-            
         # select goal according to vsqf map
         update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
         for e, p_input in enumerate(vis_inputs):
             p_input['sample_step'] = infos[e]['sample_step']
             p_input['sample_stage'] = infos[e]['sample_stage']
+            p_input['robot_xy'] = infos[e]['robot_xy']
+            p_input['robot_heading'] = infos[e]['robot_heading']
             p_input['depth'] = infos[e]['depth']
             p_input['time'] = infos[e]['time']
-            p_input['camera_stage'] = infos[e]['camera_stage']
-            p_input['camera_step'] = infos[e]['camera_step']
-            
         goals = vsqf_heu.get_best_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
         for e, p_input in enumerate(vis_inputs):
             if infos[e]['sample_stage']:
                 p_input["frontier_goal"] = goals[e]
         
         # return action with planner
-        l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+        l_action = vsqf_heu.get_actions(vis_inputs)
         
     # transition:
     # pred instance, get semantic masks and step env: 
@@ -324,32 +273,19 @@ def main():
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
         
+        # 
+        
+        
         if finished.sum() == args.num_processes:    # eval over
             break
         
         # get reward: map change after state transition
-        
-        for e in range(num_scenes):
-            if infos[e]['camera_stage']:
-                
-                if infos[e]['camera_step'] == 0:
-                    # camera policy
-                    l_input_env = infos[e]['cam_obs'][:3, ...]
-                    l_input_env = res(torch.from_numpy(l_input_env))
-                    l_rollouts.obs[0][e].copy_(l_input_env)   #
-                else:
-                    # update policy input with next state
-                    l_input = infos[e]['cam_obs'][:3, ...]       # rgb
-                    l_input = res(torch.from_numpy(l_input))
-                    # Add samples to local policy storage
-                    l_rollouts.insert(
-                                l_input, l_rec_states,      # state_t+1
-                                l_action, l_action_log_prob, l_value,   # action, reward_t
-                                l_reward, l_masks, extras
-                            )
+
         # ------------------------------------------------------------------ 
         # update local input, next state
-        # locs = full_pose.cpu().numpy()
+        locs = full_pose.cpu().numpy()
+        
+        # 
 
         for e, x in enumerate(done):
             wait_env[e] = 1 if x else wait_env[e]
@@ -375,8 +311,14 @@ def main():
                         pass
 
             if args.agent == "frontier":
-                nav_policy.reset(num_scenes)
-
+                l_policy.reset(num_scenes)
+                vsqf_heu.reset()
+        
+        
+                
+        # Sample next action
+        if args.agent == "random":
+            l_action = np.random.randint(0, 8, num_scenes)
 
         if step%50 == 0:
             maps.filter_obstacle_map()
@@ -424,16 +366,16 @@ def main():
             p_input['vsqf_map_full'] = full_vsqf_map[e, :, :, :].cpu().numpy()                  
             p_input['object_map_full'] = curr_object_maps[e]
         
-        # Sample next action
         if args.agent == "random":
             # select goal according to vsqf map
             update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
             for e, p_input in enumerate(vis_inputs):
                 p_input['sample_step'] = infos[e]['sample_step']
                 p_input['sample_stage'] = infos[e]['sample_stage']
+                p_input['robot_xy'] = infos[e]['robot_xy']
+                p_input['robot_heading'] = infos[e]['robot_heading']
                 p_input['depth'] = infos[e]['depth']
                 p_input['time'] = infos[e]['time']
-                p_input['camera_stage'] = infos[e]['camera_stage']
             goals = vsqf_heu.get_random_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
             for e, p_input in enumerate(vis_inputs):
                 if infos[e]['sample_stage']:
@@ -446,50 +388,29 @@ def main():
                 p_input['depth'] = infos[e]['depth']
                 p_input['time'] = infos[e]['time']
                 p_input['sample_stage'] = False
-            l_action, goals, short_time_goals = nav_policy.get_actions(vis_inputs)        
+            l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
+            # if args.visualize or args.print_images:
             for e, p_input in enumerate(vis_inputs):
                 p_input["frontier_goal"] = goals[e]
                 # p_input["short_time_goal"] = short_time_goals[e]
                 
         if args.agent == "vsqf_heuristic":
-            # run camera policy
-            camera_action = np.zeros(num_scenes)
-            for e in range(num_scenes):
-                if infos[e]['camera_stage']:
-                    if infos[e]['camera_step'] == 0:
-                        idx = 0
-                        
-                    else:
-                        idx = infos[e]['camera_step']
-                    # Run camera policy
-                    l_value, camera_action_, l_action_log_prob, l_rec_states = \
-                        camera_policy.act(
-                            l_rollouts.obs[idx],
-                            l_rollouts.rec_states[idx],
-                            l_rollouts.masks[idx],
-                            extras=l_rollouts.extras[idx],
-                            deterministic=False
-                        )
-                    camera_action[e] = camera_action_
-                else:
-                    l_rollouts.reset()
-                
-            
             # select goal according to vsqf map
             update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
             for e, p_input in enumerate(vis_inputs):
                 p_input['sample_step'] = infos[e]['sample_step']
                 p_input['sample_stage'] = infos[e]['sample_stage']
+                p_input['robot_xy'] = infos[e]['robot_xy']
+                p_input['robot_heading'] = infos[e]['robot_heading']
                 p_input['depth'] = infos[e]['depth']
                 p_input['time'] = infos[e]['time']
-                p_input['camera_stage'] = infos[e]['camera_stage']
             goals = vsqf_heu.get_best_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
             for e, p_input in enumerate(vis_inputs):
                 if infos[e]['sample_stage']:
                     p_input["frontier_goal"] = goals[e]
                 
             # return action with planner
-            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+            l_action = vsqf_heu.get_actions(vis_inputs)
         
         # transition: next state
         if wait_env.sum() == num_scenes:

@@ -67,6 +67,10 @@ def get_args():
                         help='Frame width (default:84)')
     parser.add_argument('-fh', '--frame_height', type=int, default=256,
                         help='Frame height (default:84)')
+    parser.add_argument('-cfw', '--camera_frame_width', type=int, default=128,      # camera policy输入大小,map更新时obs大小, 在输入前将env_frame_width变为frame_width大小
+                        help='Frame width (default')
+    parser.add_argument('-cfh', '--camera_frame_height', type=int, default=128,
+                        help='Frame height (default)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length, steps in an episode""")
     parser.add_argument("--task_config", type=str,

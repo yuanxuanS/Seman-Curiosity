@@ -45,6 +45,10 @@ class vsqf_heuristic:
         self._pointnav_stop_radius= 0.3
         self._called_stop = False
         
+        # camera policy
+        self.camera_policy = None
+        self.start_camera = [False]*num_scenes  # arrive goal and start active camera
+        
     def reset(self):
         self.planners = [None for _ in range(self.num_scenes)]
         
@@ -81,6 +85,9 @@ class vsqf_heuristic:
         # pointnav
         self._last_goal = np.zeros(2)  
         self._pointnav_policy.reset()
+
+        # camera policy
+        self.start_camera = [False]*self.num_scenes  # arrive goal and start active camera
 
     def get_random_region(self, vsqf_map, vis_inputs, update_vis_map):
         '''
@@ -323,31 +330,41 @@ class vsqf_heuristic:
         return self.vsqf_goals
     
     
-    def get_actions(self, vis_inputs):
+    def get_actions(self, vis_inputs, camera_action):
         
+        # run camera action every step
+        
+        camera_action += np.ones_like(camera_action)*3
+        
+        # vsqf algorithm
         actions = [None for _ in range(self.num_scenes)]
         for e, p_input in enumerate(vis_inputs):
             
-            # if self.rotation_counts[e] < 5:        
-            #     actions[e] =1       # left
-            #     self.rotation_counts[e] += 1
-            #     continue
+            # rotate 10 times at the beginning
             if self.rotation_counts[e] < 10:        
                 actions[e] = 2
                 self.rotation_counts[e] += 1
                 continue
             
             if p_input['sample_stage']:
-                if self.arrive_goal[e] and not self.replan[e]:
-                    
-                    actions[e], self.replan[e] = self.rotate_to_object(p_input, e, self.vsqf_goals[e])
-                    print(f"arrive and rotation with {actions[e]}")
-                    if actions[e] == 3:
-                        self.sample_num[e] += 1
-                    if actions[e] == 3 and self.sample_num[e] == 5:
-                        self.visited_goal[e] = np.zeros((self.map_shape[0], self.map_shape[1])).astype(bool)
-                        self.sample_num[e] = 0
-                else:   # arrive and replan, not arrive and not replan
+                if self.arrive_goal[e] and not self.replan[e]:  
+                    if p_input['camera_stage'] or self.start_camera[e]:
+                        actions[e] = camera_action[e]
+                        if actions[e] == 3:     # when camera capture, done
+                            self.sample_num[e] += 1
+                            if self.sample_num[e] == 5:     # sample of the object ends
+                                self.visited_goal[e] = np.zeros((self.map_shape[0], self.map_shape[1])).astype(bool)
+                                self.sample_num[e] = 0
+                            self.replan[e] = True   # 只有capture后重规划
+                        self.start_camera[e] = False
+                    else:
+                        # arrive but not to object
+                        actions[e] = self.rotate_to_object(p_input, e, self.vsqf_goals[e])  #不更新replan，改为camera stage=True
+                        print(f"arrive and rotation with {actions[e]}")
+                        if actions[e] == -2:
+                            self.start_camera[e] = True
+                            
+                else:   # arrive and replan | not arrive and not replan
                     
                     actions[e], new_goal, replan_whole,  get_in_goal = self.get_actions_with_vsqf(p_input, e, self.vsqf_goals[e])
                     if new_goal[0] == self.vsqf_goals[e][0] and new_goal[1] == self.vsqf_goals[e][1]:
@@ -368,6 +385,7 @@ class vsqf_heuristic:
                         visited_  = neighborhoods(mu, self.map_shape[0], self.map_shape[1], sigma, gaussian=gaussian)
                         self.visited_goal[e] = visited_.squeeze(0).numpy().astype(bool) | self.visited_goal[e].astype(bool)
                         print(f"get in vsqf goal")
+                        
                         # pointnav
                         self._pointnav_policy.reset()
                         self._last_goal = np.zeros(2) 
@@ -381,7 +399,7 @@ class vsqf_heuristic:
                             self.replan[e] = False
                         self.arrive_goal[e] = False
                     
-            else:
+            else:       # use frontier to explore
                 # reset 
                 self.cand_goals_map[e] = torch.zeros((self.map_shape[0], self.map_shape[1]))
                 action, goal, short_time_goal = self.frontier_policy.get_action_one_env(p_input, e)
@@ -431,8 +449,8 @@ class vsqf_heuristic:
         elif relative_angle < -self.args.turn_angle / 2.:
             action = 1  #2  # Left
         else:
-            return 3, True      # capture
-        return action, False
+            return -2      # 标志开始active camera
+        return action
 
     def get_actions_with_vsqf(self, vis_input, env_idx, goal):
         
@@ -549,53 +567,3 @@ class vsqf_heuristic:
         return action, goal, action ==-1,  action ==-1
         
         
-        x1, y1, = 0, 0
-        x2, y2 = exp_map.shape
-        
-        # 处于sample stage，仅在eplore区域导航
-        # traversible = exp_map > 0
-        # traversible =traversible*(obs_map[x1:x2, y1:y2] != True)
-        traversible = obs_map[x1:x2, y1:y2] != True
-        traversible = traversible * (1 - sem_map.astype(int))
-        
-        traversible[self.collision_map[env_idx][x1:x2, y1:y2] == 1] = 0    # 去掉碰撞区
-        traversible[self.visited[env_idx][x1:x2, y1:y2] == 1] = 1       # agent 轨迹也是可行区
-        traversible[int(start[0] - x1) - 1:int(start[0] - x1) + 2,
-                    int(start[1] - y1) - 1:int(start[1] - y1) + 2] = 1      # 现在agent位置的周围
-
-        traversible = add_boundary(traversible, value=0)
-        self.planners[env_idx] = FMMPlanner(traversible)
-        
-        # plan with vsqf
-        # goal = goal
-        if pu.get_l2_distance(goal[0], start[0], goal[1],start[1]) < 5:
-            print("get in vsqf goal")
-            return 0, goal, True, True
-        
-        new_goal = self.planners[env_idx].set_goal(goal, auto_improve=True)
-            
-            
-        state = [start[0] - x1 + 1, start[1] - y1 + 1]
-        stg_x, stg_y, replan_whole, stop = self.planners[env_idx].get_short_term_goal(state)
-
-        stg_x, stg_y = stg_x + x1 - 1, stg_y + y1 - 1
-        
-        angle_st_goal = math.degrees(math.atan2(stg_x - start[0],
-                                                stg_y - start[1]))
-        angle_agent = (start_o) % 360.0
-        if angle_agent > 180:
-            angle_agent -= 360
-
-        relative_angle = (angle_agent - angle_st_goal) % 360.0
-        if relative_angle > 180:
-            relative_angle -= 360
-
-        if relative_angle > self.args.turn_angle / 2.:
-            action = 2  #3  # Right
-        elif relative_angle < -self.args.turn_angle / 2.:
-            action = 1  #2  # Left
-        else:
-            action = 0  #1  # Forward
-            
-        #
-        return action, new_goal, replan_whole, stop
