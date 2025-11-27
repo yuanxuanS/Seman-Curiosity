@@ -63,10 +63,14 @@ def get_args():
                         help='Frame height (default:84)')
     parser.add_argument('-dfh', '--det_frame_height', type=int, default=256,
                         help='Frame height (default:84)')
-    parser.add_argument('-fw', '--frame_width', type=int, default=128,      # policy输入大小,map更新时obs大小, 在输入前将env_frame_width变为frame_width大小
+    parser.add_argument('-fw', '--frame_width', type=int, default=256,      # policy输入大小,map更新时obs大小, 在输入前将env_frame_width变为frame_width大小
                         help='Frame width (default:84)')
-    parser.add_argument('-fh', '--frame_height', type=int, default=128,
+    parser.add_argument('-fh', '--frame_height', type=int, default=256,
                         help='Frame height (default:84)')
+    parser.add_argument('-cfw', '--camera_frame_width', type=int, default=128,      # camera policy输入大小,map更新时obs大小, 在输入前将env_frame_width变为frame_width大小
+                        help='Frame width (default')
+    parser.add_argument('-cfh', '--camera_frame_height', type=int, default=128,
+                        help='Frame height (default)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length, steps in an episode""")
     parser.add_argument("--task_config", type=str,
@@ -143,7 +147,7 @@ def get_args():
                         help="Semantic prediction confidence threshold") 
     
     # Mapping
-    parser.add_argument('--global_downscaling', type=int, default=2)    # full map缩放为local map大小，可能不需要？
+    parser.add_argument('--global_downscaling', type=int, default=2)    # full_map缩放 downscaling倍数，得到local_map实际大小
     parser.add_argument('--vision_range', type=int, default=100)
     parser.add_argument('--map_resolution', type=int, default=5)        # 每一网格的实际大小
     parser.add_argument('--du_scale', type=int, default=1,

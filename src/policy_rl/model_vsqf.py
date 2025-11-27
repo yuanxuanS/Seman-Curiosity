@@ -11,7 +11,6 @@ from .envs.utils import depth_utils as du
 import math
 import itertools
 import cv2
-
 class VSQF_Mapping(nn.Module):
 
     """
@@ -27,15 +26,15 @@ class VSQF_Mapping(nn.Module):
         self.resolution = args.map_resolution
         self.z_resolution = args.map_resolution
         self.map_size_cm = args.map_size_cm // args.global_downscaling
-        
-        ### 生成vsqf区域内所有坐标
+        self.du_scale = args.du_scale
+        ### 生成vsqf区域内所有坐标: 每隔5cm生成一个点
         diameter = 11 * 100   # 场的实际直径(cm)
         self.center = (diameter / 2, diameter / 2)
         vr = int(diameter // self.resolution)       # vsqf vision range
 
-        # 直接生成坐标轴数组， x向右，y向下
-        x = np.arange(0, diameter, self.resolution)
-        y = np.arange(0, diameter, self.resolution)
+        # 直接生成坐标轴数组， x向右，y向下; vsqf边长220格子大小，等于vr大小
+        x = np.arange(2.5, diameter, 5)
+        y = np.arange(2.5, diameter, 5)
         xx, yy = np.meshgrid(x, y, indexing='xy')
         self.coords = np.column_stack((xx.ravel(), yy.ravel())) # coords: num * 2, 实际坐标值（单位m）
         self.distance_center = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]    # distance_center: [n_distance_bin], 距离分区的中心
@@ -45,7 +44,7 @@ class VSQF_Mapping(nn.Module):
             args.num_processes, 1, vr, vr,
         ).float().to(self.device)       # cls+1, h, w, z
         
-        self.coord_range = vr
+        self.coord_range = vr       # 视觉范围
         self.fov = args.hfov
         
         # 
@@ -78,7 +77,7 @@ class VSQF_Mapping(nn.Module):
         dist_idx = dist_idx[valid_mask] - 1
         
         # 根据角度计算每个坐标所属角度区间
-        angle_rad = torch.atan2(torch.from_numpy(-dx[valid_mask]), torch.from_numpy(-dy[valid_mask]))    # (y, x) 极坐标方向为x正，逆时针；弧度 [-π, π]; 在obj坐标系：x向右，y向下，极坐标方向为-y，逆时针增加
+        angle_rad = torch.atan2(torch.from_numpy(dx[valid_mask]), torch.from_numpy(dy[valid_mask]))    # 极坐标方向为x正，逆时针；弧度 [-π, π]
         # angle_rad = angle_rad[valid_mask]
         angle_deg = (angle_rad * 180 / math.pi)
         angle_deg = angle_deg % 360  # 转换为 [0°, 360°)
@@ -194,55 +193,66 @@ class VSQF_Mapping(nn.Module):
         XY= XY.transpose(0, 2, 1)      # b X n_dim=2 X length
         XY = torch.from_numpy(XY)
         
-        # 在object coord中，x方向向右，y向下； obj（圆心）为原点
+        # obj coord: 中心点为物体中心，不同角度的vsqf地图
         quality_field = self.splat_field_in_map(
             self.init_grid.to(feat.device) * 0., feat, XY.to(feat.device)
         )       # B*1*vr*vr
         
-        # obj的vsqf field在agent坐标系的朝向
+        # 转到agent coord: 先旋转到agent坐标系
         obj_pose = torch.zeros(B, 3)
-        obj_pose[:, 2] = 90 - (180-azimuth)       # 在agent坐标系中,agent朝向为极坐标方向，逆时针增加； 180-a为obj在agent极坐标中的角度，转为grid_sample函数要求的坐标系：90-
+        obj_pose[:, 2] =-azimuth
         obj_pose = obj_pose.to(self.device)
         rot_mat, trans_mat = get_grid(obj_pose, quality_field.size(),
                                         self.device)
         rotated_qf = F.grid_sample(quality_field.to(self.device), rot_mat, align_corners=True)
 
-        # obj和agent的相对距离
-        depth_obj = depth_obj     # cm -> m
-        point_cloud_t = du.get_point_cloud_from_z_t(
+        # 转到agent coord: 计算obj和agent的相对距离， 再计算在agent coord的平移
+        depth_obj = depth_obj     # cm 
+        point_cloud_t = du.get_point_cloud_from_z_t(        # dx方向原点在中点
             torch.from_numpy(depth_obj).to(self.device), 
             self.camera_matrix, 
             self.device, 
-            scale=1)
+            scale=self.du_scale)
         
-        # agent_view_t = du.transform_camera_view_t(
-        #     point_cloud_t, self.agent_height, 0, self.device)
-
-        # agent_view_centered_t = du.transform_pose_t(
-        #     agent_view_t, self.shift_loc, self.device)
         
-        dx_obj = point_cloud_t[..., 0][point_cloud_t[..., 0] > 0].mean() if (point_cloud_t[..., 0] > 0).sum() > 0 else 0.       
+        dx_obj = point_cloud_t[..., 0][point_cloud_t[..., 0] > 0].mean() if (point_cloud_t[..., 0] > 0).sum() > 0 else 0.    # cm   
         dy_obj = point_cloud_t[..., 1][point_cloud_t[..., 1] > 0].mean() if (point_cloud_t[..., 1] > 0).sum() > 0 else 0.
-        # dy_obj = (point_cloud_t[..., 1].mean() * 4.5 + 0.5) * (point_cloud_t[..., 1].mean() > 0)       # 深度方向
-        # print(f"obj x {dx_obj}, y {dy_obj}")
         
         pose_pred = poses_last
-        ### vsqf到 agent view的 全局地图上： 和agent的距离决定obj的位置
+        ### 计算agent view的 地图（local map）中， vsqf map的索引范围
         agent_view = torch.zeros((B, 1,
                             int(self.map_size_cm // self.resolution),
                             int(self.map_size_cm // self.resolution)
                             )).to(self.device)
 
-        x1 = int(self.map_size_cm // (self.resolution * 2) - self.coord_range // 2 - dx_obj // self.resolution)
-        x1 = max(0, x1)
+        # agent coord， agent朝向y正向，向右为agent view的x正向; 视野的深度方向为agent view的y
+        # x为正，x1减小
+        x1 = int(self.map_size_cm // (self.resolution * 2) - self.coord_range // 2 + dx_obj // self.resolution)
         x2 = x1 + self.coord_range
+        if x1 < 0:
+            x1 = 0
+            x_range = x2 - x1
+            x_start =rotated_qf.shape[-1] - x_range
+        else:
+            x_range = x2 - x1
+            x_start = x1
+        
+        if x2 > agent_view.shape[-1]:
+            x2 = agent_view.shape[-2]
+        x_range = x2 - x1
+        x_start = 0
+        
+        # - self.coord_range // 2 是原始vsqf map的y起始
         y1 = int(self.map_size_cm // (self.resolution * 2) - self.coord_range // 2 + dy_obj // self.resolution) # - vision_range // 2)     # field以地图中心为原点 ？
         y2 = min(y1 + self.coord_range, int(self.map_size_cm // self.resolution))
+        if y2 > agent_view.shape[-2]:
+            y2 = min(y2, agent_view.shape[-1])
         y_range = y2 - y1
-        rotated_qf = rotated_qf[:, :, :int(y_range), :]
+            
+        rotated_qf = rotated_qf[:, :, :int(y_range), x_start:x_start+x_range]
         agent_view[:, :, y1:y2, x1:x2] = rotated_qf
         
-        # 转换到world map
+        # 根据agent pose将agent_view转换到world coord
         corrected_pose = pose_obs       # 相对t-1的pose1的改变, dx, dy, do (在psoe1坐标系)
         
         def get_new_pose_batch(pose, rel_pose_change):

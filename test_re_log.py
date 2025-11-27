@@ -18,14 +18,18 @@ with open(log_file_path, 'r') as file:
 # 提取 episode mean reward 的值
 rewards = []
 for line in log_lines:
-    match = re.search(rf'{reward}=(\d+\.\d+)', line)
+    match = re.search(rf'{reward}=(-?\d+\.\d+)', line)
     if match:
-        rewards.append(float(match.group(1)))
+        r_ = float(match.group(1))
+        # if r_>0:
+        rewards.append(r_)
 
 # 检查是否提取到数据
 if not rewards:
+    
     print(f"未找到 {reward} 数据！")
 else:
+    print(len(rewards))
     # 绘制曲线
     plt.plot(rewards, label=f'{reward}')
     plt.xlabel('Episode')

@@ -64,7 +64,7 @@ class FMMPlanner():
         dd = skfmm.distance(traversible_ma, dx=1)   # 计算等高线，值为距离
         dd = ma.filled(dd, np.max(dd) + 1)      # 将False区域都赋值为最大值
         self.fmm_dist = dd
-        return
+        return goal_x, goal_y
 
     def set_multi_goal(self, goal_map):
         traversible_ma = ma.masked_values(self.traversible * 1, 0)  # 可通行1, 其他0
@@ -93,8 +93,9 @@ class FMMPlanner():
             "Planning error: unexpected subset shape {}".format(subset.shape)
 
         subset *= mask
-        subset += (1 - mask) * self.fmm_dist.shape[0] ** 2      # mask区域*大数，设被掩码区域的值很高
+        subset += (1 - mask) * self.fmm_dist.shape[0] ** 2      # 非mask区域*大数，设被掩码区域的值很高
 
+        # 检查智能体当前点处的 FMM 距离（在归一化前）是否小于一个预设的阈值（此处为 0.25 * 100 / 5. = 5.0）。如果满足，说明已到达最终目标附近
         if subset[self.du, self.du] < 0.25 * 100 / 5.:  # 25cm  中心点的值是否小于25cm
             stop = True     # 到达目标点
         else:
@@ -104,6 +105,7 @@ class FMMPlanner():
         ratio1 = subset / dist_mask     # 计算成本？
         subset[ratio1 < -1.5] = 1   # 成本小于-1.5， 作为可行区域
 
+        # 选短期目标，在修正后的局部距离场 subset 中找到最小值的索引 (stg_x, stg_y)。
         (stg_x, stg_y) = np.unravel_index(np.argmin(subset), subset.shape)      # 最小
         # min_values = np.min(subset)
         # indices = np.where(subset == min_values)
@@ -114,9 +116,9 @@ class FMMPlanner():
         #     else:
         #         stg_x, stg_y = indices
             
-        
+        # 如果找到的最佳 STG 点的修正 FMM 距离大于等于 0（或者非常接近 0），这意味着找不到一个能带来 FMM 距离节省（即使智能体更接近终点）的可行下一步，需要进行全局重新规划。
         if subset[stg_x, stg_y] > -0.0001:
-            replan = True       # 选择的stg就是目标点
+            replan = True       
         else:
             replan = False
 

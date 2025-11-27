@@ -11,6 +11,7 @@ third_parties/detectron2/
 outputs/
 images/
 env_orients/
+hssd_data/
 
 # type
 *.pyc

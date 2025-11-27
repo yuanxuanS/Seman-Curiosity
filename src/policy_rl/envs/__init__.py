@@ -47,15 +47,33 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return reward
 
-    def step_and_preprocess(self, action, inputs):
-        obs, reward, done, info = self.venv.step_and_preprocess(action, inputs)
+    def update_collision_map(self, inputs):
+        self.venv.update_collision_map(inputs)
+        
+    def step_and_preprocess(self, action, wait_env):
+        obs, reward, done, info = self.venv.step_and_preprocess(action, wait_env)
+        obs = torch.from_numpy(obs).float().to(self.device)
+        reward = torch.from_numpy(reward).float()
+        return obs, reward, done, info
+    
+    
+    def step_and_pre(self, action, inputs, wait_env):
+        obs, reward, done, info = self.venv.step_and_pre(action, inputs, wait_env)
         obs = torch.from_numpy(obs).float().to(self.device)
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
 
-    def update_collision_map(self, inputs):
-        self.venv.update_collision_map(inputs)
-        
+    def get_obs_info(self):
+        obs_info = self.venv.get_obs_info()
+        return obs_info
+    
+    def save_data(self, obs_info, capture):
+        self.venv.save_data(obs_info, capture)
+        return
+    
+    def visualize(self, vis_data):
+        self.venv.visualize(vis_data)
+        return 
     def close(self):
         return self.venv.close()
     

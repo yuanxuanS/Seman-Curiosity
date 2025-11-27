@@ -36,10 +36,23 @@ class RolloutStorage(object):
         self.masks = torch.ones(num_steps + 1, num_processes)
 
         self.num_steps = num_steps
+        self.num_processes = num_processes
         self.step = 0
         self.has_extras = False
         self.extras_size = None
 
+    def reset(self):
+        self.obs = torch.zeros_like(self.obs)
+        self.rec_states = torch.zeros_like(self.rec_states)
+        self.rewards = torch.zeros_like(self.rewards)
+        self.value_preds = torch.zeros_like(self.value_preds)
+        self.returns = torch.zeros_like(self.returns)
+        self.action_log_probs = torch.zeros_like(self.action_log_probs)
+        self.actions = torch.zeros_like(self.actions, dtype=self.actions.dtype)
+        self.masks = torch.ones_like(self.masks)
+        self.step = 0
+        self.has_extras = False
+        self.extras_size = None
     def to(self, device):
         self.obs = self.obs.to(device)
         self.rec_states = self.rec_states.to(device)

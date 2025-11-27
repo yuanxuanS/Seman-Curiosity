@@ -272,7 +272,8 @@ class Vsqf_Maps_Env:
         maps_flat = self.full_map.reshape(self.num_scenes, -1)
         flat_indices = torch.argmax(maps_flat, dim=1)
         row_indices, col_indices = np.unravel_index(flat_indices.cpu().numpy(), (self.full_map.shape[-2], self.full_map.shape[-1]))
-        return row_indices, col_indices
+        indices = [[row_indices[i], col_indices[i]] for i in range(len(row_indices))]
+        return indices
     
     def get_vsqf_score(self, occupy=True):
         locs = self.full_pose.cpu().numpy()

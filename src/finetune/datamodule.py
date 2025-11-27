@@ -38,6 +38,14 @@ class HabitatDataModule(pl.LightningDataModule):
         
         self.gpus = kwargs['gpus']
         
+        # with uncertainty filter
+        self.test_mode = kwargs['test_mode']  # "all"
+        if self.test_mode == "uncertainty":
+            self.uncertain_pth = kwargs['uncertain_pth']
+            self.test_budget = kwargs['test_budget']
+            with open(self.uncertain_pth, "rb") as f:
+                self.uncertain = pickle.load(f)
+        
         
     
     def prepare_data(self):
@@ -175,20 +183,33 @@ class HabitatDataModule(pl.LightningDataModule):
 
         sampler = SampleLoader(self.testset_path)
         
-        inputs = sampler.get_env_episode_and_steps_dense_list()     
-        filter_empty_instances = []
-        
-        for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
-            instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
+        if self.test_mode == "all":
+            inputs = sampler.get_env_episode_and_steps_dense_list()     
+            filter_empty_instances = []
+            for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
+                instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
 
-            filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
-
-        dataset = BbsgtDataset(
-            data_path=None,
-            sampler=sampler,
-            index_mask=filter_empty_instances,      # 仅保留有mask的
-            transform=transform,
-        )
+                filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+                
+                
+            dataset = BbsgtDataset(
+                data_path=None,
+                sampler=sampler,
+                index_mask=filter_empty_instances,      # 仅保留有mask的
+                transform=transform,
+            )
+        elif self.test_mode == "uncertainty":
+            inputs = []            
+            sorted_uncertain = sorted(self.uncertain, key=lambda x: x[3])
+            for i in range(test_budget):
+                inputs.append(sorted_uncertain[i][:3])   # 从小到大排序，取前test_budget个
+                
+            dataset = BbsgtDataset(
+                data_path=None,
+                sampler=sampler,
+                inputs=inputs,
+                transform=transform,
+            )
         return dataset
         
 class GTDataModule(HabitatDataModule):
