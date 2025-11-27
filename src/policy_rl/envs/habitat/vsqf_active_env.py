@@ -61,6 +61,7 @@ class Vsqf_active_Env(habitat.RLEnv):
         self.info['lost_goal'] = False
         self.info['camera_stage'] = False
         self.info['camera_step'] = 0
+        self.info['invalid_goal'] = False
         self.init_obs = None
         # self.has_captured = False
         
@@ -112,6 +113,7 @@ class Vsqf_active_Env(habitat.RLEnv):
         self.info['lost_goal'] = False
         self.info['camera_stage'] = False
         self.info['camera_step'] = 0
+        self.info['invalid_goal'] = False
         self.init_obs = None
         # self.has_captured = False
         
@@ -364,6 +366,7 @@ class Vsqf_active_Env(habitat.RLEnv):
         self.info['semantic'] = return_obs['semantic']
 
         # update camera stage
+        self.info['invalid_goal'] = False       # 目标位置处无效
         if self.info['sample_stage']:
             goal_name = self.info['target_class']
             if self.info['camera_stage']:
@@ -390,7 +393,6 @@ class Vsqf_active_Env(habitat.RLEnv):
                     self.info['camera_step'] = 0
                     self.init_obs = None
             else:
-
                 if camera_start:   
                     # 进一步判断是否开启camera stage
                     if self.has_target(obs, goal_name)[0] and \
@@ -403,6 +405,9 @@ class Vsqf_active_Env(habitat.RLEnv):
                             state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
                             self.info['cam_obs'] = state_
                             print("start camera stage")
+                            
+                    else:
+                        self.info['invalid_goal'] = True
                             
         return state, 0., done, self.info
     

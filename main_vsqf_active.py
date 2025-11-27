@@ -106,6 +106,7 @@ def main():
     # init current obj map for goal computation
     curr_object_maps = [np.ones((maps.full_w, maps.full_h))] * num_scenes
     
+    
     ## active cam policy
     l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
     l_action_space = envs.get_action_space()[0]
@@ -206,6 +207,8 @@ def main():
     
     
     if args.agent == "random":
+        camera_action = np.random.randint(0, 5, num_scenes)
+                
         # select goal according to vsqf map
         update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
         for e, p_input in enumerate(vis_inputs):
@@ -214,13 +217,15 @@ def main():
             p_input['depth'] = infos[e]['depth']
             p_input['time'] = infos[e]['time']
             p_input['camera_stage'] = infos[e]['camera_stage']
+            p_input['camera_step'] = infos[e]['camera_step']
+            p_input['invalid_goal'] = infos[e]['invalid_goal']
         goals = vsqf_heu.get_random_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
         for e, p_input in enumerate(vis_inputs):
             if infos[e]['sample_stage']:
                 p_input["frontier_goal"] = goals[e]
             
         # return action with planner
-        l_action = vsqf_heu.get_actions(vis_inputs)
+        l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
     elif args.agent == "frontier":
         nav_policy = Frontier(args)
         nav_policy.reset(num_scenes)
@@ -269,6 +274,7 @@ def main():
             p_input['time'] = infos[e]['time']
             p_input['camera_stage'] = infos[e]['camera_stage']
             p_input['camera_step'] = infos[e]['camera_step']
+            p_input['invalid_goal'] = infos[e]['invalid_goal']
             
         goals = vsqf_heu.get_best_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
         for e, p_input in enumerate(vis_inputs):
@@ -328,25 +334,25 @@ def main():
             break
         
         # get reward: map change after state transition
-        
-        for e in range(num_scenes):
-            if infos[e]['camera_stage']:
-                
-                if infos[e]['camera_step'] == 0:
-                    # camera policy
-                    l_input_env = infos[e]['cam_obs'][:3, ...]
-                    l_input_env = res(torch.from_numpy(l_input_env))
-                    l_rollouts.obs[0][e].copy_(l_input_env)   #
-                else:
-                    # update policy input with next state
-                    l_input = infos[e]['cam_obs'][:3, ...]       # rgb
-                    l_input = res(torch.from_numpy(l_input))
-                    # Add samples to local policy storage
-                    l_rollouts.insert(
-                                l_input, l_rec_states,      # state_t+1
-                                l_action, l_action_log_prob, l_value,   # action, reward_t
-                                l_reward, l_masks, extras
-                            )
+        if args.agent == "vsqf_heuristic":
+            for e in range(num_scenes):
+                if infos[e]['camera_stage']:
+                    
+                    if infos[e]['camera_step'] == 0:
+                        # camera policy
+                        l_input_env = infos[e]['cam_obs'][:3, ...]
+                        l_input_env = res(torch.from_numpy(l_input_env))
+                        l_rollouts.obs[0][e].copy_(l_input_env)   #
+                    else:
+                        # update policy input with next state
+                        l_input = infos[e]['cam_obs'][:3, ...]       # rgb
+                        l_input = res(torch.from_numpy(l_input))
+                        # Add samples to local policy storage
+                        l_rollouts.insert(
+                                    l_input, l_rec_states,      # state_t+1
+                                    l_action, l_action_log_prob, l_value,   # action, reward_t
+                                    l_reward, l_masks, extras
+                                )
         # ------------------------------------------------------------------ 
         # update local input, next state
         # locs = full_pose.cpu().numpy()
@@ -426,6 +432,8 @@ def main():
         
         # Sample next action
         if args.agent == "random":
+            camera_action = np.random.randint(0, 5, num_scenes)
+            
             # select goal according to vsqf map
             update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
             for e, p_input in enumerate(vis_inputs):
@@ -434,13 +442,15 @@ def main():
                 p_input['depth'] = infos[e]['depth']
                 p_input['time'] = infos[e]['time']
                 p_input['camera_stage'] = infos[e]['camera_stage']
+                p_input['camera_step'] = infos[e]['camera_step']
+                p_input['invalid_goal'] = infos[e]['invalid_goal']
             goals = vsqf_heu.get_random_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
             for e, p_input in enumerate(vis_inputs):
                 if infos[e]['sample_stage']:
                     p_input["frontier_goal"] = goals[e]
                 
             # return action with planner
-            l_action = vsqf_heu.get_actions(vis_inputs)
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
         if args.agent == "frontier":  # must be after updating vis_inputs
             for e, p_input in enumerate(vis_inputs):
                 p_input['depth'] = infos[e]['depth']
@@ -483,6 +493,8 @@ def main():
                 p_input['depth'] = infos[e]['depth']
                 p_input['time'] = infos[e]['time']
                 p_input['camera_stage'] = infos[e]['camera_stage']
+                p_input['camera_step'] = infos[e]['camera_step']
+                p_input['invalid_goal'] = infos[e]['invalid_goal']
             goals = vsqf_heu.get_best_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
             for e, p_input in enumerate(vis_inputs):
                 if infos[e]['sample_stage']:

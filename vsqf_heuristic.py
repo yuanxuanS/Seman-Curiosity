@@ -332,8 +332,7 @@ class vsqf_heuristic:
     
     def get_actions(self, vis_inputs, camera_action):
         
-        # run camera action every step
-        
+        # camera action 
         camera_action += np.ones_like(camera_action)*3
         
         # vsqf algorithm
@@ -348,7 +347,9 @@ class vsqf_heuristic:
             
             if p_input['sample_stage']:
                 if self.arrive_goal[e] and not self.replan[e]:  
-                    if p_input['camera_stage'] or self.start_camera[e]:
+                    if p_input['invalid_goal']:
+                        self.replan[e] = True
+                    if p_input['camera_stage']:
                         actions[e] = camera_action[e]
                         if actions[e] == 3:     # when camera capture, done
                             self.sample_num[e] += 1
@@ -356,13 +357,13 @@ class vsqf_heuristic:
                                 self.visited_goal[e] = np.zeros((self.map_shape[0], self.map_shape[1])).astype(bool)
                                 self.sample_num[e] = 0
                             self.replan[e] = True   # 只有capture后重规划
-                        self.start_camera[e] = False
+                        # self.start_camera[e] = False
                     else:
                         # arrive but not to object
                         actions[e] = self.rotate_to_object(p_input, e, self.vsqf_goals[e])  #不更新replan，改为camera stage=True
                         print(f"arrive and rotation with {actions[e]}")
-                        if actions[e] == -2:
-                            self.start_camera[e] = True
+                        # if actions[e] == -2:
+                        #     self.start_camera[e] = True
                             
                 else:   # arrive and replan | not arrive and not replan
                     
