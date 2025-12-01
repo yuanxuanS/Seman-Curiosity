@@ -19,7 +19,7 @@ class vsqf_heuristic:
         self.num_scenes = num_scenes
         self.device = device
         
-        self.explore_algor = args.explore_algor      # "poni" | "frontier"
+        self.explore_algor = args.explore_algor      # "poni" | "frontier"， replan由各自算法控制
         if self.explore_algor == "frontier":
             self.explore_policy = Frontier(args)
             self.explore_policy.reset(num_scenes)
@@ -60,7 +60,7 @@ class vsqf_heuristic:
             self.explore_policy = Frontier(self.args)
             self.explore_policy.reset(self.num_scenes)
         elif self.explore_algor == "poni":
-            pass
+            self.explore_policy.reset()
         
         # Episode initializations
         self.map_shape = map_shape = (self.args.map_size_cm // self.args.map_resolution,

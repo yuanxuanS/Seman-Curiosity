@@ -88,12 +88,17 @@ class Vsqf_active_Env(habitat.RLEnv):
             self.found_classes.pop("toilet")
             
         # for poni
-        self.poni_cate_id = {"chair":0, "couch": 1,
-                    # "potted plant": 2,
+        self.poni_cate_id = {"chair":0, 
+                    "couch": 1,
                     "bed": 3,
                     "toilet": 4,
-                    # "tv": 5,
                     "refrigerator": 9
+                    }
+        self.poni_cate_inv = {0:"chair", 
+                              1:"couch",
+                    3:"bed",
+                    4:"toilet",
+                    9:"refrigerator"
                     }
         
         

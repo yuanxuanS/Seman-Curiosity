@@ -197,9 +197,9 @@ def get_args():
         default=1.0,
         help="mask size (meters) for mask_nearest_locations option",
     )
-    parser.add_argument("--area_weight_coef", type=float, default=0.5)
+    parser.add_argument("--area_weight_coef", type=float, default=0.7)
     parser.add_argument("--dist_weight_coef", type=float, default=0.3)
-    parser.add_argument('--poni_num_global_steps', type=int, default=20,    # = horizon size?
+    parser.add_argument('--poni_num_global_steps', type=int, default=1,    # = horizon size?
                         help='number of forward steps in A2C (default: 5)')
     parser.add_argument('--poni_num_sem_categories', type=float, default=16,
                         help="number of semantic plus 1 in poni")

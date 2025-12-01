@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import src.policy_rl.envs.utils.pose as pu
+from vsqf_utils import get_visibility_mask, get_visibility_mask_reverse, nms, neighborhoods
 
 class PONI:
     def __init__(self, args, num_scenes, device):
@@ -39,7 +40,7 @@ class PONI:
         
         self.g_masks = torch.ones(num_scenes).float().to(device)
         # 规划周期
-        self.replan_step = 50
+        self.replan_step = 1
         self.replan = [True]*self.num_scenes
         self.goals = [None]*self.num_scenes
         self.counts = [0]*self.num_scenes
@@ -49,9 +50,10 @@ class PONI:
         self.resize = transforms.Compose([transforms.Resize((self.local_h*self.args.global_downscaling,
                                                         self.local_w*self.args.global_downscaling),
                                interpolation=Image.NEAREST)])
-    
+
+        self.visited_goal = None
     def reset(self):
-        pass
+        self.visited_goal = np.zeros((self.num_scenes, self.local_h,self.local_w)).astype(bool)
         
     def get_global_goals(self, 
                    local_map, 
@@ -143,6 +145,7 @@ class PONI:
         fmm_dists = None
         ego_agent_poses = None
         unk_map = 1.0 - local_map[:, 1, :, :]
+        unk_map = unk_map * torch.from_numpy(~self.visited_goal).to(unk_map.device)
         # Sample long-term goal from global policy
         g_value, g_action, g_action_log_prob, g_rec_states, prev_pfs = self.g_policy.act(
             g_obs,
@@ -163,11 +166,13 @@ class PONI:
             cpu_actions = g_action.cpu().numpy()
             if len(cpu_actions.shape) == 2:  # (B, 2) XY locations
                 global_goals = [
-                    [int(action[0] * self.local_w), int(action[1] * self.local_h)]
+                    [int(action[0] * self.local_w), 
+                     int(action[1] * self.local_h)]
                     for action in cpu_actions
                 ]
                 global_goals = [
-                    [min(x, int(self.local_w - 1)), min(y, int(self.local_h - 1))]
+                    [min(x, int(self.local_w - 1)), 
+                     min(y, int(self.local_h - 1))]
                     for x, y in global_goals
                 ]
             else:
@@ -175,14 +180,17 @@ class PONI:
                 global_goals = None
         
         # convert to full goal
-        for e in range(self.num_scenes):
-            pose_pred = vis_inputs[e]['pose_pred']
-            start_x, start_y, start_o, gx1, gx2, gy1, gy2 = pose_pred
-            gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
-            goal_c, goal_r = global_goals[e][0], global_goals[e][1]
-            goal_c += gy1
-            goal_r += gx1
-            global_goals[e] = pu.threshold_poses([goal_r, goal_c], full_map[e].shape)
+        # for e in range(self.num_scenes):
+        #     pose_pred = vis_inputs[e]['pose_pred']
+        #     start_x, start_y, start_o, gx1, gx2, gy1, gy2 = pose_pred
+        #     gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
+        #     origin = [gy1 , 
+        #               gx1 ]
+            
+        #     goal_c, goal_r = global_goals[e][1], global_goals[e][0]
+        #     goal_c += origin[1]
+        #     goal_r += origin[0]
+        #     global_goals[e] = pu.threshold_poses([goal_r, goal_c], full_map[e].shape)
         
         # Update long-term goal if target object is found
         # found_goal = [0 for _ in range(self.num_scenes)]
@@ -214,6 +222,13 @@ class PONI:
         #         found_goal[e] = 1
         
         self.goals = [g_goal if self.replan[e] else self.goals[e] for g_goal in global_goals] 
+        
+        # record to avoid repeat 
+        sigma=(1.5, 1.5)
+        gaussian=True
+        mu = torch.tensor([[self.goals[e][0], self.goals[e][1]]]).float()
+        visited_  = neighborhoods(mu, self.local_h, self.local_w, sigma, gaussian=gaussian)
+        self.visited_goal[e] = visited_.squeeze(0).numpy().astype(bool) | self.visited_goal[e].astype(bool)
         return self.goals
              
     def update_vis(self, 
