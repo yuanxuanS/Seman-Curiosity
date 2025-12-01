@@ -15,7 +15,7 @@ import gzip
 from src.vqf_constants import target_coco_categories_mapping, target_coco_categories, category_id_maps, target_cls_id_in_scene
 import cv2
 import magnum as mn
-
+import random
 
 class Vsqf_active_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
@@ -86,6 +86,15 @@ class Vsqf_active_Env(habitat.RLEnv):
                 self.found_classes[target] = {'num':0, "obj_id":[], "rgbs":0}
         if scene_name == "Wiconisco":
             self.found_classes.pop("toilet")
+            
+        # for poni
+        self.poni_cate_id = {"chair":0, "couch": 1,
+                    # "potted plant": 2,
+                    "bed": 3,
+                    "toilet": 4,
+                    # "tv": 5,
+                    "refrigerator": 9
+                    }
         
         
     def reset(self):
@@ -146,8 +155,22 @@ class Vsqf_active_Env(habitat.RLEnv):
         
         self.info['depth'] = depth
         
-        
+        self.reset_for_poni()
         return state, self.info
+    
+    def reset_for_poni(self):
+        # for poni
+        not_found_cls = []
+        for c, v in self.found_classes.items():
+            if v['num'] < 1:
+                not_found_cls.append(c)
+        
+        if len(not_found_cls) == 0:     # 都找到
+            self.info['goal_cat_id'] = 0        # 选chair作为替代
+        else:
+            self.info['goal_cat_id'] = self.poni_cate_id[random.choice(not_found_cls)]
+        
+        
     
     def load_episode_loc(self):
         args = self.args
@@ -182,6 +205,8 @@ class Vsqf_active_Env(habitat.RLEnv):
                     action={'action': 0, 'action_args':{}},
                     task=self._env.task,
             ))
+        
+        # for poni
         
         return obs
     

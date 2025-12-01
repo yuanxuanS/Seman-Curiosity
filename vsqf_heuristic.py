@@ -11,7 +11,7 @@ from src.policy_rl.utils.obs_transforms import image_resize
 
 from vsqf_utils import get_visibility_mask, get_visibility_mask_reverse, nms, neighborhoods
 from src.policy_rl.utils.pointnav_policy import WrappedPointNavResNetPolicy
-
+from src.policy_rl.utils.poni_utils.poni_algor import PONI
 class vsqf_heuristic:
     def __init__(self, args, num_scenes, device):
         self.planners = [None for _ in range(num_scenes)]
@@ -19,8 +19,13 @@ class vsqf_heuristic:
         self.num_scenes = num_scenes
         self.device = device
         
-        self.frontier_policy = Frontier(args)
-        self.frontier_policy.reset(num_scenes)
+        self.explore_algor = args.explore_algor      # "poni" | "frontier"
+        if self.explore_algor == "frontier":
+            self.explore_policy = Frontier(args)
+            self.explore_policy.reset(num_scenes)
+        elif self.explore_algor == "poni":
+            self.explore_policy = PONI(args, num_scenes, device)
+            
          
         self.collision_map = None
         self.last_actions = None
@@ -34,7 +39,6 @@ class vsqf_heuristic:
         self.mask_sigma = np.ones(self.num_scenes) * 1.5
         self.replan = None
         self.cand_goals_map = [None]*5
-         
         self.rotation_counts = None
         
         # pointnav
@@ -52,8 +56,11 @@ class vsqf_heuristic:
     def reset(self):
         self.planners = [None for _ in range(self.num_scenes)]
         
-        self.frontier_policy = Frontier(self.args)
-        self.frontier_policy.reset(self.num_scenes)
+        if self.explore_algor == "frontier":
+            self.explore_policy = Frontier(self.args)
+            self.explore_policy.reset(self.num_scenes)
+        elif self.explore_algor == "poni":
+            pass
         
         # Episode initializations
         self.map_shape = map_shape = (self.args.map_size_cm // self.args.map_resolution,
@@ -329,12 +336,25 @@ class vsqf_heuristic:
                 
         return self.vsqf_goals
     
-    
-    def get_actions(self, vis_inputs, camera_action):
+    def get_actions(self, vis_inputs, camera_action, kwargs):
         
         # camera action 
         camera_action += np.ones_like(camera_action)*3
         
+        #  poni
+        if self.explore_algor == "poni":
+            goals = self.explore_policy.get_global_goals(
+                kwargs['local_map'],
+                kwargs['full_map'],
+                kwargs['local_pose'],
+                vis_inputs,
+                kwargs['infos'],
+            )
+            
+            pf_visualizations = None
+            if self.args.visualize or self.args.print_images:
+                pf_visualizations = self.explore_policy.g_policy.visualizations
+                
         # vsqf algorithm
         actions = [None for _ in range(self.num_scenes)]
         for e, p_input in enumerate(vis_inputs):
@@ -367,17 +387,18 @@ class vsqf_heuristic:
                             
                 else:   # arrive and replan | not arrive and not replan
                     
-                    actions[e], new_goal, replan_whole,  get_in_goal = self.get_actions_with_vsqf(p_input, e, self.vsqf_goals[e])
+                    actions[e], new_goal, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, self.vsqf_goals[e])
                     if new_goal[0] == self.vsqf_goals[e][0] and new_goal[1] == self.vsqf_goals[e][1]:
                         pass
                     else:
                         self.vsqf_goals[e] = new_goal 
                         p_input['frontier_goal'] = new_goal
                     
-                    self.frontier_policy.collision_map[e] = self.collision_map[e]
-                    self.frontier_policy.curr_loc[e] = self.curr_loc[e]
-                    self.frontier_policy.last_loc[e] = self.last_loc[e]
-                    self.frontier_policy.col_width[e] = self.col_width[e]
+                    if self.explore_algor == "frontier":
+                        self.explore_policy.collision_map[e] = self.collision_map[e]    # TODO : poni是否需要改
+                        self.explore_policy.curr_loc[e] = self.curr_loc[e]
+                        self.explore_policy.last_loc[e] = self.last_loc[e]
+                        self.explore_policy.col_width[e] = self.col_width[e]
                     if get_in_goal:
 
                         sigma=(self.mask_sigma[e], self.mask_sigma[e])
@@ -403,16 +424,23 @@ class vsqf_heuristic:
             else:       # use frontier to explore
                 # reset 
                 self.cand_goals_map[e] = torch.zeros((self.map_shape[0], self.map_shape[1]))
-                action, goal, short_time_goal = self.frontier_policy.get_action_one_env(p_input, e)
-                actions[e] = int(action)
                 
-                p_input["frontier_goal"] = goal
-                # p_input["short_time_goal"] = short_time_goal
+                if self.explore_algor == "frontier":
+                    action, goal, short_time_goal = self.explore_policy.get_action_one_env(p_input, e)
+                    actions[e] = int(action)
+                    p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
                     
-                self.collision_map[e] = self.frontier_policy.collision_map[e]
-                self.curr_loc[e] = self.frontier_policy.curr_loc[e]
-                self.last_loc[e] = self.frontier_policy.last_loc[e]
-                self.col_width[e] = self.frontier_policy.col_width[e]
+                    self.collision_map[e] = self.explore_policy.collision_map[e]    # TODO: poni是否需要
+                    self.curr_loc[e] = self.explore_policy.curr_loc[e]
+                    self.last_loc[e] = self.explore_policy.last_loc[e]
+                    self.col_width[e] = self.explore_policy.col_width[e]
+                    
+                elif self.explore_algor == "poni":
+                    goal = goals[e]     # TODO
+                    actions[e], _, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, goal)
+                    p_input["pf_pred"] = pf_visualizations[e]
+                    p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
+                
 
             self.last_actions[e] = actions[e]
         return actions
@@ -453,31 +481,10 @@ class vsqf_heuristic:
             return -2      # 标志开始active camera
         return action
 
-    def get_actions_with_vsqf(self, vis_input, env_idx, goal):
-        
-        def add_boundary(mat, value=1):
-            
-            h, w = mat.shape
-            new_mat = np.zeros((h + 2, w + 2)) + value
-            new_mat[1:h + 1, 1:w + 1] = mat
-            return new_mat
-        
-        selem = skimage.morphology.disk(3)
-        
-        sem_map = np.rint(vis_input['sem_map_pred_full']< 5)
-        sem_map = skimage.morphology.dilation(sem_map.astype(bool), selem)
-        exp_map = np.rint(vis_input['exp_pred_full'])
-        exp_map =  skimage.morphology.dilation(exp_map, selem)
-        # 过滤噪声
+    def get_actions_by_planner(self, vis_input, env_idx, goal):
+                
         obs_map = np.rint(vis_input['map_pred_full'])
-        connected_colli, num_coli = skimage.morphology.label(obs_map, connectivity=1, return_num=True)
-        for id in range(num_coli):
-                region_ = (connected_colli== id).astype(bool)
-                if region_.sum() < 50:
-                    # set small collision region to traversible
-                    obs_map[region_] = 0
-                        
-        # obs_map = skimage.morphology.dilation(obs_map, selem)
+
         start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
             vis_input['pose_pred']     # x,y,o为全局，如果要用局部的，需要减去局部原点gx1, gy1
         r, c = start_y, start_x     # 转化为格子坐标
@@ -532,10 +539,15 @@ class vsqf_heuristic:
                         [r, c] = pu.threshold_poses([r, c],
                                                     self.collision_map[env_idx].shape)
                         self.collision_map[env_idx, r, c] = 1
-        
-        # pointnav navigation
+
         num_steps = vis_input['sample_step']
+        action, stop, get_in_goal = self.point_nav(num_steps, vis_input, goal)
+        return action, goal, stop, get_in_goal
+    
+    def point_nav(self, num_steps, vis_input, goal):
+        # pointnav navigation
         masks = torch.tensor([num_steps != 1], dtype=torch.bool, device=self.device)        #   rotation 10 times
+        
         if not np.array_equal(goal, self._last_goal):
             if np.linalg.norm(np.array(goal) - np.array(self._last_goal)) > 0.1:        # 和上一个目标距离大时才作为目标
                 self._pointnav_policy.reset()
@@ -562,9 +574,9 @@ class vsqf_heuristic:
         if rho < self._pointnav_stop_radius:
             self._called_stop = True
             print("get in vsqf goal")
-            return -1, goal, True, True
+            return -1, True, True
         action = self._pointnav_policy.act(obs_pointnav, masks, deterministic=False).cpu().numpy()[0][0] - 1
         # 0：stop,1: forward,2:left,3: right  ——> -1,0,1,2
-        return action, goal, action ==-1,  action ==-1
+        return action, action ==-1,  action ==-1
         
         

@@ -230,6 +230,9 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 print("sample stage ends")
                 self.sampled_num += 1
                 self.found_classes[info['target_class']]['num'] += 1
+                
+                # update for poni
+                self.reset_for_poni()
                     
             else:       # sample stage continues
                 info['sample_step'] += 1

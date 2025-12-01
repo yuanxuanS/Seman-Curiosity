@@ -52,7 +52,8 @@ _C.TASK.SENSORS = []
 _C.TASK.MEASUREMENTS = []
 _C.TASK.GOAL_SENSOR_UUID = "pointgoal"
 _C.TASK.POSSIBLE_ACTIONS = ["STOP", "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT", 
-                            "CAMERA_CAPTURE", "CAMERA_LEFT", "CAMERA_RIGHT", "CAMERA_UP", "CAMERA_DOWN"]
+                            "CAMERA_CAPTURE", "CAMERA_LEFT", "CAMERA_RIGHT", "CAMERA_UP", "CAMERA_DOWN", 
+                            "LOOK_UP", "LOOK_DOWN"]
 # -----------------------------------------------------------------------------
 # # ACTIONS
 # -----------------------------------------------------------------------------
@@ -68,10 +69,10 @@ ACTIONS.TURN_LEFT = CN()
 ACTIONS.TURN_LEFT.TYPE = "TurnLeftAction"
 ACTIONS.TURN_RIGHT = CN()
 ACTIONS.TURN_RIGHT.TYPE = "TurnRightAction"
-# ACTIONS.LOOK_UP = CN()
-# ACTIONS.LOOK_UP.TYPE = "LookUpAction"
-# ACTIONS.LOOK_DOWN = CN()
-# ACTIONS.LOOK_DOWN.TYPE = "LookDownAction"
+ACTIONS.LOOK_UP = CN()
+ACTIONS.LOOK_UP.TYPE = "LookUpAction"
+ACTIONS.LOOK_DOWN = CN()
+ACTIONS.LOOK_DOWN.TYPE = "LookDownAction"
 
 ACTIONS.CAMERA_CAPTURE = CN()
 ACTIONS.CAMERA_CAPTURE.TYPE = "CameraCaptureAction"

@@ -225,7 +225,14 @@ def main():
                 p_input["frontier_goal"] = goals[e]
             
         # return action with planner
-        l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+        if args.explore_algor == "frontier":
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+        elif args.explore_algor == "poni":
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action,
+                                            {'local_map':local_map, 
+                                            'full_map':full_map,
+                                            'local_pose':local_pose, 
+                                            'infos':infos})
     elif args.agent == "frontier":
         nav_policy = Frontier(args)
         nav_policy.reset(num_scenes)
@@ -282,8 +289,15 @@ def main():
                 p_input["frontier_goal"] = goals[e]
         
         # return action with planner
-        l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
-        
+        if args.explore_algor == "frontier":
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+        elif args.explore_algor == "poni":
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
+                                            {'local_map':local_map, 
+                                            'full_map':full_map,
+                                            'local_pose':local_pose, 
+                                            'infos':infos}
+                                            )
     # transition:
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_pre(l_action, vis_inputs, wait_env)
@@ -450,7 +464,14 @@ def main():
                     p_input["frontier_goal"] = goals[e]
                 
             # return action with planner
-            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+            if args.explore_algor == "frontier":
+                l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+            elif args.explore_algor == "poni":
+                l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
+                                                {'local_map':local_map, 
+                                            'full_map':full_map,
+                                            'local_pose':local_pose, 
+                                            'infos':infos})
         if args.agent == "frontier":  # must be after updating vis_inputs
             for e, p_input in enumerate(vis_inputs):
                 p_input['depth'] = infos[e]['depth']
@@ -501,7 +522,14 @@ def main():
                     p_input["frontier_goal"] = goals[e]
                 
             # return action with planner
-            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+            if args.explore_algor == "frontier":
+                l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+            elif args.explore_algor == "poni":
+                l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
+                                                {'local_map':local_map, 
+                                            'full_map':full_map,
+                                            'local_pose':local_pose, 
+                                            'infos':infos})
         
         # transition: next state
         if wait_env.sum() == num_scenes:
