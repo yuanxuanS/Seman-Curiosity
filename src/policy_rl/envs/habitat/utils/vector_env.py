@@ -50,6 +50,7 @@ EPISODE_COMMAND = "current_episode"
 STEP_AND_PREPROCESS = "step_and_preprocess"
 STEP_AND_PRE = "step_and_pre"
 GET_OBS_INFO = "get_obs_info"
+GET_TARGET_REL_LOC= "get_target_rel_loc"
 SAVE_DATA = "save_data"
 COUNT_EPISODES_COMMAND = "count_episodes"
 EPISODE_OVER = "episode_over"
@@ -242,6 +243,9 @@ class VectorEnv:
                     env.save_data(**data)
                 elif command == GET_OBS_INFO:
                     result = env.get_obs_info()
+                    connection_write_fn(result)
+                elif command == GET_TARGET_REL_LOC:
+                    result = env.get_target_rel_loc()
                     connection_write_fn(result)
                 elif command == VISUALIZE_COMMAND:
                     env.visualize(**data)
@@ -639,7 +643,18 @@ class VectorEnv:
             results.append(read_fn())
         self._is_waiting = False
         return results
-        
+    
+    def get_target_rel_loc(self):
+        self._assert_not_closed()
+        self._is_waiting = True
+        for e, write_fn in enumerate(self._connection_write_fns):
+            write_fn((GET_TARGET_REL_LOC, None))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+        self._is_waiting = False
+        return results
+    
     def _assert_not_closed(self):
         assert not self._is_closed, "Trying to operate on a SubprocVecEnv after calling close()"
 

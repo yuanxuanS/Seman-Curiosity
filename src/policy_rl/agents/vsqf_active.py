@@ -70,7 +70,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         # visualize
         if args.visualize or args.print_images:
             goal_name = self.poni_cate_inv[self.info['goal_cat_id']]
-            self.vis_image = vu.init_vis_image(goal_name, self.legend, mode=4)
+            vis_mode = 4 if self.args.explore_algor == "poni" else 3
+            self.vis_image = vu.init_vis_image(goal_name, self.legend, mode=vis_mode)
         
         return obs, info
     
@@ -234,6 +235,9 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 
                 # update for poni
                 self.reset_for_poni()
+                
+                # for gt epxlore
+                self.info['rest_goal'].remove(info['target_class'])
                     
             else:       # sample stage continues
                 info['sample_step'] += 1
@@ -375,7 +379,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         
     def _visualize(self, inputs, mode="full"):
         goal_name = self.poni_cate_inv[self.info['goal_cat_id']]
-        self.vis_image = vu.init_vis_image(goal_name, self.legend, mode=4)
+        vis_mode = 4 if self.args.explore_algor == "poni" else 3
+        self.vis_image = vu.init_vis_image(goal_name, self.legend, mode=vis_mode)
         
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,

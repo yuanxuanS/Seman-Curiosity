@@ -84,9 +84,10 @@ class Vsqf_active_Env(habitat.RLEnv):
         for target, id in target_coco_categories.items():
             if id in possible_cats:
                 self.found_classes[target] = {'num':0, "obj_id":[], "rgbs":0}
-        if scene_name == "Wiconisco":
-            self.found_classes.pop("toilet")
-            
+        # if scene_name == "Wiconisco":
+        #     self.found_classes.pop("toilet")
+        self.load_target_loc()
+        
         # for poni
         self.poni_cate_id = {"chair":0, 
                     "couch": 1,
@@ -100,7 +101,8 @@ class Vsqf_active_Env(habitat.RLEnv):
                     4:"toilet",
                     9:"refrigerator"
                     }
-        
+        # for gt explore
+        self.info['rest_goal'] = list(self.found_classes.keys())
         
     def reset(self):
         """Resets the environment to a new episode.
@@ -175,7 +177,62 @@ class Vsqf_active_Env(habitat.RLEnv):
         else:
             self.info['goal_cat_id'] = self.poni_cate_id[random.choice(not_found_cls)]
         
+    def load_target_loc(self):
+        self.target_loc = {k: [] for k in self.found_classes.keys()}
+        # objs = self.habitat_env.sim.semantic_scene.objects
+        # for i in range(1, len(objs)):
+        #     obj = objs[i]
+        #     if obj.category.name() in self.found_classes.keys():
+        #         obj_center = obj.aabb.center         # 绝对位置
+        #         self.target_loc[obj.category.name()].append(obj_center)
         
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        scene_info = self.dataset_info[scene_name]
+        for floor_idx in list(scene_info.keys()):
+            floor_height = scene_info[floor_idx]['floor_height']
+            sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
+            self.map_obj_origin = scene_info[floor_idx]['origin']
+
+            # 取语义地图的前6个类别
+            cat_counts = sem_map.sum(2).sum(1)
+            possible_cats = target_cls_id_in_scene      # 目标类别索引 
+            possible_cats_ = target_cls_id_in_scene
+            
+            for i in possible_cats_:
+                if cat_counts[i + 1] == 0:      # 如某类别没有物体，则去除这个类别
+                    possible_cats.remove(i)
+
+            for pcat in possible_cats:
+                goal_idx = pcat
+                goal_name = None
+                for key, value in target_coco_categories.items():      # 目标类别的名字
+                    if value == goal_idx:
+                        goal_name = key
+                        break
+                
+                # 在语义地图上得到物体区域
+                goal_map_ = sem_map[goal_idx + 1]
+                connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
+                object_ids = list(np.unique(connected_region[connected_region > 0]))
+
+                # 如果有多个物体，取其中一个物体
+                for object_id in object_ids:
+                    goal_map_one = np.zeros_like(goal_map_)
+                    goal_map_one[connected_region == object_id] = 1
+                
+                    # 得到：在真实世界坐标下，该物体的中心
+                    rows, cols = np.where(goal_map_one > 0)
+                    obj_center = (rows.min() + rows.max()) / 2, (cols.min() + cols.max()) / 2
+                    obj_center_y, obj_center_x = self.map_coord_to_real(obj_center)
+                    obj_center_real =  obj_center_y, floor_height,  obj_center_x        # 和直接返回的agent位置一致
+
+                    self.target_loc[goal_name].append(obj_center_real)
+    def map_coord_to_real(self, map_coord):
+        map_coord_y, map_coord_x = map_coord
+        min_x, min_y = self.map_obj_origin / 100.0
+        return map_coord_y / 20. + min_y, map_coord_x / 20. + min_x
+    
     
     def load_episode_loc(self):
         args = self.args
@@ -211,9 +268,32 @@ class Vsqf_active_Env(habitat.RLEnv):
                     task=self._env.task,
             ))
         
-        # for poni
+        # 将目标位置转为地图中的相对值
+        self.rel_target_loc = {k:[] for k in self.target_loc.keys()}
+        agent_loc = self.get_sim_location()
+        for cate in self.target_loc:
+            for obj_loc in self.target_loc[cate]:
+                x = -obj_loc[2]
+                y = -obj_loc[0]
+                axis = quaternion.as_euler_angles(rot)[0]
+                if (axis % (2 * np.pi)) < 0.1 or (axis %
+                                          (2 * np.pi)) > 2 * np.pi - 0.1:
+                    o = quaternion.as_euler_angles(rot)[1]
+                else:
+                    o = 2 * np.pi - quaternion.as_euler_angles(rot)[1]
+                if o > np.pi:
+                    o -= 2 * np.pi      # 范围放缩到 []
+                obj_rel_loc = pu.get_rel_pose_change(      # obj相对初始agent坐标
+                    [x, y, o], agent_loc
+                )
+                
+                self.rel_target_loc[cate].append(obj_rel_loc)
+        
         
         return obs
+    
+    def get_target_rel_loc(self):
+        return self.rel_target_loc
     
     def initial_possible_loc(self):
         args = self.args
@@ -383,6 +463,15 @@ class Vsqf_active_Env(habitat.RLEnv):
         found_ = [self.found_classes[target]['num']==1 and self.found_classes[target]['rgbs']==5 for target in self.found_classes.keys()]
         self.info['finished'] = np.array(found_).sum() == len(self.found_classes)
 
+        # for gt goal
+        # self.info['rest_goal'] = []
+        # for target in self.found_classes.keys():
+        #     if self.found_classes[target]['num']==1 and self.found_classes[target]['rgbs']==5:
+        #         pass
+        #     else:
+        #         self.info['rest_goal'].append(target)
+        
+        
         # cam state; when in camera stage, return init camera state for map
         if self.info['sample_stage'] and self.info['camera_stage']:
             return_obs = self.init_obs[0]
@@ -476,6 +565,10 @@ class Vsqf_active_Env(habitat.RLEnv):
 
 
     def get_done(self, observations, *args):
+        
+        if self.info['finished']:
+            return True
+        
         if (self.info['sample_stage']) and \
             self.info['sample_step'] > 200 and \
             self.found_classes[self.info['target_class']]['rgbs'] < 5:

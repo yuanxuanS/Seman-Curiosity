@@ -67,6 +67,10 @@ class VecPyTorch():
         obs_info = self.venv.get_obs_info()
         return obs_info
     
+    def get_target_rel_loc(self):
+        obs_info = self.venv.get_target_rel_loc()
+        return obs_info
+    
     def save_data(self, obs_info, capture):
         self.venv.save_data(obs_info, capture)
         return

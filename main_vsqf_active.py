@@ -103,6 +103,7 @@ def main():
     vsqf_heu = vsqf_heuristic(args, num_scenes, device)
     vsqf_heu.reset()
     
+    
     # init current obj map for goal computation
     curr_object_maps = [np.ones((maps.full_w, maps.full_h))] * num_scenes
     
@@ -142,6 +143,12 @@ def main():
     ## ------------------start------------------
     obs, infos = envs.reset()   # obs: rgb +depth + categories 16 TODO: ?
     
+    if args.explore_algor == "gt":
+        target_locs = envs.get_target_rel_loc()     # 在初始agent坐标系中的dx dy
+        vsqf_heu.explore_policy.set_goals(target_locs)
+        
+        rest_goal = [info['rest_goal'] for info in infos] 
+        vsqf_heu.explore_policy.update_goal_deque(rest_goal)
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
@@ -225,7 +232,7 @@ def main():
                 p_input["frontier_goal"] = goals[e]
             
         # return action with planner
-        if args.explore_algor == "frontier":
+        if args.explore_algor == "frontier" or args.explore_algor == "gt":
             l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
         elif args.explore_algor == "poni":
             l_action = vsqf_heu.get_actions(vis_inputs, camera_action,
@@ -289,7 +296,7 @@ def main():
                 p_input["frontier_goal"] = goals[e]
         
         # return action with planner
-        if args.explore_algor == "frontier":
+        if args.explore_algor == "frontier" or args.explore_algor == "gt":
             l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
         elif args.explore_algor == "poni":
             l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
@@ -424,6 +431,8 @@ def main():
         patch = [True if timestep[e] == 0 else False for e in range(num_scenes)]
         maps.patch_agent_region(patch)
         
+        
+        
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
             p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
@@ -464,7 +473,7 @@ def main():
                     p_input["frontier_goal"] = goals[e]
                 
             # return action with planner
-            if args.explore_algor == "frontier":
+            if args.explore_algor == "frontier" or args.explore_algor == "gt":
                 l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
             elif args.explore_algor == "poni":
                 l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
@@ -504,7 +513,8 @@ def main():
                     camera_action[e] = camera_action_
                 else:
                     l_rollouts.reset()
-                
+
+            
             
             # select goal according to vsqf map
             update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
@@ -520,9 +530,12 @@ def main():
             for e, p_input in enumerate(vis_inputs):
                 if infos[e]['sample_stage']:
                     p_input["frontier_goal"] = goals[e]
-                
+            
+            if args.explore_algor == "gt":
+                rest_goal = [info['rest_goal'] for info in infos] 
+                vsqf_heu.explore_policy.update_goal_deque(rest_goal)
             # return action with planner
-            if args.explore_algor == "frontier":
+            if args.explore_algor == "frontier" or args.explore_algor == "gt":
                 l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
             elif args.explore_algor == "poni":
                 l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
@@ -541,6 +554,13 @@ def main():
             vsqf_heu.reset()
                 
             obs, infos = envs.reset()
+            if args.explore_algor == "gt":
+                target_locs = envs.get_target_rel_loc()     # 在初始agent坐标系中的dx dy
+                vsqf_heu.explore_policy.set_goals(target_locs)
+
+                rest_goal = [info['rest_goal'] for info in infos] 
+                vsqf_heu.explore_policy.update_goal_deque(rest_goal)
+        
             done  = np.array([False]*num_scenes)
             wait_env = np.zeros((args.num_processes))
             curr_object_maps = [np.ones_like(full_vsqf_map[0].cpu().numpy())] * num_scenes

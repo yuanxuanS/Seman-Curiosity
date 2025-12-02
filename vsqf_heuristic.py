@@ -12,6 +12,9 @@ from src.policy_rl.utils.obs_transforms import image_resize
 from vsqf_utils import get_visibility_mask, get_visibility_mask_reverse, nms, neighborhoods
 from src.policy_rl.utils.pointnav_policy import WrappedPointNavResNetPolicy
 from src.policy_rl.utils.poni_utils.poni_algor import PONI
+from src.policy_rl.explore_gt_goal import gt_goal
+import random
+
 class vsqf_heuristic:
     def __init__(self, args, num_scenes, device):
         self.planners = [None for _ in range(num_scenes)]
@@ -25,8 +28,9 @@ class vsqf_heuristic:
             self.explore_policy.reset(num_scenes)
         elif self.explore_algor == "poni":
             self.explore_policy = PONI(args, num_scenes, device)
-            
-         
+        elif self.explore_algor == "gt":
+            self.explore_policy = gt_goal(args, num_scenes)             
+                    
         self.collision_map = None
         self.last_actions = None
         self.curr_loc = None
@@ -96,6 +100,32 @@ class vsqf_heuristic:
         # camera policy
         self.start_camera = [False]*self.num_scenes  # arrive goal and start active camera
 
+    def set_goals(self, obj_rel_locs):
+        '''
+        obj_rel_locs: list
+        '''
+        assert self.explore_algor == "gt"
+        
+        init_loc = self.args.map_size_cm / 100.0 / 2.0
+        init_agent_loc = [int(init_loc * 100.0 / self.args.map_resolution),
+                               int(init_loc * 100.0 / self.args.map_resolution)]
+        
+        for e, obj_rel_loc in enumerate(obj_rel_locs):
+            # 转为地图分辨率
+            obj_abs_loc = {k:[] for k in obj_rel_loc.keys()}
+            for goal, obj_loc in obj_rel_loc.items():
+                for loc in obj_loc:
+                    dx, dy, do = loc
+                    # map resolution
+                    dx_, dy_ = int(dx * 100.0 / self.args.map_resolution),  int(dy * 100.0 / self.args.map_resolution)
+                    obj_c = init_agent_loc[0] + dx_
+                    obj_r = init_agent_loc[1] - dy_
+                    obj_r, obj_c = pu.threshold_poses([obj_r, obj_c], (480, 480))
+                    obj_abs_loc[goal].append([obj_r, obj_c])
+                
+            self.goals_gt[e] = obj_abs_loc
+            self.goal_deque[e] = list(obj_abs_loc.keys())
+                
     def get_random_region(self, vsqf_map, vis_inputs, update_vis_map):
         '''
         vsqf_map: env*1*w*h
@@ -336,7 +366,7 @@ class vsqf_heuristic:
                 
         return self.vsqf_goals
     
-    def get_actions(self, vis_inputs, camera_action, kwargs):
+    def get_actions(self, vis_inputs, camera_action, **kwargs):
         
         # camera action 
         camera_action += np.ones_like(camera_action)*3
@@ -420,7 +450,8 @@ class vsqf_heuristic:
                         else:
                             self.replan[e] = False
                         self.arrive_goal[e] = False
-                    
+                if self.explore_algor == "gt":
+                    self.explore_policy.update_replan(e)
             else:       # use frontier to explore
                 # reset 
                 self.cand_goals_map[e] = torch.zeros((self.map_shape[0], self.map_shape[1]))
@@ -440,8 +471,10 @@ class vsqf_heuristic:
                     actions[e], _, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, goal)
                     p_input["pf_pred"] = pf_visualizations[e]
                     p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
-                
-
+                elif self.explore_algor == "gt":
+                    goal = self.explore_policy.get_goals(p_input, e)
+                    actions[e], _, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, goal)
+                    p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
             self.last_actions[e] = actions[e]
         return actions
     
