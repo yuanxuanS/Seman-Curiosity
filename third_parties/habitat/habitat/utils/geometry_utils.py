@@ -8,21 +8,16 @@ from typing import List, Tuple, Union
 
 import numpy as np
 import quaternion
-<<<<<<< HEAD
 
-=======
 import math
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
 EPSILON = 1e-8
 
 
 def angle_between_quaternions(q1: np.quaternion, q2: np.quaternion) -> float:
     r"""Returns the angle (in radians) between two quaternions. This angle will
     always be positive.
-<<<<<<< HEAD
 =======
     从 {q}_1 旋转到 {q}_2 所需的最小旋转角
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
     """
     q1_inv = np.conjugate(q1)
     dq = quaternion.as_float_array(q1_inv * q2)
@@ -64,12 +59,8 @@ def quaternion_from_coeff(coeffs: np.ndarray) -> np.quaternion:
 
 
 def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
-<<<<<<< HEAD
-    r"""Rotates a vector by a quaternion
-=======
     r"""Rotates a vector by a quaternion; 
         将向量v执行quat旋转
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
     Args:
         quaternion: The quaternion to rotate by
         v: The vector to rotate
@@ -122,17 +113,13 @@ def agent_state_target2ref(
     )
 
     return (rotation_in_ref_coordinate, position_in_ref_coordinate)
-<<<<<<< HEAD
-=======
 
 def compute_heading_from_quaternion(r):
-    """
-    计算r的朝向相对世界坐标系的正朝向的角度, 顺时针为正
-    r的Y上，Z为负朝向，X为向右
-    r - rotation quaternion
+    # r的Y上，Z为负朝向，X为向右
+    # r - rotation quaternion
     
-    Computes clockwise rotation about Y.
-    """
+    # Computes clockwise rotation about Y.
+    
     # quaternion - np.quaternion unit quaternion
     # Real world rotation
     direction_vector = np.array([0, 0, -1])  # Forward vector
@@ -230,4 +217,3 @@ def apply_local_rotation(rotation_world: np.quaternion, rotation_local_delta: np
     
     return rotation_new
 
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad

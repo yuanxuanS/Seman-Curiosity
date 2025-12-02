@@ -28,18 +28,12 @@ import attr
 import numpy as np
 import torch
 from gym.spaces import Box
-<<<<<<< HEAD
-from PIL import Image
-from torch import Size, Tensor
-from torch import nn as nn
-=======
 from gym import spaces
 from habitat.core.spaces import EmptySpace
 from PIL import Image
 from torch import Size, Tensor
 from torch import nn as nn
 import math
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
 
 from habitat import logger
 from habitat.core.dataset import Episode
@@ -48,12 +42,6 @@ from habitat.utils import profiling_wrapper
 from habitat.utils.visualizations.utils import images_to_video
 from habitat_baselines.common.tensor_dict import DictTree, TensorDict
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
-<<<<<<< HEAD
-import math
-from habitat.core.spaces import EmptySpace
-from gym import spaces
-=======
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
 if TYPE_CHECKING:
     from omegaconf import DictConfig
     
@@ -61,17 +49,10 @@ cv2 = try_cv2_import()
 
 
 class CustomFixedCategorical(torch.distributions.Categorical):  # type: ignore
-<<<<<<< HEAD
-    def sample(
-        self, sample_shape: Size = torch.Size()  # noqa: B008
-    ) -> Tensor:
-        return super().sample(sample_shape).unsqueeze(-1)
-=======
     def sample_(
         self, sample_shape: Size = torch.Size()  # noqa: B008
     ) -> Tensor:
         return self.sample().unsqueeze(0)
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
 
     def log_probs(self, actions: Tensor) -> Tensor:
         return (
@@ -85,21 +66,6 @@ class CustomFixedCategorical(torch.distributions.Categorical):  # type: ignore
     def mode(self):
         return self.probs.argmax(dim=-1, keepdim=True)
 
-<<<<<<< HEAD
-class CustomNormal(torch.distributions.normal.Normal):
-    def sample(
-        self, sample_shape: Size = torch.Size()  # noqa: B008
-    ) -> Tensor:
-        return self.rsample(sample_shape)
-
-    def log_probs(self, actions) -> Tensor:
-        return super().log_prob(actions).sum(-1, keepdim=True)
-
-    def entropy(self) -> Tensor:
-        return super().entropy().sum(-1, keepdim=True)
-    
-=======
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
 
 class CategoricalNet(nn.Module):
     def __init__(self, num_inputs: int, num_outputs: int) -> None:
@@ -114,7 +80,6 @@ class CategoricalNet(nn.Module):
         x = self.linear(x)
         return CustomFixedCategorical(logits=x)
 
-<<<<<<< HEAD
 class GaussianNet(nn.Module):
     def __init__(
         self,
@@ -180,8 +145,6 @@ class GaussianNet(nn.Module):
 
         return CustomNormal(mu, std, validate_args=False)
 
-=======
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
 
 def linear_decay(epoch: int, total_num_updates: int) -> float:
     r"""Returns a multiplicative factor for linear value decay
@@ -605,11 +568,7 @@ def delete_folder(path: str) -> None:
     shutil.rmtree(path)
 
 
-<<<<<<< HEAD
-
-=======
 # from vlfm
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
 def iterate_action_space_recursively(action_space):
     if isinstance(action_space, spaces.Dict):
         for v in action_space.values():
@@ -634,9 +593,6 @@ def get_num_actions(action_space) -> int:
                 f"Trying to count the number of actions with an unknown action space {v}"
             )
 
-<<<<<<< HEAD
-    return num_actions
-=======
     return num_actions
 
 class CustomNormal(torch.distributions.normal.Normal):
@@ -715,4 +671,3 @@ class GaussianNet(nn.Module):
             std = torch.nn.functional.softplus(std)
 
         return CustomNormal(mu, std, validate_args=False)
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
