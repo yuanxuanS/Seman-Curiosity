@@ -37,7 +37,12 @@ def main():
     # Setup Logging
     log_dir = "{}/models/{}/".format(args.dump_location, args.exp_name)
     dump_dir = "{}/dump/{}/".format(args.dump_location, args.exp_name)
-
+    
+    # debug
+    debug_dir = "./imgs/{}".format(args.exp_name)
+    if not os.path.exists(debug_dir):
+        os.makedirs(debug_dir)
+        
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     if not os.path.exists(dump_dir):
@@ -161,6 +166,9 @@ def main():
     vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
     
+    # debug
+    if find_goal[0]:
+        print(f"azimuth is {azimuth[0]}, score {confidence}")
     # update vsqf maps
     local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map    
@@ -307,13 +315,19 @@ def main():
     orient_data = orient_pred.pred_orient_multi(rgb_objs)
     azimuth, confidence = orient_data
     
+    # debug
+    vsqf[:, :, 0] = 1.
+
     # check if find goal
     # find_goal = torch.tensor([False for _ in range(num_scenes)])
     find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
     find_goal = find_goal.to(vsqf.device)
     vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
-    
+    # debug
+    if find_goal[0]:
+        print(f"azimuth is {azimuth[0]}, score {confidence}")
+        
     local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map
     
@@ -542,13 +556,19 @@ def main():
         orient_data = orient_pred.pred_orient_multi(rgb_objs)
         azimuth, confidence = orient_data
         
+        # debug for azimuth in vsqf map
+        vsqf[:, :, 0] = 1.
+        
         # check if find goal
         # find_goal = torch.tensor([False for _ in range(num_scenes)])
         find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
         find_goal = find_goal.to(vsqf.device)
         vsqf = find_goal[:, None, None] * vsqf
         azimuth = find_goal * azimuth
-        
+        # debug
+        if find_goal[0]:
+            print(f"azimuth is {azimuth[0]}, score {confidence}")
+            cv2.imwrite(debug_dir+f"/{azimuth[0]}_score{confidence.cpu().numpy()}.png", (vsqf[0].cpu().numpy()*255).astype(np.uint8))
         # update vsqf maps
         local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
         full_vsqf_map = vsqf_maps.full_map

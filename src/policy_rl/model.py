@@ -409,7 +409,7 @@ class Semantic_Mapping(nn.Module):
                             * 100.0 / self.resolution
                             - self.map_size_cm // (self.resolution * 2)) /\
             (self.map_size_cm // (self.resolution * 2))
-        st_pose[:, 2] = 90. - (st_pose[:, 2])       # 向上，顺时针角度增加, 
+        st_pose[:, 2] = 90. - (st_pose[:, 2])       #转为： 向上为x正，，逆时针角度(图像坐标系)增加, 
         
         # 将当前地图进行平移+旋转，和上一时刻地图进行融合
         rot_mat, trans_mat = get_grid(st_pose, agent_view.size(),

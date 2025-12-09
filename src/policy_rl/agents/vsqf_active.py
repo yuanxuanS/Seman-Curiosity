@@ -264,7 +264,7 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 if target_cond:   # 之前没找到过该类物体
                     # info['found_classes'][cls_name]['num'] += 1
                     # info['found_classes'][cls_name]['obj_id'].append(obj_id)
-                    
+                    print(f"target {cls_name} id is {obj_id}")
                     self.found_classes[cls_name]['obj_id'].append(obj_id)
                     
                     
