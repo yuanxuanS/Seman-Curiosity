@@ -6,13 +6,12 @@ from .utils import visualization as vu
 from src.constants import color_palette
 from src.vqf_constants import color_palette_vsqf
 import os
+import pickle
 import torch
 from ..envs.utils import pose as pu
 from ..envs.habitat.vsqf_active_env import Vsqf_active_Env
 from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
-from .utils.vsqf_prediction import Vsqf_pred
-from .utils.orient_prediction import Orient_pred
-from src.finetune.dataset_utils import save_obs
+from ..utils.geometry_utils import compute_heading_z_from_quaternion, compute_angle_from_a2b, compute_angle_from_a2b_2d
 import quaternion
 from .utils.detect_utils import box_iou_calc
 from detectron2.utils.visualizer import ColorMode, Visualizer
@@ -52,6 +51,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
             self.vis_image = None
             self.rgb_vis = None
             self.goal_name = "No"
+            
+        
     def reset(self):
         args = self.args
         
@@ -223,6 +224,7 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         
         # if pred objects, pred vsqf and Orient, (在depth处理之前)
         obj = self.filter_instance(obj)
+        info['azimuth'] = None
         if info['sample_stage']:
             # if info['sample_step'] > 70:    # sample stage ends
             if self.found_classes[info['target_class']]['rgbs'] == 5:
@@ -244,6 +246,7 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 info['find_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256)) 
+            
         else:
             # maskrcnn检测到时开启sample stage
             if len(obj) > 0:
@@ -259,14 +262,39 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 
                 if cls_name in self.found_classes.keys():
                     target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
+                    # if cls_name == 'couch':
+                    #     target_cond = True if obj_id == 38 else False
                 else:
                     target_cond = False
                 if target_cond:   # 之前没找到过该类物体
-                    # info['found_classes'][cls_name]['num'] += 1
+                    # info['found_classes'][cls_name]['num'] += 1m 
                     # info['found_classes'][cls_name]['obj_id'].append(obj_id)
                     print(f"target {cls_name} id is {obj_id}")
                     self.found_classes[cls_name]['obj_id'].append(obj_id)
                     
+                    if obj_id in self.scene_object_headings:
+                        obj_heading_quat = self.scene_object_headings[obj_id]
+                        obj_heading_v = compute_heading_z_from_quaternion(obj_heading_quat)[1]
+                        # 计算agent pos
+                        agent_state = self._env.sim.get_agent_state(0)
+                        agent_pos = agent_state.position.copy()
+                        agent_pos[1] = 0
+                        obj_pos = np.array(self.scene_object_loc[obj_id])
+                        V_obj2agent = agent_pos - obj_pos   
+                        azimuth = compute_angle_from_a2b(obj_heading_v, V_obj2agent)
+                        
+                        # 2
+                        # agent pos: 相对初始坐标系
+                        # agent_pos = self.get_agent_rel_pos()
+                        # obj_pos = self.rel_target_loc['refrigerator'][0]
+                        # V_obj2agent = np.array(agent_pos)[:2] - np.array(obj_pos)[:2]
+                        # obj_heading_v = np.array(self.rel_target_loc_add['refrigerator'][0])[:2] - \
+                        #                 np.array(obj_pos)[:2]
+                        
+                        # azimuth = - compute_angle_from_a2b_2d(obj_heading_v, V_obj2agent)
+                        
+                        info['azimuth'] = azimuth % 360
+                        pass
                     
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
@@ -376,7 +404,36 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         else:
             return semantic_pred, obj
         
+    
+    def draw_point(self, goal_x, goal_y, s_stg=False, sem_map_full=None):
         
+        
+        size = self.visited_vis.shape[0]
+        square_size = 20
+        half_size = square_size // 2
+        
+        for i in range(goal_x - half_size, goal_x + half_size + 1):
+            j = goal_y
+            if not s_stg:
+                sem_map_full[i, j] = 12
+                sem_map_full[i, j-1] = 12
+                sem_map_full[i, j+1] = 12
+            else:
+                sem_map_full[i, j] = 16
+                sem_map_full[i, j-1] = 16
+                sem_map_full[i, j+1] = 16
+        
+        for j in range(goal_y - half_size, goal_y + half_size + 1):
+            i = goal_x
+            if not s_stg:
+                sem_map_full[i, j] = 12
+                sem_map_full[i-1, j] = 12
+                sem_map_full[i+1, j] = 12
+            else:
+                sem_map_full[i, j] = 16
+                sem_map_full[i-1, j] = 16
+                sem_map_full[i+1, j] = 16
+        return sem_map_full
     def _visualize(self, inputs, mode="full"):
         goal_name = self.poni_cate_inv[self.info['goal_cat_id']]
         vis_mode = 4 if self.args.explore_algor == "poni" else 3
@@ -456,60 +513,26 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 goal_x = goal_r
                 goal_y = goal_c
                 
-                size = self.visited_vis.shape[0]
-                square_size = 20
-                half_size = square_size // 2
+                sem_map_full = self.draw_point(goal_x, goal_y, inputs['sample_stage'], sem_map_full)
+        
+               
+        if 'frontier_goal_add' in inputs:
+            if inputs['frontier_goal_add'] is not None:
+                goal = inputs['frontier_goal_add']
+                goal_r, goal_c = goal   # r,c
+                goal_x = goal_r
+                goal_y = goal_c
                 
-                for i in range(goal_x - half_size, goal_x + half_size + 1):
-                    j = goal_y
-                    if not inputs['sample_stage']:
-                        sem_map_full[i, j] = 12
-                        sem_map_full[i, j-1] = 12
-                        sem_map_full[i, j+1] = 12
-                    else:
-                        sem_map_full[i, j] = 16
-                        sem_map_full[i, j-1] = 16
-                        sem_map_full[i, j+1] = 16
+                sem_map_full = self.draw_point(goal_x, goal_y, False, sem_map_full)
+        
+        if 'curr_agent' in inputs:
+            if inputs['curr_agent'] is not None:
+                goal = inputs['curr_agent']
+                goal_r, goal_c = goal   # r,c
+                goal_x = goal_r
+                goal_y = goal_c
                 
-                for j in range(goal_y - half_size, goal_y + half_size + 1):
-                    i = goal_x
-                    if not inputs['sample_stage']:
-                        sem_map_full[i, j] = 12
-                        sem_map_full[i-1, j] = 12
-                        sem_map_full[i+1, j] = 12
-                    else:
-                        sem_map_full[i, j] = 16
-                        sem_map_full[i-1, j] = 16
-                        sem_map_full[i+1, j] = 16
-                # for i in range(goal_x - half_size, goal_x + half_size + 1):
-                #     for j in range(goal_y - half_size, goal_y + half_size + 1):
-                #         i = min(i, size-1)
-                #         j = min(j, size-1)
-                #         if not inputs['sample_stage']:
-                #             sem_map_full[i, j] = 12
-                #         else:
-                #             sem_map_full[i, j] = 16
-                            
-                if 'short_time_goal' in inputs:
-                    st_goal = inputs['short_time_goal']
-                    st_goal_r, st_goal_c = st_goal
-                    st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
-                    st_goal_x = st_goal_r
-                    st_goal_y = st_goal_c
-
-                
-                        
-                    square_size = 10
-                    half_size = square_size // 2
-                    for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
-                        for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
-                            i = min(i, size-1)
-                            j = min(j, size-1)
-                            if not inputs['sample_stage']:
-                                sem_map_full[i, j] = 12
-                            else:
-                                sem_map_full[i, j] = 16
-                            
+                sem_map_full = self.draw_point(goal_x, goal_y, False, sem_map_full)
                         
 
         # 绘制语义地图

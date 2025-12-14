@@ -11,18 +11,21 @@ class gt_goal:
         self.replan = [None]*num_scenes
         
         self.goals_gt = [None]*num_scenes
+        self.goals_gt_add = [None]*num_scenes       # debug
         self.goal_deque = [None]*num_scenes     # 该队列用于选择目标
     def set_goals(self, obj_rel_locs):
         '''
         obj_rel_locs: list
         '''
-        # assert self.explore_algor == "gt"
-        
+        # debug
+        # obj_rel_locs, obj_rel_locs_add = obj_rel_locs
+                
         init_loc = self.args.map_size_cm / 100.0 / 2.0
         init_agent_loc = [int(init_loc * 100.0 / self.args.map_resolution),
                                int(init_loc * 100.0 / self.args.map_resolution)]
         
-        for e, obj_rel_loc in enumerate(obj_rel_locs):
+        for e, data in enumerate(obj_rel_locs):
+            obj_rel_loc = data[0]
             # 转为地图分辨率
             obj_abs_loc = {k:[] for k in obj_rel_loc.keys()}
             for goal, obj_loc in obj_rel_loc.items():
@@ -37,6 +40,23 @@ class gt_goal:
                 
             self.goals_gt[e] = obj_abs_loc
             self.goal_deque[e] = list(obj_abs_loc.keys())
+        
+        # debug
+        for e, data in enumerate(obj_rel_locs):
+            obj_rel_loc = data[1]
+            # 转为地图分辨率
+            obj_abs_loc = {k:[] for k in obj_rel_loc.keys()}
+            for goal, obj_loc in obj_rel_loc.items():
+                for loc in obj_loc:
+                    dx, dy, do = loc
+                    # map resolution
+                    dx_, dy_ = int(dx * 100.0 / self.args.map_resolution),  int(dy * 100.0 / self.args.map_resolution)
+                    obj_c = init_agent_loc[0] + dx_
+                    obj_r = init_agent_loc[1] + dy_
+                    obj_r, obj_c = pu.threshold_poses([obj_r, obj_c], (479, 479))
+                    obj_abs_loc[goal].append([obj_r, obj_c])
+                
+            self.goals_gt_add[e] = obj_abs_loc
     
     def update_goal_deque(self, res_targets):
         for e in range(len(res_targets)):
@@ -84,12 +104,18 @@ class gt_goal:
         if self.replan[env_idx]:
             if len(self.goal_deque[env_idx]) > 0:
                 objs_loc = self.goals_gt[env_idx][self.goal_deque[env_idx][0]]
+                objs_loc_add = self.goals_gt_add[env_idx][self.goal_deque[env_idx][0]]
             else:
                 objs_loc = self.goals_gt[env_idx]["chair"]
+                objs_loc_add = self.goals_gt_add[env_idx]["chair"]
             self.goal_deque[env_idx] = self.goal_deque[env_idx][1:] + self.goal_deque[env_idx][:1]        # deque更新
-            goal = random.choice(objs_loc)
+            idx = random.choice(range(len(objs_loc)))
+            goal = objs_loc[idx]
+            #debug
+            goal_add = objs_loc_add[idx]
         else:
             goal = self.goals[env_idx]
+            goal_add = None
         
         self.goals[env_idx] = goal
-        return self.goals[env_idx]
+        return self.goals[env_idx], goal_add

@@ -165,7 +165,10 @@ def main():
     find_goal = find_goal.to(vsqf.device)
     vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
-    
+    if find_goal[0]:
+        for e, info in enumerate(infos):
+            if 'azimuth' in info and info['azimuth']!= None:
+                azimuth[e] = info['azimuth']
     # debug
     if find_goal[0]:
         print(f"azimuth is {azimuth[0]}, score {confidence}")
@@ -316,7 +319,7 @@ def main():
     azimuth, confidence = orient_data
     
     # debug
-    vsqf[:, :, 0] = 1.
+    # vsqf[:, :, 0] = 1.
 
     # check if find goal
     # find_goal = torch.tensor([False for _ in range(num_scenes)])
@@ -324,6 +327,10 @@ def main():
     find_goal = find_goal.to(vsqf.device)
     vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
+    if find_goal[0]:
+        for e, info in enumerate(infos):
+            if 'azimuth' in info and info['azimuth']!= None:
+                azimuth[e] = info['azimuth']
     # debug
     if find_goal[0]:
         print(f"azimuth is {azimuth[0]}, score {confidence}")
@@ -557,7 +564,7 @@ def main():
         azimuth, confidence = orient_data
         
         # debug for azimuth in vsqf map
-        vsqf[:, :, 0] = 1.
+        # vsqf[:, :, 0] = 1.
         
         # check if find goal
         # find_goal = torch.tensor([False for _ in range(num_scenes)])
@@ -565,10 +572,14 @@ def main():
         find_goal = find_goal.to(vsqf.device)
         vsqf = find_goal[:, None, None] * vsqf
         azimuth = find_goal * azimuth
+        if find_goal[0]:
+            for e, info in enumerate(infos):
+                if 'azimuth' in info and info['azimuth']!= None:
+                    azimuth[e] = info['azimuth']
         # debug
         if find_goal[0]:
             print(f"azimuth is {azimuth[0]}, score {confidence}")
-            cv2.imwrite(debug_dir+f"/{azimuth[0]}_score{confidence.cpu().numpy()}.png", (vsqf[0].cpu().numpy()*255).astype(np.uint8))
+            # cv2.imwrite(debug_dir+f"/{azimuth[0]}_score{confidence.cpu().numpy()}.png", (vsqf[0].cpu().numpy()*255).astype(np.uint8))
         # update vsqf maps
         local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
         full_vsqf_map = vsqf_maps.full_map

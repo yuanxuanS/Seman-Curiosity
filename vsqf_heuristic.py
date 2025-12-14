@@ -472,9 +472,12 @@ class vsqf_heuristic:
                     p_input["pf_pred"] = pf_visualizations[e]
                     p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
                 elif self.explore_algor == "gt":
-                    goal = self.explore_policy.get_goals(p_input, e)
+                    # goal = self.explore_policy.get_goals(p_input, e)
+                    goal, goal_add = self.explore_policy.get_goals(p_input, e)
                     actions[e], _, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, goal)
                     p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
+                    if goal_add is not None:
+                        p_input["frontier_goal_add"] = goal_add
             self.last_actions[e] = actions[e]
         return actions
     

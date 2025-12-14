@@ -16,6 +16,7 @@ from src.vqf_constants import target_coco_categories_mapping, target_coco_catego
 import cv2
 import magnum as mn
 import random
+import pickle
 
 class Vsqf_active_Env(habitat.RLEnv):
     """The Vsqf environment class. The class is responsible
@@ -104,6 +105,12 @@ class Vsqf_active_Env(habitat.RLEnv):
         # for gt explore
         self.info['rest_goal'] = list(self.found_classes.keys())
         
+        with open("./gibson_headings.pkl", "rb") as f:
+            self.oject_headings = pickle.load(f)
+        
+        with open("./gibson_objects_loc.pkl", "rb") as f:
+            self.objects_loc = pickle.load(f)
+            
     def reset(self):
         """Resets the environment to a new episode.
                 reset traversible initial location
@@ -227,18 +234,30 @@ class Vsqf_active_Env(habitat.RLEnv):
                     obj_center_y, obj_center_x = self.map_coord_to_real(obj_center)
                     obj_center_real =  obj_center_y, floor_height,  obj_center_x        # 和直接返回的agent位置一致
 
-                    self.target_loc[goal_name].append(obj_center_real)
+                    if not (scene_name == "Collierville" and goal_name == "couch" and obj_center_y > 0):  # 排除错误的那个
+                        self.target_loc[goal_name].append(obj_center_real)
     def map_coord_to_real(self, map_coord):
         map_coord_y, map_coord_x = map_coord
         min_x, min_y = self.map_obj_origin / 100.0
         return map_coord_y / 20. + min_y, map_coord_x / 20. + min_x
     
+    def sim_continuous_to_sim_map(self, sim_loc):
+        """Converts absolute Habitat simulator pose to ground-truth 2D Map
+        coordinates.
+        """
+        x, y= sim_loc
+        min_x, min_y = self.map_obj_origin / 100.0
+        x, y = int((-x - min_x) * 20.), int((-y - min_y) * 20.)
+        # o = np.rad2deg(o) + 180.0
+        return y, x
     
     def load_episode_loc(self):
         args = self.args
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         scene_name = self.scene_path.split("/")[-1].split(".")[0]
-
+        self.scene_object_headings = self.oject_headings[scene_name]
+        self.scene_object_loc = self.objects_loc[scene_name]
+        
         if self.scene_path != self.last_scene_path: # 如果reset时加载新的环境
             episodes_file = self.episodes_dir + \
                 "content/{}_episodes.json.gz".format(scene_name)
@@ -270,7 +289,8 @@ class Vsqf_active_Env(habitat.RLEnv):
         
         # 将目标位置转为地图中的相对值
         self.rel_target_loc = {k:[] for k in self.target_loc.keys()}
-        agent_loc = self.get_sim_location()
+        self.rel_target_loc_add = {k:[] for k in self.target_loc.keys()}
+        self.init_agent_loc = agent_loc = self.get_sim_location()
         for cate in self.target_loc:
             for obj_loc in self.target_loc[cate]:
                 x = -obj_loc[2]
@@ -288,12 +308,27 @@ class Vsqf_active_Env(habitat.RLEnv):
                 )
                 
                 self.rel_target_loc[cate].append(obj_rel_loc)
+                # debug
+                obj_rel_loc = pu.get_rel_pose_change(      # obj相对初始agent坐标
+                    [x-1, y, o], agent_loc
+                )
+                self.rel_target_loc_add[cate].append(obj_rel_loc)
         
         
         return obs
     
+    def get_agent_rel_pos(self):
+        agent_loc = self.get_sim_location()
+        agent_rel_loc = pu.get_rel_pose_change(      # obj相对初始agent坐标
+                    agent_loc, self.init_agent_loc
+                ) # dx, dy, do
+        
+        return agent_rel_loc        
+    
     def get_target_rel_loc(self):
-        return self.rel_target_loc
+        # return self.rel_target_loc
+        # debug
+        return (self.rel_target_loc, self.rel_target_loc_add)
     
     def initial_possible_loc(self):
         args = self.args
