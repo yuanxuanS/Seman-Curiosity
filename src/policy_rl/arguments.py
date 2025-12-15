@@ -24,7 +24,7 @@ def get_args():
                         help="number of test episodes per scene")
     parser.add_argument('--no_cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    parser.add_argument("--sim_gpu_id", type=int, default=1,
+    parser.add_argument("--sim_gpu_id", type=int, default=3,
                         help="gpu id on which scenes are loaded")
     parser.add_argument("--sem_gpu_id", type=int, default=-1,
                     help="""gpu id for semantic model,

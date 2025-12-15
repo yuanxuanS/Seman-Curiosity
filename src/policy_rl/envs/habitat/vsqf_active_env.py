@@ -68,7 +68,7 @@ class Vsqf_active_Env(habitat.RLEnv):
         
         # existing target class
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
-        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        self.scene_name = scene_name = self.scene_path.split("/")[-1].split(".")[0]
         scene_info = self.dataset_info[scene_name]
         floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
         sem_map = scene_info[floor_idx]['sem_map']
@@ -85,8 +85,8 @@ class Vsqf_active_Env(habitat.RLEnv):
         for target, id in target_coco_categories.items():
             if id in possible_cats:
                 self.found_classes[target] = {'num':0, "obj_id":[], "rgbs":0}
-        # if scene_name == "Wiconisco":
-        #     self.found_classes.pop("toilet")
+        if scene_name == "Wiconisco":
+            self.found_classes.pop("toilet")
         self.load_target_loc()
         
         # for poni
@@ -234,7 +234,8 @@ class Vsqf_active_Env(habitat.RLEnv):
                     obj_center_y, obj_center_x = self.map_coord_to_real(obj_center)
                     obj_center_real =  obj_center_y, floor_height,  obj_center_x        # 和直接返回的agent位置一致
 
-                    if not (scene_name == "Collierville" and goal_name == "couch" and obj_center_y > 0):  # 排除错误的那个
+                    if not ((scene_name == "Collierville" and goal_name == "couch" and obj_center_y > 0) \
+                        or (scene_name == "Wiconisco" and goal_name == 'toilet')):  # 排除错误的那个
                         self.target_loc[goal_name].append(obj_center_real)
     def map_coord_to_real(self, map_coord):
         map_coord_y, map_coord_x = map_coord

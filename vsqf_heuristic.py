@@ -355,7 +355,6 @@ class vsqf_heuristic:
                 row_indices, col_indices = np.unravel_index(max_flat_indices.cpu().numpy(), (vsqf_map.shape[-2], vsqf_map.shape[-1]))
                 goals[e] = [row_indices[0], col_indices[0]]
                     
-                    
                 
         for i in range(self.num_scenes):
             invalid_goal_cond = self.vis_masks[i].sum() == 0 and vis_inputs[i]['sample_stage']

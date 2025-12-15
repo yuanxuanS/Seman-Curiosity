@@ -262,26 +262,25 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 
                 if cls_name in self.found_classes.keys():
                     target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
-                    # if cls_name == 'couch':
-                    #     target_cond = True if obj_id == 38 else False
+                    # debug
+                    if self.scene_name == 'Wiconisco' and cls_name == 'refrigerator':
+                        target_cond = False if obj_id in [69, None] else True
                 else:
                     target_cond = False
                 if target_cond:   # 之前没找到过该类物体
-                    # info['found_classes'][cls_name]['num'] += 1m 
-                    # info['found_classes'][cls_name]['obj_id'].append(obj_id)
                     print(f"target {cls_name} id is {obj_id}")
                     self.found_classes[cls_name]['obj_id'].append(obj_id)
                     
-                    if obj_id in self.scene_object_headings:
-                        obj_heading_quat = self.scene_object_headings[obj_id]
-                        obj_heading_v = compute_heading_z_from_quaternion(obj_heading_quat)[1]
-                        # 计算agent pos
-                        agent_state = self._env.sim.get_agent_state(0)
-                        agent_pos = agent_state.position.copy()
-                        agent_pos[1] = 0
-                        obj_pos = np.array(self.scene_object_loc[obj_id])
-                        V_obj2agent = agent_pos - obj_pos   
-                        azimuth = compute_angle_from_a2b(obj_heading_v, V_obj2agent)
+                    # if obj_id in self.scene_object_headings:
+                        # obj_heading_quat = self.scene_object_headings[obj_id]
+                        # obj_heading_v = compute_heading_z_from_quaternion(obj_heading_quat)[1]
+                        # # 计算agent pos
+                        # agent_state = self._env.sim.get_agent_state(0)
+                        # agent_pos = agent_state.position.copy()
+                        # agent_pos[1] = 0
+                        # obj_pos = np.array(self.scene_object_loc[obj_id])
+                        # V_obj2agent = agent_pos - obj_pos   
+                        # azimuth = compute_angle_from_a2b(obj_heading_v, V_obj2agent)
                         
                         # 2
                         # agent pos: 相对初始坐标系
@@ -293,8 +292,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                         
                         # azimuth = - compute_angle_from_a2b_2d(obj_heading_v, V_obj2agent)
                         
-                        info['azimuth'] = azimuth % 360
-                        pass
+                        # info['azimuth'] = azimuth % 360
+                        # pass
                     
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
@@ -413,7 +412,11 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         half_size = square_size // 2
         
         for i in range(goal_x - half_size, goal_x + half_size + 1):
+            if i < 0 or i >= size:
+                continue
             j = goal_y
+            if j < 0 or j+1 >= size:
+                continue
             if not s_stg:
                 sem_map_full[i, j] = 12
                 sem_map_full[i, j-1] = 12
@@ -424,7 +427,11 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 sem_map_full[i, j+1] = 16
         
         for j in range(goal_y - half_size, goal_y + half_size + 1):
+            if j < 0 or j >= size:
+                continue
             i = goal_x
+            if i < 0 or i+1 >= size:
+                continue
             if not s_stg:
                 sem_map_full[i, j] = 12
                 sem_map_full[i-1, j] = 12

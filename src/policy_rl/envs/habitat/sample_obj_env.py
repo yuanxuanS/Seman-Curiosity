@@ -282,6 +282,7 @@ class Sample_Obj_Env(habitat.RLEnv):
                     dx = visible_pts_shift[:,0]
                     dy = visible_pts_shift[:,1]
                     
+                    # yaw为agent指向物体的向量和世界正向(0,0,1)的夹角；如果yaw=0，正好向量一致； 则物体朝向为(0,0,-1)
                     valid_yaw = np.degrees(np.arctan2(dz, dx))
                     nbins = 36
                     bins = np.linspace(-180, 180, nbins+1)

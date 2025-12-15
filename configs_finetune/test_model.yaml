@@ -3,17 +3,17 @@ defaults:
   - training: pipeline_gt #pipeline_semantic
   - hydra: default
 
-notes: vsqfactive1
+notes: vsqfcam1_v3
 exp_name: ${now:%m-%d-%H-%M-%S}_${training.exp_name_training}_consensus_${training.consensus}_bs_${training.batch_size}_notes_${notes}
 
 # data
-sample_path:  /home/wpp/Seman-Curiosity/exps/dump/vsqfactive1_rand/episodes_data
+sample_path:  /home/wpp/Seman-Curiosity/exps/dump/vsqfcam1_v1_re/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v3_1_eval/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/random4vsqf/episodes_data
 # /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/vsqf_v1_eval_re/episodes_data
 
 # 要测试的目标数据集
-testset_path: /home/wpp/Seman-Curiosity/exps/dump/vsqfactive1_rand/episodes_data
+testset_path: /home/wpp/Seman-Curiosity/exps/dump/vsqfcam1_v1_re/episodes_data
 # 
 
 # training params
