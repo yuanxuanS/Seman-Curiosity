@@ -50,12 +50,17 @@ class VecPyTorch():
     def update_collision_map(self, inputs):
         self.venv.update_collision_map(inputs)
         
-    def step_and_preprocess(self, action, wait_env):
-        obs, reward, done, info = self.venv.step_and_preprocess(action, wait_env)
+    def step_and_preprocess(self, action, input):
+        obs, reward, done, info = self.venv.step_and_preprocess(action, input)
         obs = torch.from_numpy(obs).float().to(self.device)
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
     
+    def step_and_wait(self, action, wait_env):
+        obs, reward, done, info = self.venv.step_and_wait(action, wait_env)
+        obs = torch.from_numpy(obs).float().to(self.device)
+        reward = torch.from_numpy(reward).float()
+        return obs, reward, done, info
     
     def step_and_pre(self, action, inputs, wait_env):
         obs, reward, done, info = self.venv.step_and_pre(action, inputs, wait_env)

@@ -73,7 +73,7 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         
         return obs, info
     
-    def step_and_pre(self, action, inputs, wait_env):
+    def step_and_pre(self, action, inputs, wait_env=False):
         """Function responsible for taking the action and
         preprocessing observations
 

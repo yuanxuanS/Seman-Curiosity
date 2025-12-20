@@ -49,6 +49,7 @@ CALL_COMMAND = "call"
 EPISODE_COMMAND = "current_episode"
 STEP_AND_PREPROCESS = "step_and_preprocess"
 STEP_AND_PRE = "step_and_pre"
+STEP_AND_WAIT = "step_and_wait"
 GET_OBS_INFO = "get_obs_info"
 GET_TARGET_REL_LOC= "get_target_rel_loc"
 SAVE_DATA = "save_data"
@@ -99,7 +100,7 @@ class VectorEnv:
         self,
         make_env_fn: Callable[..., Union[Env, RLEnv]] = _make_env_fn,
         env_fn_args: Sequence[Tuple] = None,
-        auto_reset_done: bool = False,
+        auto_reset_done: bool = True,
         multiprocessing_start_method: str = "forkserver",
     ) -> None:
         """..
@@ -227,6 +228,12 @@ class VectorEnv:
                 elif command == STEP_AND_PRE:
                     observations, reward, done, info = \
                             env.step_and_pre(**data)
+                    if auto_reset_done and done:
+                        observations, info = env.reset()
+                    connection_write_fn((observations, reward, done, info))
+                elif command == STEP_AND_WAIT:
+                    observations, reward, done, info = \
+                            env.step_and_wait(**data)
                     if auto_reset_done and done:
                         observations, info = env.reset()
                     connection_write_fn((observations, reward, done, info))
@@ -602,11 +609,11 @@ class VectorEnv:
         self._is_waiting = False
         return np.stack(obs), np.stack(rews), np.stack(dones), infos
     
-    def step_and_preprocess(self, action, wait_env):
+    def step_and_preprocess(self, action, input):
         self._assert_not_closed()
         self._is_waiting = True
         for e, write_fn in enumerate(self._connection_write_fns):
-            write_fn((STEP_AND_PREPROCESS, ({"action":action[e], "wait_env":wait_env[e],})))
+            write_fn((STEP_AND_PREPROCESS, ({"action":action[e], "inputs":input[e],})))
         results = []
         for read_fn in self._connection_read_fns:
             results.append(read_fn())
@@ -614,6 +621,18 @@ class VectorEnv:
         self._is_waiting = False
         return np.stack(obs), np.stack(rews), np.stack(dones), infos
 
+    def step_and_wait(self, action, wait_env):
+        self._assert_not_closed()
+        self._is_waiting = True
+        for e, write_fn in enumerate(self._connection_write_fns):
+            write_fn((STEP_AND_WAIT, ({"action":action[e], "wait_env":wait_env[e],})))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+        obs, rews, dones, infos = zip(*results)
+        self._is_waiting = False
+        return np.stack(obs), np.stack(rews), np.stack(dones), infos
+    
     def update_collision_map(self, inputs):
         self._assert_not_closed()
         self._is_waiting = True

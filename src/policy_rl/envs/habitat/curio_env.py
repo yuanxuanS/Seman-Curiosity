@@ -87,7 +87,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         self.info['time'] = self.timestep
         self.info['sensor_pose'] = [0., 0., 0.]
         self.info['semantic_gt'] = None
-
+        self.info['depth'] = depth
         return state, self.info
     
     def load_episode_loc(self):
@@ -270,7 +270,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         self.timestep += 1
         self.info['time'] = self.timestep
         self.info['semantic_gt'] = obs['bbsgt']
-
+        self.info['depth'] = depth
         return state, 0., done, self.info
     
     def save_data(self, observations):
