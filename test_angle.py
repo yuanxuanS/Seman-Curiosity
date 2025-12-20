@@ -81,7 +81,7 @@ quat_yaw = quat_from_angle_axis(turn_angle, np.array([0, 1.0, 0]))
 heading, heading_v = compute_heading_z_from_quaternion(quat_yaw)
 print(f"从z正逆时针转 {heading * 180 / math.pi}, 正朝向为: {heading_v}")
 
-
+'''
 turned = compute_angle_from_a2b([0, 0, 1], heading_v)    # 从z正转向heading为azi
 - 存每个obj的正向heading
 

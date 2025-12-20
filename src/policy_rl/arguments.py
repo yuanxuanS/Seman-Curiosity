@@ -24,7 +24,7 @@ def get_args():
                         help="number of test episodes per scene")
     parser.add_argument('--no_cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    parser.add_argument("--sim_gpu_id", type=int, default=3,
+    parser.add_argument("--sim_gpu_id", type=int, default=1,
                         help="gpu id on which scenes are loaded")
     parser.add_argument("--sem_gpu_id", type=int, default=-1,
                     help="""gpu id for semantic model,
@@ -150,7 +150,7 @@ def get_args():
     parser.add_argument('--global_downscaling', type=int, default=2)    # full_map缩放 downscaling倍数，得到local_map实际大小
     parser.add_argument('--vision_range', type=int, default=100)
     parser.add_argument('--map_resolution', type=int, default=5)        # 每一网格的实际大小
-    parser.add_argument('--du_scale', type=int, default=1,
+    parser.add_argument('--du_scale', type=int, default=2,
                         help="输入policy的RGB大小 frame_w 构建地图时是否缩小")
     parser.add_argument('--map_size_cm', type=int, default=2400)
     parser.add_argument('--cat_pred_threshold', type=float, default=5.0)

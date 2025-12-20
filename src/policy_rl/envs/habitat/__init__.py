@@ -8,6 +8,7 @@ from habitat.datasets.pointnav.pointnav_dataset import PointNavDatasetV1
 from habitat import Config, Env, RLEnv, VectorEnv, make_dataset
 
 from src.policy_rl.agents.sem_cur import Sem_Cur_Env_Agent
+from src.policy_rl.agents.sem_imit import Sem_Imit_Env_Agent
 from src.policy_rl.agents.vqf import VQF_Agent
 from src.policy_rl.agents.vsqf import Vsqf_Env_Agent
 from src.policy_rl.agents.vsqf_v1_1 import Vsqf_v1_1_Env_Agent
@@ -28,6 +29,11 @@ def make_env_fn(args, config_env, rank):
 
     if args.env == "sem_cur_exp":      # TODO
         env = Sem_Cur_Env_Agent(args=args, rank=rank,
+                                config_env=config_env,
+                                dataset=dataset
+                                )
+    elif args.env == "sem_imit_exp":      # TODO
+        env = Sem_Imit_Env_Agent(args=args, rank=rank,
                                 config_env=config_env,
                                 dataset=dataset
                                 )

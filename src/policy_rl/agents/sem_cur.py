@@ -67,7 +67,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         
         return obs, info
     
-    def step_and_preprocess_cur(self, action, inputs):
+    def step_and_preprocess(self, action, inputs):
         """Function responsible for taking the action and
         preprocessing observations
 

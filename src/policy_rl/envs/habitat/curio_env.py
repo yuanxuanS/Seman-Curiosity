@@ -59,7 +59,8 @@ class Seman_Curio_Env(habitat.RLEnv):
                 reset traversible initial location
         
         """
-        new_scene = self.episode_no % self.args.num_train_episodes == 0
+        new_scene = True
+        # self.episode_no % self.args.num_train_episodes == 0
         # Initializations
         self.timestep = 0
         self.episode_no += 1
