@@ -93,8 +93,8 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.timestep = 0
         self.episode_no += 1
 
-        if new_scene:
-            obs = super().reset()
+        # if new_scene:
+        obs = super().reset()
         
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
@@ -114,6 +114,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
         self.this_sim_location_z, self.this_sim_rot = self.get_sim_location_z()
         # Set info
         self.info['time'] = self.timestep
+        self.info['depth'] = depth
         self.info['sensor_pose'] = [0., 0., 0.]
         
         #vsqf 
@@ -157,7 +158,8 @@ class Vsqf_v3_Env(habitat.RLEnv):
         floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
         sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
 
-
+        self.map_obj_origin = scene_info[floor_idx]['origin']
+        
         cat_counts = sem_map.sum(2).sum(1)
         possible_cats = target_cls_id_in_scene
         possible_cats_ = target_cls_id_in_scene.copy()
@@ -365,6 +367,9 @@ class Vsqf_v3_Env(habitat.RLEnv):
         # action = action["action"]
 
         # step
+        # for frontier baseline
+        if action['action'] == 0:
+            action['action'] = 1
         obs, dis_r, done, _ = super().step(action)
  
         # reset location if on floor
@@ -404,6 +409,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
 
         self.timestep += 1
         self.info['time'] = self.timestep
+        self.info['depth'] = depth
 
         return state, dis_r, done, self.info
     
@@ -427,7 +433,7 @@ class Vsqf_v3_Env(habitat.RLEnv):
     
 
 
-    def get_done(self, observations):
+    def get_done(self, observations, args=None):
         if self.info['time'] >= self.args.max_episode_length - 1:       # 
             done = True
         else:

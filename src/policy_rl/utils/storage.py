@@ -200,8 +200,15 @@ class RolloutStorage(object):
 
 class GlobalRolloutStorage(RolloutStorage):
 
-    def __init__(self, num_steps, num_processes, obs_shape, action_space,
-                 rec_state_size, extras_size):
+    def __init__(
+        self, 
+        num_steps, 
+        num_processes, 
+        obs_shape, 
+        action_space,
+        rec_state_size, 
+        extras_size
+    ):
         super(GlobalRolloutStorage, self).__init__(
             num_steps, num_processes, obs_shape, action_space, rec_state_size)
         self.extras = torch.zeros((num_steps + 1, num_processes, extras_size),

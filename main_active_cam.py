@@ -199,7 +199,7 @@ def main():
     
     # transition:
     # pred instance, get semantic masks and step env: 
-    obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)
+    obs, _, done, infos = envs.step_and_wait(l_action, wait_env)
     l_action = torch.tensor(l_action)
     
     
@@ -351,7 +351,7 @@ def main():
             goal_idxs = [info['goal_name'] for e, info in enumerate(infos) ]
             init_scores = last_scores = clip_score(images, goal_idxs)
         else:       # if done, obs is next state or current episode
-            obs, _, done, infos = envs.step_and_preprocess(l_action, wait_env)   
+            obs, _, done, infos = envs.step_and_wait(l_action, wait_env)   
         
         if args.eval:
             obs_info_ = envs.get_obs_info()

@@ -70,7 +70,9 @@ def compute_angle_from_a2b(a, b):
     turn_angle = math.atan2(det, np.dot(b, a))
     return turn_angle * 180 / math.pi
 
-turn_angle = 90 # degree
+
+
+turn_angle = 180 # degree
 turn_angle = turn_angle*math.pi/ 180 
 # 计算绕y轴正转angle度的heading_v_quat, 四元数,
 quat_yaw = quat_from_angle_axis(turn_angle, np.array([0, 1.0, 0]))
@@ -79,29 +81,120 @@ quat_yaw = quat_from_angle_axis(turn_angle, np.array([0, 1.0, 0]))
 heading, heading_v = compute_heading_z_from_quaternion(quat_yaw)
 print(f"从z正逆时针转 {heading * 180 / math.pi}, 正朝向为: {heading_v}")
 
-turned = compute_angle_from_a2b([0, 0, 1], [0, 0, -1])
-print(f"from a to b {turned}")
-'''
+
+turned = compute_angle_from_a2b([0, 0, 1], heading_v)    # 从z正转向heading为azi
 - 存每个obj的正向heading
-obj_id: heading_v_quat
 
 - 求出Vheading: compute_heading_z_from_quaternion
 - 求出obj指向agent向量V
 - 求出Vheading 转向 V的degree即为azimuth
 
- 验证：
-- 初始化位置，检测到target时，经过以上计算得到azimuth
-- 观察RGB看azimuth对不对 ，从而验证heading定义是否正确
+
+
+- 先设置所有obj的朝向为0；然后观测azimuth朝向哪里，需要如何调整达到目标朝向；
+
 '''
+
 
 headings = {
     'Collierville': 
-        {39: quat_from_angle_axis(0, np.array([0, 1.0, 0])),  # couch
-         29: quat_from_angle_axis(180, np.array([0, 1.0, 0])),  # toilet
-         11: quat_from_angle_axis(90, np.array([0, 1.0, 0])), # refrigerator
+        {39: quat_from_angle_axis((-80)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+         29: quat_from_angle_axis((100)*math.pi / 180, np.array([0, 1.0, 0])),  # toilet
+         11: quat_from_angle_axis((0)*math.pi / 180, np.array([0, 1.0, 0])), # refrigerator
              },
     'Corozal':
-        {}
+        {
+            35: quat_from_angle_axis((-170)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+            34: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+            85: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # refri
+            52: quat_from_angle_axis((0)*math.pi / 180, np.array([0, 1.0, 0])),  # bed
+            60: quat_from_angle_axis((180)*math.pi / 180, np.array([0, 1.0, 0])),  # toliet
+            59: quat_from_angle_axis((90)*math.pi / 180, np.array([0, 1.0, 0])),  # toliet
+        },
+    'Darden':
+        {
+            58: quat_from_angle_axis((0)*math.pi / 180, np.array([0, 1.0, 0])),  # toilet
+            52: quat_from_angle_axis((90)*math.pi / 180, np.array([0, 1.0, 0])),  # bed
+            37: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+            36: quat_from_angle_axis((-45)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+            35: quat_from_angle_axis((0)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+            72: quat_from_angle_axis((180)*math.pi / 180, np.array([0, 1.0, 0])),  # refri
+            74: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # refri
+            75: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # refri
+        },
+        'Markleeville':{
+            52: quat_from_angle_axis((90)*math.pi / 180, np.array([0, 1.0, 0])),  # refri
+            39: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # toliet
+            34: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # bed
+            23: quat_from_angle_axis((135)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+        },
+        'Wiconisco':{
+            26: quat_from_angle_axis((-90)*math.pi / 180, np.array([0, 1.0, 0])),  # couch
+            53: quat_from_angle_axis((180)*math.pi / 180, np.array([0, 1.0, 0])), # toliet
+            68: quat_from_angle_axis((45)*math.pi / 180, np.array([0, 1.0, 0])), # refri
+    }
 }
 with open("./gibson_headings.pkl", 'wb') as f:
     pickle.dump(headings, f)
+
+obj_loc_real = {
+    'Collierville': 
+        {
+            39: (-1.1099999999999994, 0.0, 0.7149999999999999),
+            29: (1.0150000000000006, 0.0, -6.034999999999999),
+            11: (-0.034999999999999254, 0.0, -5.859999999999999),
+        },
+    'Corozal':
+        {
+            35: (-1.540000000000001, 0.0, -3.744999999999999), # couch
+            34: (0.8100000000000005, 0.0, -6.219999999999999),  # couch
+            85: (-0.2900000000000009, 0.0, 1.004999999999999),  # refri
+            52: (-0.7400000000000002, 0.0, -11.594999999999999),    # bed
+            60: (-6.965, 0.0, -11.82),  # toliet
+            59: (-5.84, 0.0, -9.62),    # toliet
+        },
+    'Darden':
+        {
+            58: (-4.530000000000001, 0.0, -3.615),  # toilet
+            52: (-8.430000000000001, 0.0, -2.365), # bed
+            37: (-10.305000000000001, 0.0, -2.165), # couch
+            36: (-10.280000000000001, 0.0, 1.085), # couch
+            35: (-1.4050000000000011, 0.0, -3.415), # couch
+            72: (-0.08000000000000185, 0.0, 2.335), # refri
+            74: (-5.1800000000000015, 0.0, -3.615), # refri
+            75: (-5.755000000000001, 0.0, -3.04), # refri
+        },
+    'Markleeville':{
+            52: (2.085, 0.0, -4.845000000000001), # refrigerator
+            39: (0.96, 0.0, -5.42),     # toliet
+            34: (0.2599999999999998, 0.0, -0.14500000000000046),    # bed
+            23: (-1.3900000000000001, 0.0, 1.5299999999999994)  # couch
+        },
+    'Wiconisco':{
+        26: (5.734999999999999, 0.0, -2.705),   # couch
+        53: (-6.215, 0.0, -4.055),  # toliet
+        68: (3.51, 0.0, -11.18), # refri
+    }
+}
+
+with open("./gibson_objects_loc.pkl", 'wb') as f:
+    pickle.dump(obj_loc_real, f)
+
+# t= np.quaternion(-0.22018953669540486, 0.0, 0.9754571071707168, 0.0)
+# an = compute_heading_z_from_quaternion(t)[0]
+# print(an*180/math.pi)
+
+def compute_angle_from_a2b_2d(a, b):
+    '''
+    从a转向b的角度(逆时针为正)
+    
+    :param a, b: x, y, z
+    x向右, y向上, z向后
+    '''
+    det = (b[0] * a[1]- a[0] * b[1])        # 叉积：得到向量，方向决定了转向
+    turn_angle = math.atan2(det, np.dot(b, a))
+    return turn_angle * 180 / math.pi
+
+v1 = [0, 1]
+v2 = [1, 1.732]
+print(compute_angle_from_a2b_2d(v1, v2))

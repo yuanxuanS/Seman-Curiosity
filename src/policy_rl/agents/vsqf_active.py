@@ -6,13 +6,12 @@ from .utils import visualization as vu
 from src.constants import color_palette
 from src.vqf_constants import color_palette_vsqf
 import os
+import pickle
 import torch
 from ..envs.utils import pose as pu
 from ..envs.habitat.vsqf_active_env import Vsqf_active_Env
 from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
-from .utils.vsqf_prediction import Vsqf_pred
-from .utils.orient_prediction import Orient_pred
-from src.finetune.dataset_utils import save_obs
+from ..utils.geometry_utils import compute_heading_z_from_quaternion, compute_angle_from_a2b, compute_angle_from_a2b_2d
 import quaternion
 from .utils.detect_utils import box_iou_calc
 from detectron2.utils.visualizer import ColorMode, Visualizer
@@ -52,6 +51,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
             self.vis_image = None
             self.rgb_vis = None
             self.goal_name = "No"
+            
+        
     def reset(self):
         args = self.args
         
@@ -69,7 +70,9 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         
         # visualize
         if args.visualize or args.print_images:
-            self.vis_image = vu.init_vis_image(self.goal_name, self.legend, mode=3)
+            goal_name = self.poni_cate_inv[self.info['goal_cat_id']]
+            vis_mode = 4 if self.args.explore_algor == "poni" else 3
+            self.vis_image = vu.init_vis_image(goal_name, self.legend, mode=vis_mode)
         
         return obs, info
     
@@ -221,6 +224,7 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         
         # if pred objects, pred vsqf and Orient, (在depth处理之前)
         obj = self.filter_instance(obj)
+        info['azimuth'] = None
         if info['sample_stage']:
             # if info['sample_step'] > 70:    # sample stage ends
             if self.found_classes[info['target_class']]['rgbs'] == 5:
@@ -230,12 +234,19 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 print("sample stage ends")
                 self.sampled_num += 1
                 self.found_classes[info['target_class']]['num'] += 1
+                
+                # update for poni
+                self.reset_for_poni()
+                
+                # for gt epxlore
+                self.info['rest_goal'].remove(info['target_class'])
                     
             else:       # sample stage continues
                 info['sample_step'] += 1
                 info['find_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256)) 
+            
         else:
             # maskrcnn检测到时开启sample stage
             if len(obj) > 0:
@@ -251,14 +262,38 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 
                 if cls_name in self.found_classes.keys():
                     target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
+                    # debug
+                    if self.scene_name == 'Wiconisco' and cls_name == 'refrigerator':
+                        target_cond = False if obj_id in [69, None] else True
                 else:
                     target_cond = False
                 if target_cond:   # 之前没找到过该类物体
-                    # info['found_classes'][cls_name]['num'] += 1
-                    # info['found_classes'][cls_name]['obj_id'].append(obj_id)
-                    
+                    print(f"target {cls_name} id is {obj_id}")
                     self.found_classes[cls_name]['obj_id'].append(obj_id)
                     
+                    # if obj_id in self.scene_object_headings:
+                        # obj_heading_quat = self.scene_object_headings[obj_id]
+                        # obj_heading_v = compute_heading_z_from_quaternion(obj_heading_quat)[1]
+                        # # 计算agent pos
+                        # agent_state = self._env.sim.get_agent_state(0)
+                        # agent_pos = agent_state.position.copy()
+                        # agent_pos[1] = 0
+                        # obj_pos = np.array(self.scene_object_loc[obj_id])
+                        # V_obj2agent = agent_pos - obj_pos   
+                        # azimuth = compute_angle_from_a2b(obj_heading_v, V_obj2agent)
+                        
+                        # 2
+                        # agent pos: 相对初始坐标系
+                        # agent_pos = self.get_agent_rel_pos()
+                        # obj_pos = self.rel_target_loc['refrigerator'][0]
+                        # V_obj2agent = np.array(agent_pos)[:2] - np.array(obj_pos)[:2]
+                        # obj_heading_v = np.array(self.rel_target_loc_add['refrigerator'][0])[:2] - \
+                        #                 np.array(obj_pos)[:2]
+                        
+                        # azimuth = - compute_angle_from_a2b_2d(obj_heading_v, V_obj2agent)
+                        
+                        # info['azimuth'] = azimuth % 360
+                        # pass
                     
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
@@ -368,8 +403,48 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         else:
             return semantic_pred, obj
         
+    
+    def draw_point(self, goal_x, goal_y, s_stg=False, sem_map_full=None):
         
+        
+        size = self.visited_vis.shape[0]
+        square_size = 20
+        half_size = square_size // 2
+        
+        for i in range(goal_x - half_size, goal_x + half_size + 1):
+            if i < 0 or i >= size:
+                continue
+            j = goal_y
+            if j < 0 or j+1 >= size:
+                continue
+            if not s_stg:
+                sem_map_full[i, j] = 12
+                sem_map_full[i, j-1] = 12
+                sem_map_full[i, j+1] = 12
+            else:
+                sem_map_full[i, j] = 16
+                sem_map_full[i, j-1] = 16
+                sem_map_full[i, j+1] = 16
+        
+        for j in range(goal_y - half_size, goal_y + half_size + 1):
+            if j < 0 or j >= size:
+                continue
+            i = goal_x
+            if i < 0 or i+1 >= size:
+                continue
+            if not s_stg:
+                sem_map_full[i, j] = 12
+                sem_map_full[i-1, j] = 12
+                sem_map_full[i+1, j] = 12
+            else:
+                sem_map_full[i, j] = 16
+                sem_map_full[i-1, j] = 16
+                sem_map_full[i+1, j] = 16
+        return sem_map_full
     def _visualize(self, inputs, mode="full"):
+        goal_name = self.poni_cate_inv[self.info['goal_cat_id']]
+        vis_mode = 4 if self.args.explore_algor == "poni" else 3
+        self.vis_image = vu.init_vis_image(goal_name, self.legend, mode=vis_mode)
         
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
@@ -445,60 +520,26 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 goal_x = goal_r
                 goal_y = goal_c
                 
-                size = self.visited_vis.shape[0]
-                square_size = 20
-                half_size = square_size // 2
+                sem_map_full = self.draw_point(goal_x, goal_y, inputs['sample_stage'], sem_map_full)
+        
+               
+        if 'frontier_goal_add' in inputs:
+            if inputs['frontier_goal_add'] is not None:
+                goal = inputs['frontier_goal_add']
+                goal_r, goal_c = goal   # r,c
+                goal_x = goal_r
+                goal_y = goal_c
                 
-                for i in range(goal_x - half_size, goal_x + half_size + 1):
-                    j = goal_y
-                    if not inputs['sample_stage']:
-                        sem_map_full[i, j] = 12
-                        sem_map_full[i, j-1] = 12
-                        sem_map_full[i, j+1] = 12
-                    else:
-                        sem_map_full[i, j] = 16
-                        sem_map_full[i, j-1] = 16
-                        sem_map_full[i, j+1] = 16
+                sem_map_full = self.draw_point(goal_x, goal_y, False, sem_map_full)
+        
+        if 'curr_agent' in inputs:
+            if inputs['curr_agent'] is not None:
+                goal = inputs['curr_agent']
+                goal_r, goal_c = goal   # r,c
+                goal_x = goal_r
+                goal_y = goal_c
                 
-                for j in range(goal_y - half_size, goal_y + half_size + 1):
-                    i = goal_x
-                    if not inputs['sample_stage']:
-                        sem_map_full[i, j] = 12
-                        sem_map_full[i-1, j] = 12
-                        sem_map_full[i+1, j] = 12
-                    else:
-                        sem_map_full[i, j] = 16
-                        sem_map_full[i-1, j] = 16
-                        sem_map_full[i+1, j] = 16
-                # for i in range(goal_x - half_size, goal_x + half_size + 1):
-                #     for j in range(goal_y - half_size, goal_y + half_size + 1):
-                #         i = min(i, size-1)
-                #         j = min(j, size-1)
-                #         if not inputs['sample_stage']:
-                #             sem_map_full[i, j] = 12
-                #         else:
-                #             sem_map_full[i, j] = 16
-                            
-                if 'short_time_goal' in inputs:
-                    st_goal = inputs['short_time_goal']
-                    st_goal_r, st_goal_c = st_goal
-                    st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
-                    st_goal_x = st_goal_r
-                    st_goal_y = st_goal_c
-
-                
-                        
-                    square_size = 10
-                    half_size = square_size // 2
-                    for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
-                        for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
-                            i = min(i, size-1)
-                            j = min(j, size-1)
-                            if not inputs['sample_stage']:
-                                sem_map_full[i, j] = 12
-                            else:
-                                sem_map_full[i, j] = 16
-                            
+                sem_map_full = self.draw_point(goal_x, goal_y, False, sem_map_full)
                         
 
         # 绘制语义地图
@@ -540,12 +581,25 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         
         rgb_vis = cv2.resize(self.rgb_vis, (480, 480),
                                  interpolation=cv2.INTER_NEAREST)
-        # self.vis_image[50:530, 15:655] = rgb_vis
-        # self.vis_image[50:530, 670:1150] = sem_map_vis
-        # self.vis_image[50:530, 1165:1645] = vsqf_map_vis
         self.vis_image[50:530, 15:495] = rgb_vis
         self.vis_image[50:530, 510:990] = sem_map_vis
         self.vis_image[50:530, 1005:1485] = vsqf_map_vis
+        
+        # write goal
+        # self.vis_image[0:50, 0:500] = np.ones_like(self.vis_image[0:50, 0:500])
+        # goal_name = self.poni_cate_inv[self.info['goal_cat_id']]
+        # font = cv2.FONT_HERSHEY_SIMPLEX
+        # fontScale = 1
+        # color = (20, 20, 20)  # BGR
+        # thickness = 2
+        # text = "Observations (Goal: {})".format(goal_name)
+        # textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
+        # #  textX = (640 - textsize[0]) // 2 + 15
+        # textX = (480 - textsize[0]) // 2 + 15
+        # textY = (50 + textsize[1]) // 2
+        # self.vis_image = cv2.putText(self.vis_image, text, (textX, textY),
+        #                         font, fontScale, color, thickness,
+        #                         cv2.LINE_AA)
         
         # 绘制agent位置
         if mode == "local":
@@ -582,6 +636,24 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                  int(color_palette[9] * 255))
         cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
         
+        # poni
+        if "pf_pred" in inputs:
+            # Rescale pf_pred to match the height of vis_image
+            vis_maps = inputs["pf_pred"]
+            vis_maps_list = [vis_maps["pfs"]]
+            # if "area_pfs" in vis_maps:
+            #     vis_maps_list.append(vis_maps["raw_pfs"])
+            #     vis_maps_list.append(vis_maps["area_pfs"])
+            for i, vis_map in enumerate(vis_maps_list):
+                start_x = 1500 + 15 * (i + 1) + 480 * i
+                start_y = 50
+                end_x = start_x + 480
+                end_y = start_y + 480
+                vis_map = cv2.resize(vis_map, (480, 480))
+                # Apply up-down flipping similar to vis_image
+                vis_map = np.flipud(vis_map)
+                self.vis_image[start_y:end_y, start_x:end_x] = vis_map[..., ::-1]
+                
         
         if args.visualize:
             # Displaying the image

@@ -24,7 +24,7 @@ def get_args():
                         help="number of test episodes per scene")
     parser.add_argument('--no_cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    parser.add_argument("--sim_gpu_id", type=int, default=1,
+    parser.add_argument("--sim_gpu_id", type=int, default=3,
                         help="gpu id on which scenes are loaded")
     parser.add_argument("--sem_gpu_id", type=int, default=-1,
                     help="""gpu id for semantic model,
@@ -171,6 +171,38 @@ def get_args():
     parser.add_argument('--magnify_num', type=float, default=3.0)
     parser.add_argument('--vsqf_version', type=str, default="v2")
     
+    # explore algor for poni
+    parser.add_argument('--explore_algor', type=str, default="frontier",
+                        help="explore algorithm in heuristic, poni | frontier")
+    parser.add_argument(
+        "--pf_model_path",
+        type=str,
+        default="./data/poni_models/poni_seed123_gibson_pf_model",
+        help="path to PF model weights",
+    )
+    parser.add_argument(
+        "--pf_masking_opt",
+        type=str,
+        default="unexplored",
+        choices=["unexplored", "none"],
+    )
+    parser.add_argument("--add_agent2loc_distance", action="store_true", default=False)
+    parser.add_argument(
+        "--add_agent2loc_distance_v2", action="store_true", default=False
+    )
+    parser.add_argument("--mask_nearest_locations", action="store_true", default=False)
+    parser.add_argument(
+        "--mask_size",
+        type=float,
+        default=1.0,
+        help="mask size (meters) for mask_nearest_locations option",
+    )
+    parser.add_argument("--area_weight_coef", type=float, default=0.7)
+    parser.add_argument("--dist_weight_coef", type=float, default=0.3)
+    parser.add_argument('--poni_num_global_steps', type=int, default=1,    # = horizon size?
+                        help='number of forward steps in A2C (default: 5)')
+    parser.add_argument('--poni_num_sem_categories', type=float, default=16,
+                        help="number of semantic plus 1 in poni")
     # parse arguments
     args = parser.parse_args()
 

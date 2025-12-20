@@ -37,7 +37,12 @@ def main():
     # Setup Logging
     log_dir = "{}/models/{}/".format(args.dump_location, args.exp_name)
     dump_dir = "{}/dump/{}/".format(args.dump_location, args.exp_name)
-
+    
+    # debug
+    debug_dir = "./imgs/{}".format(args.exp_name)
+    if not os.path.exists(debug_dir):
+        os.makedirs(debug_dir)
+        
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     if not os.path.exists(dump_dir):
@@ -56,9 +61,6 @@ def main():
     num_episodes = int(args.num_eval_episodes)
     device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
-    
-
-    best_l_reward = -np.inf
 
     if args.eval:
         # TODO: 增加一些online指标
@@ -73,14 +75,10 @@ def main():
     wait_env = np.zeros((args.num_processes))
 
     l_episode_rewards = []
-    per_step_l_rewards = deque(maxlen=1000)
-    per_step_rewards = deque(maxlen=1000)
     
-
     # Init environments
     torch.set_num_threads(1)
     envs = make_vec_envs(args)      
-
     torch.set_grad_enabled(False)
 
     ## Initializing Maps
@@ -103,11 +101,11 @@ def main():
     vsqf_heu = vsqf_heuristic(args, num_scenes, device)
     vsqf_heu.reset()
     
+    
     # init current obj map for goal computation
     curr_object_maps = [np.ones((maps.full_w, maps.full_h))] * num_scenes
     
-    
-    ## active cam policy
+    ## Initialize active cam policy
     l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
     l_action_space = envs.get_action_space()[0]
     l_hidden_size = args.local_hidden_size
@@ -125,9 +123,9 @@ def main():
     extras = torch.zeros(num_scenes, 0)
     res = transforms.Compose(
             [
-            # transforms.ToPILImage(),
              transforms.Resize((args.camera_frame_height, args.camera_frame_width),
                                interpolation=Image.NEAREST)])
+    
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
     
@@ -139,9 +137,17 @@ def main():
         camera_policy.load_state_dict(state_dict)
     if args.eval:
         camera_policy.eval()
+        
     ## ------------------start------------------
     obs, infos = envs.reset()   # obs: rgb +depth + categories 16 TODO: ?
     
+    if args.explore_algor == "gt":
+        target_locs = envs.get_target_rel_loc()     # 目标在初始agent坐标系中的dx dy
+        vsqf_heu.explore_policy.set_goals(target_locs)
+        
+        rest_goal = [info['rest_goal'] for info in infos] 
+        vsqf_heu.explore_policy.update_goal_deque(rest_goal)
+        
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
@@ -159,7 +165,13 @@ def main():
     find_goal = find_goal.to(vsqf.device)
     vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
-    
+    if find_goal[0]:
+        for e, info in enumerate(infos):
+            if 'azimuth' in info and info['azimuth']!= None:
+                azimuth[e] = info['azimuth']
+    # debug
+    if find_goal[0]:
+        print(f"azimuth is {azimuth[0]}, score {confidence}")
     # update vsqf maps
     local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map    
@@ -224,8 +236,6 @@ def main():
             if infos[e]['sample_stage']:
                 p_input["frontier_goal"] = goals[e]
             
-        # return action with planner
-        l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
     elif args.agent == "frontier":
         nav_policy = Frontier(args)
         nav_policy.reset(num_scenes)
@@ -280,10 +290,18 @@ def main():
         for e, p_input in enumerate(vis_inputs):
             if infos[e]['sample_stage']:
                 p_input["frontier_goal"] = goals[e]
-        
+    
+    if args.agent == "random" or args.agent == "vsqf_heuristic":
         # return action with planner
-        l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
-        
+        if args.explore_algor == "frontier" or args.explore_algor == "gt":
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+        elif args.explore_algor == "poni":
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
+                                            {'local_map':local_map, 
+                                            'full_map':full_map,
+                                            'local_pose':local_pose, 
+                                            'infos':infos}
+                                            )
     # transition:
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_pre(l_action, vis_inputs, wait_env)
@@ -300,25 +318,32 @@ def main():
     orient_data = orient_pred.pred_orient_multi(rgb_objs)
     azimuth, confidence = orient_data
     
+    # debug
+    # vsqf[:, :, 0] = 1.
+
     # check if find goal
     # find_goal = torch.tensor([False for _ in range(num_scenes)])
     find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
     find_goal = find_goal.to(vsqf.device)
     vsqf = find_goal[:, None, None] * vsqf
     azimuth = find_goal * azimuth
-    
+    if find_goal[0]:
+        for e, info in enumerate(infos):
+            if 'azimuth' in info and info['azimuth']!= None:
+                azimuth[e] = info['azimuth']
+    # debug
+    if find_goal[0]:
+        print(f"azimuth is {azimuth[0]}, score {confidence}")
+        
     local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
     full_vsqf_map = vsqf_maps.full_map
     
 
-    
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
     logging.info("Start date and time: %s", start_datetime)
     
     l_reward = torch.zeros(num_scenes).to(device)
-    last_scores = torch.zeros(num_scenes).to(device)
-
     
     torch.set_grad_enabled(False)
 
@@ -337,7 +362,6 @@ def main():
         if args.agent == "vsqf_heuristic":
             for e in range(num_scenes):
                 if infos[e]['camera_stage']:
-                    
                     if infos[e]['camera_step'] == 0:
                         # camera policy
                         l_input_env = infos[e]['cam_obs'][:3, ...]
@@ -355,13 +379,9 @@ def main():
                                 )
         # ------------------------------------------------------------------ 
         # update local input, next state
-        # locs = full_pose.cpu().numpy()
-
         for e, x in enumerate(done):
             wait_env[e] = 1 if x else wait_env[e]
             
-        # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
-        # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         if wait_env.sum() == num_scenes:
             r_ = np.mean(l_reward.cpu().numpy())
             print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
@@ -369,12 +389,8 @@ def main():
             l_episode_rewards.append(r_)
 
             l_reward = torch.zeros(num_scenes).to(device)
-            last_scores = l_reward
             
             if args.eval:
-                # for e, x in enumerate(done):    # if done, maps from new obs
-                #     episode_done[e].append(True)
-                # if len(episode_done[e]) == num_episodes:
                 for e in range(num_scenes):
                     if finish_sample[e]:
                         finished[e] = 1
@@ -409,6 +425,7 @@ def main():
         finish_sample = [infos[env_idx]['finished'] for env_idx in range(num_scenes)]
         patch = [True if timestep[e] == 0 else False for e in range(num_scenes)]
         maps.patch_agent_region(patch)
+        
         
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
@@ -449,8 +466,6 @@ def main():
                 if infos[e]['sample_stage']:
                     p_input["frontier_goal"] = goals[e]
                 
-            # return action with planner
-            l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
         if args.agent == "frontier":  # must be after updating vis_inputs
             for e, p_input in enumerate(vis_inputs):
                 p_input['depth'] = infos[e]['depth']
@@ -468,7 +483,6 @@ def main():
                 if infos[e]['camera_stage']:
                     if infos[e]['camera_step'] == 0:
                         idx = 0
-                        
                     else:
                         idx = infos[e]['camera_step']
                     # Run camera policy
@@ -483,7 +497,6 @@ def main():
                     camera_action[e] = camera_action_
                 else:
                     l_rollouts.reset()
-                
             
             # select goal according to vsqf map
             update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
@@ -499,9 +512,19 @@ def main():
             for e, p_input in enumerate(vis_inputs):
                 if infos[e]['sample_stage']:
                     p_input["frontier_goal"] = goals[e]
-                
-            # return action with planner
+            
+        if args.explore_algor == "gt":
+            rest_goal = [info['rest_goal'] for info in infos] 
+            vsqf_heu.explore_policy.update_goal_deque(rest_goal)
+        # return action with planner
+        if args.explore_algor == "frontier" or args.explore_algor == "gt":
             l_action = vsqf_heu.get_actions(vis_inputs, camera_action)
+        elif args.explore_algor == "poni":
+            l_action = vsqf_heu.get_actions(vis_inputs, camera_action, 
+                                            {'local_map':local_map, 
+                                            'full_map':full_map,
+                                            'local_pose':local_pose, 
+                                            'infos':infos})
         
         # transition: next state
         if wait_env.sum() == num_scenes:
@@ -513,6 +536,13 @@ def main():
             vsqf_heu.reset()
                 
             obs, infos = envs.reset()
+            if args.explore_algor == "gt":
+                target_locs = envs.get_target_rel_loc()     # 在初始agent坐标系中的dx dy
+                vsqf_heu.explore_policy.set_goals(target_locs)
+
+                rest_goal = [info['rest_goal'] for info in infos] 
+                vsqf_heu.explore_policy.update_goal_deque(rest_goal)
+        
             done  = np.array([False]*num_scenes)
             wait_env = np.zeros((args.num_processes))
             curr_object_maps = [np.ones_like(full_vsqf_map[0].cpu().numpy())] * num_scenes
@@ -524,7 +554,6 @@ def main():
         
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)
-        full_pose = maps.full_pose
         
         # inference vsqf and azimuth
         rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
@@ -534,19 +563,27 @@ def main():
         orient_data = orient_pred.pred_orient_multi(rgb_objs)
         azimuth, confidence = orient_data
         
+        # debug for azimuth in vsqf map
+        # vsqf[:, :, 0] = 1.
+        
         # check if find goal
         # find_goal = torch.tensor([False for _ in range(num_scenes)])
         find_goal = torch.tensor([infos[env_idx]['find_goal'] for env_idx in range(num_scenes)])
         find_goal = find_goal.to(vsqf.device)
         vsqf = find_goal[:, None, None] * vsqf
         azimuth = find_goal * azimuth
-        
+        if find_goal[0]:
+            for e, info in enumerate(infos):
+                if 'azimuth' in info and info['azimuth']!= None:
+                    azimuth[e] = info['azimuth']
+        # debug
+        if find_goal[0]:
+            print(f"azimuth is {azimuth[0]}, score {confidence}")
+            # cv2.imwrite(debug_dir+f"/{azimuth[0]}_score{confidence.cpu().numpy()}.png", (vsqf[0].cpu().numpy()*255).astype(np.uint8))
         # update vsqf maps
         local_vsqf_map, _ = vsqf_maps.update_vsqf_map(infos, vsqf, azimuth)
         full_vsqf_map = vsqf_maps.full_map
                 
-        
-        
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------

@@ -62,7 +62,7 @@ class Maps_Env:
         self.full_map.fill_(0.)
         self.curr_full_map.fill_(0.)
         self.full_pose.fill_(0.)
-        self.full_pose[:, :2] = self.args.map_size_cm / 100.0 / 2.0
+        self.full_pose[:, :2] = self.args.map_size_cm / 100.0 / 2.0     # full pose和local pose单位都是m
 
         
         locs = self.full_pose.cpu().numpy()

@@ -67,7 +67,7 @@ class Active_cam_Agent(Active_cam_Env):
         
         return obs, info
     
-    def step_and_preprocess(self, action, wait_env):
+    def step_and_wait(self, action, wait_env):
         """Function responsible for taking the action and
         preprocessing observations
 
