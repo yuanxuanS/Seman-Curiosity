@@ -293,8 +293,8 @@ class Seman_Curio_Env(habitat.RLEnv):
     
 
 
-    def get_done(self, observations):
-        if self.info['time'] >= self.args.max_episode_length - 1:       # 
+    def get_done(self, observations, *args):
+        if self.info['time'] >= self.args.max_episode_length - 2:       # 
             done = True
         else:
             done = False

@@ -80,6 +80,18 @@ class CategoricalNet(nn.Module):
         x = self.linear(x)
         return CustomFixedCategorical(logits=x)
 
+class CustomNormal(torch.distributions.normal.Normal):
+    def sample(
+        self, sample_shape: Size = torch.Size()  # noqa: B008
+    ) -> Tensor:
+        return self.rsample(sample_shape)
+
+    def log_probs(self, actions) -> Tensor:
+        return super().log_prob(actions).sum(-1, keepdim=True)
+
+    def entropy(self) -> Tensor:
+        return super().entropy().sum(-1, keepdim=True)
+    
 class GaussianNet(nn.Module):
     def __init__(
         self,
@@ -595,17 +607,7 @@ def get_num_actions(action_space) -> int:
 
     return num_actions
 
-class CustomNormal(torch.distributions.normal.Normal):
-    def sample(
-        self, sample_shape: Size = torch.Size()  # noqa: B008
-    ) -> Tensor:
-        return self.rsample(sample_shape)
 
-    def log_probs(self, actions) -> Tensor:
-        return super().log_prob(actions).sum(-1, keepdim=True)
-
-    def entropy(self) -> Tensor:
-        return super().entropy().sum(-1, keepdim=True)
     
 class GaussianNet(nn.Module):
     def __init__(

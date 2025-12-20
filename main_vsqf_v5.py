@@ -101,7 +101,7 @@ def main():
     magnify, magnify_num = args.magnify, args.magnify_num
     vsqf_pred = Vsqf_pred(device, magnify, magnify_num)
     orient_pred = Orient_pred(device)
-    vsqf_heu = vsqf_heuristic(args, num_scenes)
+    vsqf_heu = vsqf_heuristic(args, num_scenes, device)
     vsqf_heu.reset()
     
     # inference vsqf and azimuth

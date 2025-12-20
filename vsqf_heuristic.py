@@ -38,7 +38,7 @@ class vsqf_heuristic:
         self.rotation_counts = None
         
         # pointnav
-        pointnav_policy_path = "/home/wpp/Seman-Curiosity/data/pointnav_w"
+        pointnav_policy_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/pointnav_w"
         self._pointnav_policy = WrappedPointNavResNetPolicy(pointnav_policy_path)
         self._last_goal = np.zeros(2)
         self._depth_image_shape = (224, 224)

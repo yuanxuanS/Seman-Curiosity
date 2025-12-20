@@ -90,14 +90,6 @@ class BaselineRegistry(Registry):
                 pass
 
         """
-<<<<<<< HEAD
-        from habitat_baselines.rl.ppo.policy import Policy, PolicyV2
-        Required_Type = Union[Policy, PolicyV2]
-        runtime_check_types = Required_Type.__args__
-        
-        return cls._register_impl(
-            "policy", to_register, name, assert_type=runtime_check_types
-=======
         from habitat_baselines.rl.ppo.policy import PolicyV2, Policy
         # from habitat_baselines.rl.ppo.policy import Policy
         Required_Type = Union[Policy, PolicyV2]
@@ -105,7 +97,6 @@ class BaselineRegistry(Registry):
         return cls._register_impl(
             "policy", to_register, name, assert_type=runtime_check_types
             # "policy", to_register, name, assert_type=Policy
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
         )
 
     @classmethod

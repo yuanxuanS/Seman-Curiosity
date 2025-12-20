@@ -53,7 +53,7 @@ class VQFModel(nn.Module):
         self.device = device
         self.clip_model, self.preprocess = clip.load("ViT-B/16", device=device) 
         ## dinov2
-        self.dinov2 = torch.hub.load('/home/wpp/dinov2', 'dinov2_vitb14',source='local').to(device)  # base; 16patch
+        self.dinov2 = torch.hub.load('/home/users/wpp/dinov2', 'dinov2_vitb14',source='local').to(device)  # base; 16patch
 
         self.angle_bin = int(360 / angle_interval)
         out_dims = self.angle_bin * distance_len

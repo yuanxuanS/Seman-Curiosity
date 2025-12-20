@@ -404,11 +404,7 @@ class RLEnv(gym.Env):
 
         observations = self._env.step(*args, **kwargs)
         reward = self.get_reward(observations)
-<<<<<<< HEAD
-        done = self.get_done(observations)
-=======
         done = self.get_done(observations, *args)
->>>>>>> edf552505eb4bcf56e83e049844516ba64d8f1ad
         info = self.get_info(observations)
 
         return observations, reward, done, info

@@ -197,7 +197,7 @@ def main():
     actions = []
     actions.append(l_action)
     # print(f"action is {l_action}")
-    obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
+    obs, _, done, infos = envs.step_and_preprocess_cur(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
@@ -331,7 +331,7 @@ def main():
         # pred instance, get semantic masks and step env
         actions.append(l_action)
         # print(f"action is {l_action}")
-        obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
+        obs, _, done, infos = envs.step_and_preprocess_cur(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
         # if episode over, reset maps
         for e, x in enumerate(done):    # if done, maps from new obs
