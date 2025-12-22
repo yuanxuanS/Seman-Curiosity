@@ -1,3 +1,4 @@
+import random
 from torchvision import transforms
 import cv2
 import numpy as np
@@ -17,11 +18,11 @@ from .utils.detect_utils import box_iou_calc
 from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.structures.instances import Instances
 from detectron2.structures.boxes import Boxes, BoxMode
-from src.vqf_constants import target_coco_categories_mapping, clsid_name_maps, \
-         target_coco_categories, category_id_maps, target_cls_id_in_scene
-import skimage
-
-class Vsqf_Active_Env_Agent(Vsqf_active_Env):
+from src.vqf_constants import target_coco_categories_mapping, clsid_name_maps
+import gzip
+import json
+import random
+class Expert_Env_Agent(Vsqf_active_Env):
     """The VSQF environment agent class. A separate Vsqf_Env_Agent class
     object is used for each environment thread.
 
@@ -53,69 +54,11 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
             self.vis_image = None
             self.rgb_vis = None
             self.goal_name = "No"
-            
-        self.load_target_loc()
 
-        with open("./gibson_headings.pkl", "rb") as f:
-            self.oject_headings = pickle.load(f)
-        
-        with open("./gibson_objects_loc.pkl", "rb") as f:
+        with open("./gibson_objects_loc2.pkl", "rb") as f:
             self.objects_loc = pickle.load(f)
-            
-    def load_target_loc(self):
-        self.target_loc = {k: [] for k in self.found_classes.keys()}
-        # objs = self.habitat_env.sim.semantic_scene.objects
-        # for i in range(1, len(objs)):
-        #     obj = objs[i]
-        #     if obj.category.name() in self.found_classes.keys():
-        #         obj_center = obj.aabb.center         # 绝对位置
-        #         self.target_loc[obj.category.name()].append(obj_center)
         
-        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
-        scene_name = self.scene_path.split("/")[-1].split(".")[0]
-        scene_info = self.dataset_info[scene_name]
-        for floor_idx in list(scene_info.keys()):
-            floor_height = scene_info[floor_idx]['floor_height']
-            sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
-            self.map_obj_origin = scene_info[floor_idx]['origin']
-
-            # 取语义地图的前6个类别
-            cat_counts = sem_map.sum(2).sum(1)
-            possible_cats = target_cls_id_in_scene      # 目标类别索引 
-            possible_cats_ = target_cls_id_in_scene
-            
-            for i in possible_cats_:
-                if cat_counts[i + 1] == 0:      # 如某类别没有物体，则去除这个类别
-                    possible_cats.remove(i)
-
-            for pcat in possible_cats:
-                goal_idx = pcat
-                goal_name = None
-                for key, value in target_coco_categories.items():      # 目标类别的名字
-                    if value == goal_idx:
-                        goal_name = key
-                        break
-                
-                # 在语义地图上得到物体区域
-                goal_map_ = sem_map[goal_idx + 1]
-                connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
-                object_ids = list(np.unique(connected_region[connected_region > 0]))
-
-                # 如果有多个物体，取其中一个物体
-                for object_id in object_ids:
-                    goal_map_one = np.zeros_like(goal_map_)
-                    goal_map_one[connected_region == object_id] = 1
-                
-                    # 得到：在真实世界坐标下，该物体的中心
-                    rows, cols = np.where(goal_map_one > 0)
-                    obj_center = (rows.min() + rows.max()) / 2, (cols.min() + cols.max()) / 2
-                    obj_center_y, obj_center_x = self.map_coord_to_real(obj_center)
-                    obj_center_real =  obj_center_y, floor_height,  obj_center_x        # 和直接返回的agent位置一致
-
-                    if not ((scene_name == "Collierville" and goal_name == "couch" and obj_center_y > 0) \
-                        or (scene_name == "Wiconisco" and goal_name == 'toilet')):  # 排除错误的那个
-                        self.target_loc[goal_name].append(obj_center_real)
-                        
+        
     def reset(self):
         args = self.args
         
@@ -138,6 +81,74 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
             self.vis_image = vu.init_vis_image(goal_name, self.legend, mode=vis_mode)
         
         return obs, info
+    
+    def load_episode_loc(self):
+        args = self.args
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        
+        if self.scene_path != self.last_scene_path: # 如果reset时加载新的环境
+            episodes_file = self.episodes_dir + \
+                "content/{}_episodes.json.gz".format(scene_name)
+
+            print("Loading episodes from: {}".format(episodes_file))
+            with gzip.open(episodes_file, 'r') as f:
+                self.eps_data = json.loads(
+                    f.read().decode('utf-8'))["episodes"]
+
+            self.eps_data_idx = 0
+            self.last_scene_path = self.scene_path
+            
+        # Load episode info
+        episode = self.eps_data[self.eps_data_idx]      # episode结束后重新reset，加载数据中不同epsiode的初始位置
+        self.eps_data_idx += 1
+        self.eps_data_idx = self.eps_data_idx % len(self.eps_data)
+        pos = episode["start_position"]
+        rot = quaternion.from_float_array(episode["start_rotation"])
+        
+        self._env.sim.set_agent_state(pos, rot)
+        obs = self._env.sim.get_observations_at(pos, rot)
+        obs.update(
+                self._env.task.sensor_suite.get_observations(
+                    observations=obs,
+                    episode=self._env.current_episode,
+                    action={'action': 0, 'action_args':{}},
+                    task=self._env.task,
+            ))
+        
+        # 将目标位置转为地图中的相对值
+        self.scene_object_loc = self.objects_loc[scene_name]
+        # self.scene_object_loc = sorted(self.scene_object_loc, key=lambda x: x[-1])
+        idxs = list(range(len(self.scene_object_loc)))
+        random.shuffle(idxs)
+        self.scene_object_loc = [self.scene_object_loc[i] for i in idxs]
+        
+        self.rel_target_loc = []
+        self.init_agent_loc = agent_loc = self.get_sim_location()
+        for obj_data in self.scene_object_loc:
+            obj = obj_data[1]   # x,y,z
+            x = -obj[2]
+            y = -obj[0]
+            axis = quaternion.as_euler_angles(rot)[0]
+            if (axis % (2 * np.pi)) < 0.1 or (axis %
+                                        (2 * np.pi)) > 2 * np.pi - 0.1:
+                o = quaternion.as_euler_angles(rot)[1]
+            else:
+                o = 2 * np.pi - quaternion.as_euler_angles(rot)[1]
+            if o > np.pi:
+                o -= 2 * np.pi      # 范围放缩到 []
+            obj_rel_loc = pu.get_rel_pose_change(      # obj相对初始agent坐标
+                [x, y, o], agent_loc
+            )
+            
+            self.rel_target_loc.append(obj_rel_loc)
+        
+        self.goal_id = self.scene_object_loc[0][0]
+        self.info['rest_goal'] = [data[-2] for data in self.scene_object_loc]
+        return obs
+    
+    def get_target_rel_loc(self):
+        return self.rel_target_loc
     
     def step_and_pre(self, action, inputs, wait_env):
         """Function responsible for taking the action and
@@ -188,7 +199,7 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         # act and step
         action = action + np.ones_like(action)   # output: -1,0-2, add to 0-3
         action = {'action': action.astype(int)}
-        obs, _, done, info = super().step(action)       # 4,256,256
+        obs, _, done, info = super().step(action, with_camera=False)       # 4,256,256
 
         
         
@@ -204,6 +215,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
             cam_obs = cv2.resize(cam_obs, (self.args.det_frame_height, self.args.det_frame_width))
             self.rgb_vis = cam_obs.astype(np.uint8)[:, :, ::-1]
         return obs, 0., done, info
+    
+    
     
     def update_collision_map(self, vis_input):
         shape = self.collision_map.shape[-2:]
@@ -289,8 +302,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
         obj = self.filter_instance(obj)
         info['azimuth'] = None
         if info['sample_stage']:
-            # if info['sample_step'] > 70:    # sample stage ends
-            if self.found_classes[info['target_class']]['rgbs'] == 5:
+            if info['sample_step'] > 70:    # sample stage ends
+            # if self.found_classes[info['target_class']]['rgbs'] == 5:
             # if info['sample_num'] == 5:      # 限制采集样本数
                 info['sample_stage'] = False
                 info['sample_step'] = 0
@@ -323,41 +336,14 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
                 has_obj, obj_id = self.get_mask_id(info['semantic'], cls_name, mask)
                 
-                if cls_name in self.found_classes.keys():
-                    target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
-                    # debug
-                    if self.scene_name == 'Wiconisco' and cls_name == 'refrigerator':
-                        target_cond = False if obj_id in [69, None] else True
-                else:
-                    target_cond = False
-                if target_cond:   # 之前没找到过该类物体
+                # target_cond = has_obj and cls_name in self.info['rest_goal'] and obj_id == self.goal_id 
+                # if cls_name == "chair":
+                target_cond = has_obj and cls_name in self.info['rest_goal'] # chair不区分id
+                if target_cond:   
                     print(f"target {cls_name} id is {obj_id}")
-                    self.found_classes[cls_name]['obj_id'].append(obj_id)
-                    
-                    # if obj_id in self.scene_object_headings:
-                        # obj_heading_quat = self.scene_object_headings[obj_id]
-                        # obj_heading_v = compute_heading_z_from_quaternion(obj_heading_quat)[1]
-                        # # 计算agent pos
-                        # agent_state = self._env.sim.get_agent_state(0)
-                        # agent_pos = agent_state.position.copy()
-                        # agent_pos[1] = 0
-                        # obj_pos = np.array(self.scene_object_loc[obj_id])
-                        # V_obj2agent = agent_pos - obj_pos   
-                        # azimuth = compute_angle_from_a2b(obj_heading_v, V_obj2agent)
-                        
-                        # 2
-                        # agent pos: 相对初始坐标系
-                        # agent_pos = self.get_agent_rel_pos()
-                        # obj_pos = self.rel_target_loc['refrigerator'][0]
-                        # V_obj2agent = np.array(agent_pos)[:2] - np.array(obj_pos)[:2]
-                        # obj_heading_v = np.array(self.rel_target_loc_add['refrigerator'][0])[:2] - \
-                        #                 np.array(obj_pos)[:2]
-                        
-                        # azimuth = - compute_angle_from_a2b_2d(obj_heading_v, V_obj2agent)
-                        
-                        # info['azimuth'] = azimuth % 360
-                        # pass
-                    
+                    self.scene_object_loc = self.scene_object_loc[1:]   # 移除已找到物体
+                    self.goal_id =self.scene_object_loc[0][0] if len(self.scene_object_loc) > 0 else None 
+                                            
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
                     depth_t = cv2.resize(depth, (256, 256)) 
@@ -379,26 +365,8 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                     
                     info['sample_stage'] = False
                     info['sample_step'] = 0
-                # info['find_cand_goal'] = False
-                # info['cand_class'] = None
-                # info['cand_obj_id'] = None
             else:
-                # # 从候选队列选择目标
-                # if len(self.info['candidates']) > 0:
-                #     print("from candidate objects")
-                #     candidates_dict = self.info['candidates'].pop(0)
-                #     info['find_goal'] = True
-                #     info['get_cand_goal'] = True
-                #     info['rgb_obj'] = candidates_dict['rgb']
-                #     info['depth_obj'] = candidates_dict['depth']
-                #     info['sample_stage'] = True
-                #     info['sample_step'] = 1
-                #     info['sample_num'] = 0
-                #     info['cand_class'] = candidates_dict['class']
-                #     info['cand_obj_id'] = candidates_dict['obj_id']
-                # else:
                 info['find_goal'] = False
-                # info['get_cand_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256))     
                 
@@ -406,11 +374,6 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 info['sample_step'] = 0
                 info['sample_num'] = 0
                 info['target_class'] = None
-                
-                # info['find_cand_goal'] = False
-                # info['cand_class'] = None
-                # info['cand_obj_id'] = None
-            
             
         return state, info
     
@@ -504,6 +467,17 @@ class Vsqf_Active_Env_Agent(Vsqf_active_Env):
                 sem_map_full[i-1, j] = 16
                 sem_map_full[i+1, j] = 16
         return sem_map_full
+
+    def get_done(self, observations, *args):
+        
+        
+        
+        # 500步结束且不在采集时间
+        if self.info['time'] >= self.args.max_episode_length - 1:       # 
+            return True
+        
+        return False
+    
     def _visualize(self, inputs, mode="full"):
         goal_name = self.poni_cate_inv[self.info['goal_cat_id']]
         vis_mode = 4 if self.args.explore_algor == "poni" else 3

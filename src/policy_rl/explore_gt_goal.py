@@ -13,7 +13,7 @@ class gt_goal:
         self.goals_gt = [None]*num_scenes
         self.goals_gt_add = [None]*num_scenes       # debug
         self.goal_deque = [None]*num_scenes     # 该队列用于选择目标
-    def set_goals(self, obj_rel_locs):
+    def set_goals(self, obj_rel_locs, debug=False):
         '''
         obj_rel_locs: list
         '''
@@ -41,22 +41,22 @@ class gt_goal:
             self.goals_gt[e] = obj_abs_loc
             self.goal_deque[e] = list(obj_abs_loc.keys())
         
-        # debug
-        for e, data in enumerate(obj_rel_locs):
-            obj_rel_loc = data[1]
-            # 转为地图分辨率
-            obj_abs_loc = {k:[] for k in obj_rel_loc.keys()}
-            for goal, obj_loc in obj_rel_loc.items():
-                for loc in obj_loc:
-                    dx, dy, do = loc
-                    # map resolution
-                    dx_, dy_ = int(dx * 100.0 / self.args.map_resolution),  int(dy * 100.0 / self.args.map_resolution)
-                    obj_c = init_agent_loc[0] + dx_
-                    obj_r = init_agent_loc[1] + dy_
-                    obj_r, obj_c = pu.threshold_poses([obj_r, obj_c], (479, 479))
-                    obj_abs_loc[goal].append([obj_r, obj_c])
-                
-            self.goals_gt_add[e] = obj_abs_loc
+        if debug:
+            for e, data in enumerate(obj_rel_locs):
+                obj_rel_loc = data[1]
+                # 转为地图分辨率
+                obj_abs_loc = {k:[] for k in obj_rel_loc.keys()}
+                for goal, obj_loc in obj_rel_loc.items():
+                    for loc in obj_loc:
+                        dx, dy, do = loc
+                        # map resolution
+                        dx_, dy_ = int(dx * 100.0 / self.args.map_resolution),  int(dy * 100.0 / self.args.map_resolution)
+                        obj_c = init_agent_loc[0] + dx_
+                        obj_r = init_agent_loc[1] + dy_
+                        obj_r, obj_c = pu.threshold_poses([obj_r, obj_c], (479, 479))
+                        obj_abs_loc[goal].append([obj_r, obj_c])
+                    
+                self.goals_gt_add[e] = obj_abs_loc
     
     def update_goal_deque(self, res_targets):
         for e in range(len(res_targets)):

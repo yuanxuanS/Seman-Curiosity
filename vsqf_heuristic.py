@@ -13,6 +13,7 @@ from vsqf_utils import get_visibility_mask, get_visibility_mask_reverse, nms, ne
 from src.policy_rl.utils.pointnav_policy import WrappedPointNavResNetPolicy
 from src.policy_rl.utils.poni_utils.poni_algor import PONI
 from src.policy_rl.explore_gt_goal import gt_goal
+from src.policy_rl.explore_gt_object import gt_object
 import random
 
 class vsqf_heuristic:
@@ -30,7 +31,9 @@ class vsqf_heuristic:
             self.explore_policy = PONI(args, num_scenes, device)
         elif self.explore_algor == "gt":
             self.explore_policy = gt_goal(args, num_scenes)             
-                    
+        elif self.explore_algor == "gt_object":
+            self.explore_policy = gt_object(args, num_scenes)  
+            
         self.collision_map = None
         self.last_actions = None
         self.curr_loc = None
@@ -104,40 +107,41 @@ class vsqf_heuristic:
         '''
         obj_rel_locs: list
         '''
-        assert self.explore_algor == "gt"
+        assert self.explore_algor == "gt" or self.explore_algor == "gt_object", "Only gt or gt_object explore algor can set goals"
         
         init_loc = self.args.map_size_cm / 100.0 / 2.0
         init_agent_loc = [int(init_loc * 100.0 / self.args.map_resolution),
                                int(init_loc * 100.0 / self.args.map_resolution)]
         
-        for e, obj_rel_loc in enumerate(obj_rel_locs):
-            # 转为地图分辨率
-            obj_abs_loc = {k:[] for k in obj_rel_loc.keys()}
-            for goal, obj_loc in obj_rel_loc.items():
-                for loc in obj_loc:
+        def compute_rc(dx, dy):
+            # map resolution
+            dx_, dy_ = int(dx * 100.0 / self.args.map_resolution),  int(dy * 100.0 / self.args.map_resolution)
+            obj_c = init_agent_loc[0] + dx_
+            obj_r = init_agent_loc[1] - dy_
+            obj_r, obj_c = pu.threshold_poses([obj_r, obj_c], (480, 480))
+            return obj_r, obj_c
+        
+        # 转为地图分辨率
+        if self.explore_algor == "gt":
+            for e, obj_rel_loc in enumerate(obj_rel_locs):
+                obj_abs_loc = {k:[] for k in obj_rel_loc.keys()}
+                for goal, obj_loc in obj_rel_loc.items():
+                    for loc in obj_loc:
+                        dx, dy, do = loc
+                        obj_r, obj_c = compute_rc(dx, dy)
+                        obj_abs_loc[goal].append([obj_r, obj_c])
+                self.goals_gt[e] = obj_abs_loc
+                self.goal_deque[e] = list(obj_abs_loc.keys())
+        elif self.explore_algor == "gt_object":
+            for e, obj_rel_loc in enumerate(obj_rel_locs):
+                obj_abs_loc = []
+                for loc in obj_rel_loc:
                     dx, dy, do = loc
-                    # map resolution
-                    dx_, dy_ = int(dx * 100.0 / self.args.map_resolution),  int(dy * 100.0 / self.args.map_resolution)
-                    obj_c = init_agent_loc[0] + dx_
-                    obj_r = init_agent_loc[1] - dy_
-                    obj_r, obj_c = pu.threshold_poses([obj_r, obj_c], (480, 480))
-                    obj_abs_loc[goal].append([obj_r, obj_c])
+                    obj_r, obj_c = compute_rc(dx, dy)
+                    obj_abs_loc.append([obj_r, obj_c])
+                self.goals_gt[e] = obj_abs_loc
                 
-            self.goals_gt[e] = obj_abs_loc
-            self.goal_deque[e] = list(obj_abs_loc.keys())
-                
-    def get_random_region(self, vsqf_map, vis_inputs, update_vis_map):
-        '''
-        vsqf_map: env*1*w*h
-        vis_inputs: env number, dict
-        '''
-        selem_s = skimage.morphology.disk(1)
-        selem_l = skimage.morphology.disk(3)
-        exp_maps = [torch.from_numpy(skimage.morphology.dilation(np.rint(v_ip['exp_pred_full']), selem_s)) for v_ip in vis_inputs]
-        # exp_maps = [torch.from_numpy(np.rint(v_ip['exp_pred_full'])) for v_ip in vis_inputs]
-        exp_maps = torch.stack(exp_maps)
-        
-        
+    def _filter_obs_map(self, vis_inputs, selem_s):
         # 过滤obs上的噪声
         obs_maps = []
         for e, p_input in enumerate(vis_inputs):
@@ -150,10 +154,9 @@ class vsqf_heuristic:
                         obs_map[region_] = 0
             obs_maps.append(torch.from_numpy(obs_map))
         obs_maps = torch.stack(obs_maps)             
+        return obs_maps
 
-        exp_maps = exp_maps * (1 - obs_maps.type(torch.int))
-        
-        
+    def _agent_connected_region(self, vis_inputs, exp_maps):
         # 连通域分割，只在agent位置连通范围
         map_masks = []
         for e, p_input in enumerate(vis_inputs):
@@ -177,10 +180,9 @@ class vsqf_heuristic:
             map_masks.append(torch.from_numpy(map_mask))
             
         map_masks = torch.stack(map_masks)
-        
-        # 在可行区上，且当前位置连通的可行区上选择目标
-        exp_maps = exp_maps * map_masks
-        
+        return map_masks
+    
+    def _get_target(self, vis_inputs, selem_l):
         # vsqf选定目标物体周围的可视区, 此时exp_maps为连通区域; object_maps为和初始目标物体重叠的物体
 
         tgt_maps = []
@@ -204,6 +206,27 @@ class vsqf_heuristic:
             v_ip['target_map'] = torch.from_numpy(tgt_map)
             
         tgt_maps = torch.stack(tgt_maps)
+        return tgt_maps
+    
+    def get_random_region(self, vsqf_map, vis_inputs, update_vis_map):
+        '''
+        vsqf_map: env*1*w*h
+        vis_inputs: env number, dict
+        '''
+        selem_s = skimage.morphology.disk(1)
+        selem_l = skimage.morphology.disk(3)
+        exp_maps = [torch.from_numpy(skimage.morphology.dilation(np.rint(v_ip['exp_pred_full']), selem_s)) for v_ip in vis_inputs]
+        # exp_maps = [torch.from_numpy(np.rint(v_ip['exp_pred_full'])) for v_ip in vis_inputs]
+        exp_maps = torch.stack(exp_maps)
+        
+        obs_maps = self._filter_obs_map(vis_inputs, selem_s)
+        exp_maps = exp_maps * (1 - obs_maps.type(torch.int))
+        
+        # 在可行区上，且当前位置连通的可行区上选择目标
+        map_masks = self._agent_connected_region(vis_inputs, exp_maps)
+        exp_maps = exp_maps * map_masks
+
+        tgt_maps = self._get_target(vis_inputs, selem_l)
         
         # 在explore map上，且目标的可视范围内选择
         for e in range(obs_maps.shape[0]):
@@ -253,71 +276,18 @@ class vsqf_heuristic:
         
         
         # 过滤obs上的噪声
-        obs_maps = []
-        for e, p_input in enumerate(vis_inputs):
-            obs_map = skimage.morphology.dilation(np.rint(p_input['map_pred_full']), selem_s)
-            connected_colli, num_coli = skimage.morphology.label(obs_map, connectivity=1, return_num=True)
-            for id in range(num_coli+1):
-                    region_ = (connected_colli== id).astype(bool)
-                    if region_.sum() < 50:
-                        # set small collision region to traversible
-                        obs_map[region_] = 0
-            obs_maps.append(torch.from_numpy(obs_map))
-        obs_maps = torch.stack(obs_maps)             
-
+        obs_maps = self._filter_obs_map(vis_inputs, selem_s)       
         exp_maps = exp_maps * (1 - obs_maps.type(torch.int))
         
         
         # 连通域分割，只在agent位置连通范围
-        map_masks = []
-        for e, p_input in enumerate(vis_inputs):
-            
-            start_x, start_y, start_o, gx1, gx2, gy1, gy2 = p_input['pose_pred']
-            r, c = start_y, start_x     # 转化为格子坐标
-            start = [int(r * 100.0 / self.args.map_resolution),
-                    int(c * 100.0 / self.args.map_resolution)]
-            start = pu.threshold_poses(start, exp_maps.shape[-2:])
-        
-            exp_maps_ = exp_maps[e]
-            exp_maps_[int(start[0]) - 5: int(start[0])+5,       # 所在位置为可行区
-                      int(start[1]) - 5: int(start[1]) + 5] = 1.
-            map_mask = np.ones_like(exp_maps[e])
-            connected_colli2, num_coli2 = skimage.morphology.label(exp_maps_, connectivity=1, return_num=True)
-            for id in range(1, num_coli2):
-                region_ = (connected_colli2== id).astype(bool)
-                if region_[start[0], start[1]] > 0:
-                    map_mask = region_
-                    break
-            map_masks.append(torch.from_numpy(map_mask))
-            
-        map_masks = torch.stack(map_masks)
-        
+        map_masks = self._agent_connected_region(vis_inputs, exp_maps)
         # 在可行区上，且当前位置连通的可行区上选择目标
         exp_maps = exp_maps * map_masks
         
         # vsqf选定目标物体周围的可视区, 此时exp_maps为连通区域; object_maps为和初始目标物体重叠的物体
 
-        tgt_maps = []
-        for e, v_ip in enumerate(vis_inputs):
-            sem_map_ = skimage.morphology.dilation(v_ip['sem_map_pred_full'] < 5, selem_l)
-            connected_colli, num_coli = skimage.morphology.label(sem_map_, connectivity=1, return_num=True)
-            obj_map = v_ip['object_map_full'] < 5       # TODO 可以增加指定类别通道
-            
-            # 语义地图上和obj_map重叠的，重叠面积最大的为目标物体
-            tgt_id = None
-            max_area = -1
-            for id in range(1, num_coli+1):
-                region_ = (connected_colli== id).astype(bool)
-                intersect = region_ * obj_map
-                if intersect.sum() > 0:
-                    if intersect.sum() > max_area:
-                        max_area = intersect.sum()
-                        tgt_id = id
-            tgt_map = connected_colli== tgt_id    
-            tgt_maps.append(torch.from_numpy(tgt_map))
-            v_ip['target_map'] = torch.from_numpy(tgt_map)
-            
-        tgt_maps = torch.stack(tgt_maps)
+        tgt_maps = self._get_target(vis_inputs, selem_l)            
         
         # 在explore map上，且目标的可视范围内选择
         for e in range(obs_maps.shape[0]):
@@ -364,6 +334,105 @@ class vsqf_heuristic:
             # 如果本次无效，则从候选点中选择
                 
         return self.vsqf_goals
+    
+    def get_actions_wo_cam(self, vis_inputs, **kwargs):
+        
+        
+        #  poni
+        if self.explore_algor == "poni":
+            goals = self.explore_policy.get_global_goals(
+                kwargs['local_map'],
+                kwargs['full_map'],
+                kwargs['local_pose'],
+                vis_inputs,
+                kwargs['infos'],
+            )
+            
+            pf_visualizations = None
+            if self.args.visualize or self.args.print_images:
+                pf_visualizations = self.explore_policy.g_policy.visualizations
+                
+        # vsqf algorithm
+        actions = [None for _ in range(self.num_scenes)]
+        for e, p_input in enumerate(vis_inputs):
+            
+            # rotate 10 times at the beginning
+            if self.rotation_counts[e] < 10:        
+                actions[e] = 2
+                self.rotation_counts[e] += 1
+                continue
+            
+            if p_input['sample_stage']:
+                if self.arrive_goal[e] and not self.replan[e]:  
+                    if p_input['invalid_goal']:
+                        self.replan[e] = True
+                    # arrive but not to object
+                    actions[e] = self.rotate_to_object(p_input, e, self.vsqf_goals[e])  #不更新replan，改为camera stage=True
+                    print(f"arrive and rotation with {actions[e]}")
+                    if actions[e] == -2:
+                        self.replan[e] = True
+                            
+                else:   # arrive and replan | not arrive and not replan
+                    
+                    actions[e], _, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, self.vsqf_goals[e])
+                    
+                    if self.explore_algor == "frontier":
+                        self.explore_policy.collision_map[e] = self.collision_map[e]    # TODO : poni是否需要改
+                        self.explore_policy.curr_loc[e] = self.curr_loc[e]
+                        self.explore_policy.last_loc[e] = self.last_loc[e]
+                        self.explore_policy.col_width[e] = self.col_width[e]
+                    if get_in_goal:
+
+                        sigma=(self.mask_sigma[e], self.mask_sigma[e])
+                        gaussian=True
+                        mu = torch.tensor([[self.vsqf_goals[e][1], self.vsqf_goals[e][0]]]).float()
+                        visited_  = neighborhoods(mu, self.map_shape[0], self.map_shape[1], sigma, gaussian=gaussian)
+                        self.visited_goal[e] = visited_.squeeze(0).numpy().astype(bool) | self.visited_goal[e].astype(bool)
+                        print(f"get in vsqf goal")
+                        
+                        # pointnav
+                        self._pointnav_policy.reset()
+                        self._last_goal = np.zeros(2) 
+                        
+                        self.arrive_goal[e] = True
+                        self.replan[e] = False
+                    else:
+                        if replan_whole:        # 当前点已经不可达，重新规划目标
+                            self.replan[e] = True
+                        else:
+                            self.replan[e] = False
+                        self.arrive_goal[e] = False
+                        
+                if self.explore_algor == "gt" or "gt_object":
+                    self.explore_policy.update_replan(e)
+            else:       # use frontier to explore
+                # reset 
+                self.cand_goals_map[e] = torch.zeros((self.map_shape[0], self.map_shape[1]))
+                
+                if self.explore_algor == "frontier":
+                    action, goal, short_time_goal = self.explore_policy.get_action_one_env(p_input, e)
+                    actions[e] = int(action)
+                    p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
+                    
+                    self.collision_map[e] = self.explore_policy.collision_map[e]    # TODO: poni是否需要
+                    self.curr_loc[e] = self.explore_policy.curr_loc[e]
+                    self.last_loc[e] = self.explore_policy.last_loc[e]
+                    self.col_width[e] = self.explore_policy.col_width[e]
+                    
+                elif self.explore_algor == "poni":
+                    goal = goals[e]     # TODO
+                    actions[e], _, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, goal)
+                    p_input["pf_pred"] = pf_visualizations[e]
+                    p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
+                elif self.explore_algor == "gt" or "gt_object":
+                    goal = self.explore_policy.get_goals(p_input, e)
+                    # goal, goal_add = self.explore_policy.get_goals(p_input, e)
+                    actions[e], _, replan_whole,  get_in_goal = self.get_actions_by_planner(p_input, e, goal)
+                    p_input["frontier_goal"] = goal     # TODO 改为longtermgoal
+                    # if goal_add is not None:
+                    #     p_input["frontier_goal_add"] = goal_add
+            self.last_actions[e] = actions[e]
+        return actions
     
     def get_actions(self, vis_inputs, camera_action, **kwargs):
         

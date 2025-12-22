@@ -87,7 +87,7 @@ class Vsqf_active_Env(habitat.RLEnv):
                 self.found_classes[target] = {'num':0, "obj_id":[], "rgbs":0}
         if scene_name == "Wiconisco":
             self.found_classes.pop("toilet")
-        self.load_target_loc()
+        
         
         # for poni
         self.poni_cate_id = {"chair":0, 
@@ -105,11 +105,7 @@ class Vsqf_active_Env(habitat.RLEnv):
         # for gt explore
         self.info['rest_goal'] = list(self.found_classes.keys())
         
-        with open("./gibson_headings.pkl", "rb") as f:
-            self.oject_headings = pickle.load(f)
         
-        with open("./gibson_objects_loc.pkl", "rb") as f:
-            self.objects_loc = pickle.load(f)
             
     def reset(self):
         """Resets the environment to a new episode.
@@ -184,59 +180,7 @@ class Vsqf_active_Env(habitat.RLEnv):
         else:
             self.info['goal_cat_id'] = self.poni_cate_id[random.choice(not_found_cls)]
         
-    def load_target_loc(self):
-        self.target_loc = {k: [] for k in self.found_classes.keys()}
-        # objs = self.habitat_env.sim.semantic_scene.objects
-        # for i in range(1, len(objs)):
-        #     obj = objs[i]
-        #     if obj.category.name() in self.found_classes.keys():
-        #         obj_center = obj.aabb.center         # 绝对位置
-        #         self.target_loc[obj.category.name()].append(obj_center)
-        
-        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
-        scene_name = self.scene_path.split("/")[-1].split(".")[0]
-        scene_info = self.dataset_info[scene_name]
-        for floor_idx in list(scene_info.keys()):
-            floor_height = scene_info[floor_idx]['floor_height']
-            sem_map = scene_info[floor_idx]['sem_map']      # 16*w*h, 一共15类别，0通道是others/背景
-            self.map_obj_origin = scene_info[floor_idx]['origin']
-
-            # 取语义地图的前6个类别
-            cat_counts = sem_map.sum(2).sum(1)
-            possible_cats = target_cls_id_in_scene      # 目标类别索引 
-            possible_cats_ = target_cls_id_in_scene
-            
-            for i in possible_cats_:
-                if cat_counts[i + 1] == 0:      # 如某类别没有物体，则去除这个类别
-                    possible_cats.remove(i)
-
-            for pcat in possible_cats:
-                goal_idx = pcat
-                goal_name = None
-                for key, value in target_coco_categories.items():      # 目标类别的名字
-                    if value == goal_idx:
-                        goal_name = key
-                        break
-                
-                # 在语义地图上得到物体区域
-                goal_map_ = sem_map[goal_idx + 1]
-                connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
-                object_ids = list(np.unique(connected_region[connected_region > 0]))
-
-                # 如果有多个物体，取其中一个物体
-                for object_id in object_ids:
-                    goal_map_one = np.zeros_like(goal_map_)
-                    goal_map_one[connected_region == object_id] = 1
-                
-                    # 得到：在真实世界坐标下，该物体的中心
-                    rows, cols = np.where(goal_map_one > 0)
-                    obj_center = (rows.min() + rows.max()) / 2, (cols.min() + cols.max()) / 2
-                    obj_center_y, obj_center_x = self.map_coord_to_real(obj_center)
-                    obj_center_real =  obj_center_y, floor_height,  obj_center_x        # 和直接返回的agent位置一致
-
-                    if not ((scene_name == "Collierville" and goal_name == "couch" and obj_center_y > 0) \
-                        or (scene_name == "Wiconisco" and goal_name == 'toilet')):  # 排除错误的那个
-                        self.target_loc[goal_name].append(obj_center_real)
+    
     def map_coord_to_real(self, map_coord):
         map_coord_y, map_coord_x = map_coord
         min_x, min_y = self.map_obj_origin / 100.0
@@ -455,7 +399,7 @@ class Vsqf_active_Env(habitat.RLEnv):
                                 return True, int(obj.id[1:]), obj.category.name()
         return False, None, None
 
-    def step(self, action):
+    def step(self, action, with_camera=True):
         """Function to take an action in the environment.
 
         Args:
@@ -479,9 +423,9 @@ class Vsqf_active_Env(habitat.RLEnv):
                          evaluation metric info
         """
 
-
-        # action=-1, camera start, reset action to 0
-        camera_start = True if action['action'] == -1 else False
+        if with_camera:
+            # action=-1, camera start, reset action to 0
+            camera_start = True if action['action'] == -1 else False
         action['action'] = 0 if action['action'] == -1 else action['action']
         # step
         obs, _, done, _ = super().step(action)
@@ -507,12 +451,15 @@ class Vsqf_active_Env(habitat.RLEnv):
         #     else:
         #         self.info['rest_goal'].append(target)
         
-        
-        # cam state; when in camera stage, return init camera state for map
-        if self.info['sample_stage'] and self.info['camera_stage']:
-            return_obs = self.init_obs[0]
+        if with_camera:
+            # cam state; when in camera stage, return init camera state for map
+            if self.info['sample_stage'] and self.info['camera_stage']:
+                return_obs = self.init_obs[0]
+            else:
+                return_obs = obs
         else:
             return_obs = obs
+            
         rgb = return_obs['rgb'].astype(np.uint8)
         depth = return_obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
@@ -520,50 +467,63 @@ class Vsqf_active_Env(habitat.RLEnv):
         self.info['depth'] = depth
         self.info['semantic'] = return_obs['semantic']
 
-        # update camera stage
-        self.info['invalid_goal'] = False       # 目标位置处无效
-        if self.info['sample_stage']:
-            goal_name = self.info['target_class']
-            if self.info['camera_stage']:
-                if action['action'] !=4 and self.info['camera_step'] <10:
-                    pass  # 动作不是capture且采集步数未到10步，继续active camera
-                    self.info['camera_step'] += 1
-                    # update cam obs
-                    rgb_ = obs['rgb'].astype(np.uint8)
-                    depth_ = obs['depth']
-                    state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
-                    self.info['cam_obs'] = state_
+        if with_camera:
+            # update camera stage
+            self.info['invalid_goal'] = False       # 目标位置处无效
+            if self.info['sample_stage']:
+                goal_name = self.info['target_class']
+                if self.info['camera_stage']:
+                    if action['action'] !=4 and self.info['camera_step'] <10:
+                        pass  # 动作不是capture且采集步数未到10步，继续active camera
+                        self.info['camera_step'] += 1
+                        # update cam obs
+                        rgb_ = obs['rgb'].astype(np.uint8)
+                        depth_ = obs['depth']
+                        state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
+                        self.info['cam_obs'] = state_
+                    else:
+                        valid, self.scene_target_id, goal_name_ = self.has_target(obs, goal_name)
+                        if valid:
+                            paths = self.save_data(obs, self.timestep)
+                        else:
+                            paths = self.save_data(self.init_obs[0], self.init_obs[1])      # 存初始步的
+                        self.found_classes[goal_name]['rgbs'] +=1
+                        
+                        # reset camera to original orientation
+                        self.reset_camera()
+                        
+                        self.info['camera_stage']  = False
+                        self.info['camera_step'] = 0
+                        self.init_obs = None
                 else:
-                    valid, self.scene_target_id, goal_name_ = self.has_target(obs, goal_name)
-                    if valid:
-                        paths = self.save_data(obs, self.timestep)
-                    else:
-                        paths = self.save_data(self.init_obs[0], self.init_obs[1])      # 存初始步的
-                    self.found_classes[goal_name]['rgbs'] +=1
-                    
-                    # reset camera to original orientation
-                    self.reset_camera()
-                    
-                    self.info['camera_stage']  = False
-                    self.info['camera_step'] = 0
-                    self.init_obs = None
-            else:
-                if camera_start:   
-                    # 进一步判断是否开启camera stage
-                    if self.has_target(obs, goal_name)[0] and \
-                        self.found_classes[goal_name]['rgbs'] < 5:
-                            self.info['camera_stage'] = True
-                            self.init_obs = [obs, self.timestep]
-                            
-                            rgb_ = obs['rgb'].astype(np.uint8)
-                            depth_ = obs['depth']
-                            state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
-                            self.info['cam_obs'] = state_
-                            print("start camera stage")
-                            
-                    else:
-                        self.info['invalid_goal'] = True
-                            
+                    if camera_start:   
+                        # 进一步判断是否开启camera stage
+                        if self.has_target(obs, goal_name)[0] and \
+                            self.found_classes[goal_name]['rgbs'] < 5:
+                                self.info['camera_stage'] = True
+                                self.init_obs = [obs, self.timestep]
+                                
+                                rgb_ = obs['rgb'].astype(np.uint8)
+                                depth_ = obs['depth']
+                                state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
+                                self.info['cam_obs'] = state_
+                                print("start camera stage")
+                                
+                        else:
+                            self.info['invalid_goal'] = True
+        else:
+            # update camera stage
+            if self.info['sample_stage']:
+                goal_name = self.info['target_class']
+                if self.has_target(obs, goal_name)[0] and \
+                    self.found_classes[goal_name]['rgbs'] < 5:
+                        
+                        rgb_ = obs['rgb'].astype(np.uint8)
+                        depth_ = obs['depth']
+                        state_ = np.concatenate((rgb_, depth_), axis=2).transpose(2, 0, 1)
+                        self.info['cam_obs'] = state_
+                        
+                        self.found_classes[goal_name]['rgbs'] +=1
         return state, 0., done, self.info
     
     

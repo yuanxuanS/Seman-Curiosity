@@ -111,6 +111,10 @@ def main():
     ## ------------------start------------------
     obs, infos = envs.reset()   # obs: rgb +depth + categories 16 TODO: ?
     
+    if args.agent == "expert":
+        target_locs = envs.get_target_rel_loc()     # 目标在初始agent坐标系中的dx dy
+        print(target_locs)
+        vsqf_heu.explore_policy.set_goals(target_locs)
     # camera policy
     # Get policy input
     l_input = obs[:, :3, ...]
@@ -226,7 +230,22 @@ def main():
         
         # return action with planner
         l_action = vsqf_heu.get_actions(vis_inputs)
+    elif args.agent == "expert":
+        # select goal according to vsqf map
+        update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
+        for e, p_input in enumerate(vis_inputs):
+            p_input['sample_step'] = infos[e]['sample_step']
+            p_input['sample_stage'] = infos[e]['sample_stage']
+            p_input['depth'] = infos[e]['depth']
+            p_input['time'] = infos[e]['time']
+            p_input['invalid_goal'] = infos[e]['invalid_goal']
+        goals = vsqf_heu.get_random_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
+        for e, p_input in enumerate(vis_inputs):
+            if infos[e]['sample_stage']:
+                p_input["frontier_goal"] = goals[e]
         
+        # return action with planner
+        l_action = vsqf_heu.get_actions_wo_cam(vis_inputs)
     # transition:
     # pred instance, get semantic masks and step env: 
     obs, _, done, infos = envs.step_and_pre(l_action, vis_inputs, wait_env)
@@ -293,6 +312,7 @@ def main():
         # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         if wait_env.sum() == num_scenes:
+        # if step % args.max_episode_length == 0:
             r_ = np.mean(l_reward.cpu().numpy())
             print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
             logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
@@ -314,6 +334,12 @@ def main():
                 l_policy.reset(num_scenes)
                 vsqf_heu.reset()
         
+        # if step % args.max_episode_length == 0: 
+        #     if args.agent == "expert":
+        #         target_locs = envs.get_target_rel_loc()     # 目标在初始agent坐标系中的dx dy
+        #         print("reset and set goals:")
+        #         vsqf_heu.explore_policy.set_goals(target_locs)
+
         
                 
         # Sample next action
@@ -411,7 +437,22 @@ def main():
                 
             # return action with planner
             l_action = vsqf_heu.get_actions(vis_inputs)
-        
+        elif args.agent == "expert":
+            # select goal according to vsqf map
+            update_vis = [info['sample_stage']*(info['sample_step'] % 5 == 1) for info in infos]
+            for e, p_input in enumerate(vis_inputs):
+                p_input['sample_step'] = infos[e]['sample_step']
+                p_input['sample_stage'] = infos[e]['sample_stage']
+                p_input['depth'] = infos[e]['depth']
+                p_input['time'] = infos[e]['time']
+                p_input['invalid_goal'] = infos[e]['invalid_goal']
+            goals = vsqf_heu.get_random_region(vsqf_maps.full_map, vis_inputs, update_vis_map=update_vis)
+            for e, p_input in enumerate(vis_inputs):
+                if infos[e]['sample_stage']:
+                    p_input["frontier_goal"] = goals[e]
+            
+            # return action with planner
+            l_action = vsqf_heu.get_actions_wo_cam(vis_inputs)
         # transition: next state
         if wait_env.sum() == num_scenes:
             # if episode over, reset maps
@@ -426,6 +467,10 @@ def main():
             wait_env = np.zeros((args.num_processes))
             curr_object_maps = [np.ones_like(full_vsqf_map[0].cpu().numpy())] * num_scenes
             
+            if args.agent == "expert":
+                target_locs = envs.get_target_rel_loc()     # 目标在初始agent坐标系中的dx dy
+                print("reset and set goals:")
+                vsqf_heu.explore_policy.set_goals(target_locs)
         else:
             # pred instance, get semantic masks and step env
             obs, _, done, infos = envs.step_and_pre(l_action, vis_inputs, wait_env)    # if done ,envs.reset, obs are ones after reset
