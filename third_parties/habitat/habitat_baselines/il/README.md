@@ -14,7 +14,7 @@ The implementation consists of first independently training the -
 - **VQA model** (for predicting answer based on question and image input)
 - **PACMAN (NAV) model** (for navigating to the required destination based on question and image input)
 
-followed by fine-tuning the NAV model.
+followed by fine-tuning the NAV model. 
 
 > "We employ a two-stage training process. First, the navigation and answering modules are independently trained using imitation/supervised learning on automatically generated expert demonstrations of navigation. Second, the navigation architecture is fine-tuned .."
 

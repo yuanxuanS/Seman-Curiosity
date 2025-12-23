@@ -7,7 +7,7 @@ third_parties/Grounded-Segment-Anything
 third_parties/GroundingDINO
 third_parties/Orient_Anything
 third_parties/segment_anything
-third_parties/detectron2/
+# third_parties/detectron2/
 outputs/
 images/
 env_orients/
