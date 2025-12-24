@@ -558,3 +558,10 @@ class AdverTrainer(TrainerBase):
     def load_state_dict(self, state_dict):
         super().load_state_dict(state_dict)
         self.optimizer.load_state_dict(state_dict["optimizer"])
+
+
+# class ALTrainer(TrainerBase):
+#     def __init__(self, model, data_loader, optimizer):
+#         super().__init__(model, data_loader, optimizer)
+    
+    

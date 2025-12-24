@@ -132,7 +132,7 @@ Run on multiple machines:
         "https://pytorch.org/docs/stable/distributed.html for details.",
     )
     parser.add_argument(
-        "--opts",
+        "opts",
         help="Modify config options by adding 'KEY VALUE' pairs at the end of the command. "
         "See config references at "
         "https://detectron2.readthedocs.io/modules/config.html#config-references",

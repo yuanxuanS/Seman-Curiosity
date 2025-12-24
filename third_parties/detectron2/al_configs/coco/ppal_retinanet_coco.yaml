@@ -1,0 +1,21 @@
+# Paths
+CONFIG_DIR: 'configs/coco_active_learning/'
+WORK_DIR: 'work_dirs/'
+
+# Environment setting
+PYTHON_PATH: 'python'
+PORT: 29500
+GPUS: 4
+
+# Config setting
+TRAIN_CONFIG: "${CONFIG_DIR}/coco_active_learning/al_train/retinanet_26e.yaml"
+UNCERTAINTY_INFER_CONFIG: "${CONFIG_DIR}/coco_active_learning/al_inference/retinanet_uncertainty.yaml"
+DIVERSITY_INFER_CONFIG: "${CONFIG_DIR}/coco_active_learning/al_inference/retinanet_diversity.yaml"
+
+# Active learning setting
+ROUND_NUM : 5
+BUDGET: 2365
+BUDGET_EXPAND_RATIO: 4
+uncertainty_pool_size: budget * budget_expand_ratio + gpus - (budget * budget_expand_ratio) % gpus
+
+OUTPUT_DIR: "${WORK_DIR}/retinanet_coco_ppal_5rounds_2percent_to_10percent"

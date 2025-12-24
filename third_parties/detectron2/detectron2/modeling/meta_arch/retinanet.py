@@ -607,3 +607,30 @@ class RetinaNetHead(nn.Module):
             logits.append(self.cls_score(self.cls_subnet(feature)))
             bbox_reg.append(self.bbox_pred(self.bbox_subnet(feature)))
         return logits, bbox_reg
+
+# class RetinaQualityEMAHead(RetinaNetHead):
+#     def __init__(
+#         self,
+#         *,
+#         input_shape: List[ShapeSpec],
+#         num_classes,
+#         num_anchors,
+#         conv_dims: List[int],
+#         norm="",
+#         prior_prob=0.01,
+#         base_momentum=0.999,  # 增加
+#         quality_xi=0.6,    # 增加
+#     ):
+#         super().__init__(
+#             input_shape=input_shape,
+#             num_classes=num_classes,
+#             num_anchors=num_anchors,
+#             conv_dims=conv_dims,
+#             norm=norm,
+#             prior_prob=prior_prob,
+#         )
+
+#         self.quality_xi = quality_xi
+#         self.base_momentum = base_momentum
+#         self.class_momentum = torch.ones((num_classes,)) * base_momentum
+#         self.class_quality = torch.zeros((num_classes,))
