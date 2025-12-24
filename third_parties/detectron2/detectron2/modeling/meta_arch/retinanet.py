@@ -608,29 +608,93 @@ class RetinaNetHead(nn.Module):
             bbox_reg.append(self.bbox_pred(self.bbox_subnet(feature)))
         return logits, bbox_reg
 
-# class RetinaQualityEMAHead(RetinaNetHead):
-#     def __init__(
-#         self,
-#         *,
-#         input_shape: List[ShapeSpec],
-#         num_classes,
-#         num_anchors,
-#         conv_dims: List[int],
-#         norm="",
-#         prior_prob=0.01,
-#         base_momentum=0.999,  # 增加
-#         quality_xi=0.6,    # 增加
-#     ):
-#         super().__init__(
-#             input_shape=input_shape,
-#             num_classes=num_classes,
-#             num_anchors=num_anchors,
-#             conv_dims=conv_dims,
-#             norm=norm,
-#             prior_prob=prior_prob,
-#         )
+# ----------------------- customed arch
 
-#         self.quality_xi = quality_xi
-#         self.base_momentum = base_momentum
-#         self.class_momentum = torch.ones((num_classes,)) * base_momentum
-#         self.class_quality = torch.zeros((num_classes,))
+def get_sliced_indices(keep_class_indices, num_anchors, old_classes=80):
+    """
+    keep_class_indices: 列表，例如 [0, 2, 5]
+    """
+    all_indices = []
+    for a in range(num_anchors):
+        # 计算每个 anchor 对应的起始偏移
+        offset = a * old_classes
+        # 将该 anchor 下我们要保留的类索引加入
+        for cls_idx in keep_class_indices:
+            all_indices.append(offset + cls_idx)
+    return torch.tensor(all_indices)
+
+@META_ARCH_REGISTRY.register()
+class PruneRetinaNet(RetinaNet):
+    @configurable
+    def __init__(
+        self,
+        *,
+        backbone: Backbone,
+        head: nn.Module,
+        head_in_features,
+        anchor_generator,
+        box2box_transform,
+        anchor_matcher,
+        num_classes,
+        focal_loss_alpha=0.25,
+        focal_loss_gamma=2.0,
+        smooth_l1_beta=0.0,
+        box_reg_loss_type="smooth_l1",
+        test_score_thresh=0.05,
+        test_topk_candidates=1000,
+        test_nms_thresh=0.5,
+        max_detections_per_image=100,
+        pixel_mean,
+        pixel_std,
+        vis_period=0,
+        input_format="BGR",
+    ):
+        super().__init__(
+            backbone=backbone,
+            head=head,
+            head_in_features=head_in_features,
+            anchor_generator=anchor_generator,
+            box2box_transform=box2box_transform,
+            anchor_matcher=anchor_matcher,
+            num_classes=num_classes,
+            focal_loss_alpha=focal_loss_alpha,
+            focal_loss_gamma=focal_loss_gamma,
+            smooth_l1_beta=smooth_l1_beta,
+            box_reg_loss_type=box_reg_loss_type,
+            test_score_thresh=test_score_thresh,
+            test_topk_candidates=test_topk_candidates,
+            test_nms_thresh=test_nms_thresh,
+            max_detections_per_image=max_detections_per_image,
+            pixel_mean=pixel_mean,
+            pixel_std=pixel_std,
+            vis_period=vis_period,
+            input_format=input_format,
+        )
+        
+
+    def reinit_head(self, keep_class_indices):
+        """
+        model: 你的 RetinaNet 实例
+        keep_class_indices: 你想要的类别索引列表
+        """
+        num_anchors = 9
+        new_num_classes = len(keep_class_indices)
+        
+        # 1. 获取索引
+        indices = get_sliced_indices(keep_class_indices, num_anchors)
+        
+        # 2. 剪切分类头的权重 (Weight)
+        # Shape: [num_anchors * 80, C, 3, 3] -> [num_anchors * 3, C, 3, 3]
+        old_weight = self.head.cls_score.weight.data
+        self.head.cls_score.weight.data = old_weight[indices]
+        
+        # 3. 剪切分类头的偏置 (Bias)
+        # Shape: [num_anchors * 80] -> [num_anchors * 3]
+        old_bias = self.head.cls_score.bias.data
+        self.head.cls_score.bias.data = old_bias[indices]
+        
+        # 4. 更新模型内部的 num_classes 属性，防止后续逻辑报错
+        self.head.num_classes = new_num_classes
+        self.num_classes = new_num_classes # 如果外层也有该属性
+        
+        print(f"成功将类别从 80 剪切为 {new_num_classes}")

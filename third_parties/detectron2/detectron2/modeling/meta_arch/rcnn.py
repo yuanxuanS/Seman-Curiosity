@@ -446,3 +446,190 @@ class AdverRCNN(GeneralizedRCNN):
         losses.update(detector_losses)
         losses.update(proposal_losses)
         return losses
+
+
+@META_ARCH_REGISTRY.register()
+class PruneRCNN(GeneralizedRCNN):
+    @configurable
+    def __init__(
+        self,
+        *,
+        backbone: Backbone,
+        proposal_generator: nn.Module,
+        roi_heads: nn.Module,
+        pixel_mean: Tuple[float],
+        pixel_std: Tuple[float],
+        input_format: Optional[str] = None,
+        vis_period: int = 0,
+    ):
+        """
+        Args:
+            backbone: a backbone module, must follow detectron2's backbone interface
+            proposal_generator: a module that generates proposals using backbone features
+            roi_heads: a ROI head that performs per-region computation
+            pixel_mean, pixel_std: list or tuple with #channels element, representing
+                the per-channel mean and std to be used to normalize the input image
+            input_format: describe the meaning of channels of input. Needed by visualization
+            vis_period: the period to run visualization. Set to 0 to disable.
+        """
+        super().__init__(backbone=backbone,
+                         proposal_generator=proposal_generator,
+                         roi_heads=roi_heads,
+                         pixel_mean=pixel_mean,
+                         pixel_std=pixel_std,
+                         input_format=input_format,
+                         vis_period=vis_period)
+        # self.adver_part = self.roi_heads.box_predictor
+    
+    def reinit_head(self, classes_idxs):    # TODO
+        self.roi_heads.num_classes = len(classes_idxs)
+
+        # if isinstance(self.model.roi_heads.box_predictor, MinimalPredictorWrapper):
+        #     self.model.roi_heads.box_predictor.reinit_head(classes_idxs)
+        # else:
+        classes_to_keep = np.array([*classes_idxs, 80])
+        cls_bias = torch.nn.Parameter(
+            self.roi_heads.box_predictor.cls_score.bias[classes_to_keep]
+        )
+        cls_weight = torch.nn.Parameter(
+            self.roi_heads.box_predictor.cls_score.weight[classes_to_keep]
+        )
+
+        classes_to_keep = np.array([*classes_idxs])
+        mask = np.repeat(classes_to_keep * 4, 4) + np.tile(
+            np.arange(0, 4), len(classes_to_keep)
+        )
+
+        box_weight = torch.nn.Parameter(
+            self.roi_heads.box_predictor.bbox_pred.weight[mask]
+        )
+        box_bias = torch.nn.Parameter(
+            self.roi_heads.box_predictor.bbox_pred.bias[mask]
+        )
+        self.roi_heads.box_predictor.num_classes = len(classes_idxs)
+
+        in_features = box_weight.shape[1]
+        self.roi_heads.box_predictor.cls_score = nn.Linear(
+            in_features, len(classes_to_keep) + 1
+        )
+        self.roi_heads.box_predictor.cls_score.bias = cls_bias
+        self.roi_heads.box_predictor.cls_score.weight = cls_weight
+
+        self.roi_heads.box_predictor.bbox_pred = nn.Linear(
+            in_features, len(classes_idxs) * 4
+        )
+        self.roi_heads.box_predictor.bbox_pred.bias = box_bias
+        self.roi_heads.box_predictor.bbox_pred.weight = box_weight
+
+        if hasattr(self.roi_heads, "mask_head"):
+            classes_to_keep = np.array([*classes_idxs])
+            mask_weight = torch.nn.Parameter(
+                self.roi_heads.mask_head.predictor.weight[classes_to_keep]
+            )
+            mask_bias = torch.nn.Parameter(
+                self.roi_heads.mask_head.predictor.bias[classes_to_keep]
+            )
+            self.roi_heads.mask_head.predictor.weight = mask_weight
+            self.roi_heads.mask_head.predictor.bias = mask_bias
+            self.roi_heads.mask_head.predictor.num_classes = len(classes_idxs)
+        
+
+    def reinit_head_list(self, classes_idxs):
+        # 1. 确定基本参数
+        # 假设原始模型是 COCO 80类，则背景索引为 80
+        old_bg_idx = 80 
+        new_num_classes = len(classes_idxs)
+        device = next(self.parameters()).device
+        
+        # 2. 遍历 Cascade R-CNN 的所有预测阶段
+        # Cascade R-CNN 的 predictors 存储在 self.roi_heads.box_predictors (是一个 ModuleList)
+        for i, predictor in enumerate(self.roi_heads.box_predictor):
+            
+            # --- 处理分类层 (cls_score) ---
+            in_features = predictor.cls_score.in_features
+            
+            # 提取指定类和背景类的权重
+            # 索引选择：[class0, class1, ..., old_background]
+            keep_idxs = torch.tensor([*classes_idxs, old_bg_idx], device=device)
+            
+            with torch.no_grad():
+                new_cls_weight = predictor.cls_score.weight[keep_idxs].clone()
+                new_cls_bias = predictor.cls_score.bias[keep_idxs].clone()
+                
+                # 重新初始化该阶段的 Linear 层
+                # 输出维度 = 新类别数 + 1 (背景)
+                predictor.cls_score = nn.Linear(in_features, new_num_classes + 1).to(device)
+                predictor.cls_score.weight.copy_(new_cls_weight)
+                predictor.cls_score.bias.copy_(new_cls_bias)
+            
+            # --- 处理回归层 (bbox_pred) ---
+            # 重点：根据你的代码断言，Cascade R-CNN 是 CLS_AGNOSTIC
+            # 如果是 Class-Agnostic，out_features 应该是 4，不需要任何剪切
+            # 如果你强制修改了配置为 Class-Specific，才需要执行类似 Faster R-CNN 的 mask 逻辑
+            if predictor.bbox_pred.out_features > 4:
+                # 只有在非 Class-Agnostic 模式下才运行这里的逻辑
+                mask = []
+                for c in classes_idxs:
+                    mask.extend(range(c * 4, (c + 1) * 4))
+                mask = torch.tensor(mask, device=device)
+                
+                with torch.no_grad():
+                    new_box_weight = predictor.bbox_pred.weight[mask].clone()
+                    new_box_bias = predictor.bbox_pred.bias[mask].clone()
+                    
+                    predictor.bbox_pred = nn.Linear(in_features, new_num_classes * 4).to(device)
+                    predictor.bbox_pred.weight.copy_(new_box_weight)
+                    predictor.bbox_pred.bias.copy_(new_box_bias)
+
+            # 更新 predictor 内部的 num_classes 属性
+            predictor.num_classes = new_num_classes
+
+        # 3. 更新 ROIHeads 整体的 num_classes
+        self.roi_heads.num_classes = new_num_classes
+        
+        # 4. 如果有 Mask Head，处理方式与 Faster R-CNN 一致
+        if hasattr(self.roi_heads, "mask_head"):
+            # ... 这里的逻辑保持不变 ...
+            print("exists mask head")
+            # 获取设备信息
+            mask_predictor = self.roi_heads.mask_head.predictor
+            device = mask_predictor.weight.device
+            
+            # Mask Head 的输出通常是 (num_classes, C, H, W)
+            # 它通常不包含背景类，所以直接取指定的 classes_idxs
+            classes_to_keep = torch.tensor([*classes_idxs], device=device)
+            
+            with torch.no_grad():
+                # 提取权重和偏置
+                # weight shape: [num_classes, C, K, K]
+                # bias shape: [num_classes]
+                new_mask_weight = mask_predictor.weight[classes_to_keep].clone()
+                new_mask_bias = mask_predictor.bias[classes_to_keep].clone()
+                
+                # 获取输入通道数和其他卷积参数
+                in_channels = mask_predictor.in_channels
+                out_channels = len(classes_idxs)
+                kernel_size = mask_predictor.kernel_size
+                stride = mask_predictor.stride
+                padding = mask_predictor.padding
+                
+                # 重新初始化预测层
+                # 注意：这里要区分是 Conv2d 还是 ConvTranspose2d (通常是后者进行上采样)
+                if isinstance(mask_predictor, nn.ConvTranspose2d):
+                    new_predictor = nn.ConvTranspose2d(
+                        in_channels, out_channels, kernel_size, stride, padding
+                    ).to(device)
+                else:
+                    new_predictor = nn.Conv2d(
+                        in_channels, out_channels, kernel_size, stride, padding
+                    ).to(device)
+                
+                # 拷贝权重
+                new_predictor.weight.copy_(new_mask_weight)
+                new_predictor.bias.copy_(new_mask_bias)
+                
+                # 替换原有的 predictor
+                self.roi_heads.mask_head.predictor = new_predictor
+                
+                # 更新 mask_head 中的类别属性
+                self.roi_heads.mask_head.num_classes = len(classes_idxs)

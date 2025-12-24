@@ -162,7 +162,7 @@ def inference_on_dataset(
                 # cv2.imwrite(save_pth+inputs[0]["image_id"]+"_pred.png", out.img)
                 if not os.path.exists(save_pth):
                     os.mkdir(save_pth)
-                out.save(save_pth+inputs[0]["image_id"]+"_"+dataset_name+"_pred.png")
+                out.save(save_pth+str(inputs[0]["image_id"])+"_"+dataset_name+"_pred.png")
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time
