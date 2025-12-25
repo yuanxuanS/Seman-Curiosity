@@ -532,7 +532,93 @@ class PruneRCNN(GeneralizedRCNN):
             self.roi_heads.mask_head.predictor.weight = mask_weight
             self.roi_heads.mask_head.predictor.bias = mask_bias
             self.roi_heads.mask_head.predictor.num_classes = len(classes_idxs)
+    
+    def extend_head(self, num_new_classes):
+        """
+        在现有子类基础上增加 m 个新类别
+        num_new_classes: 增加的类别数量 m
+        """
+        # 1. 获取基础信息
+        device = self.roi_heads.box_predictor.cls_score.weight.device
+        old_num_classes = self.roi_heads.box_predictor.num_classes # 当前已有的 n 个类
+        new_total_classes = old_num_classes + num_new_classes
+        in_features = self.roi_heads.box_predictor.cls_score.in_features
+
+        # --- 分类层 (cls_score) 权重处理 ---
+        # 提取旧权重：前 n 个是物体，最后一个是背景
+        old_cls_weight = self.roi_heads.box_predictor.cls_score.weight.data
+        old_cls_bias = self.roi_heads.box_predictor.cls_score.bias.data
         
+        # 分离物体权重和背景权重
+        old_obj_w = old_cls_weight[:old_num_classes]
+        old_obj_b = old_cls_bias[:old_num_classes]
+        bg_w = old_cls_weight[-1:]
+        bg_b = old_cls_bias[-1:]
+
+        # 初始化新类别的权重 (使用随机初始化或零初始化)
+        new_obj_w = torch.randn(num_new_classes, in_features, device=device) * 0.01
+        new_obj_b = torch.zeros(num_new_classes, device=device)
+
+        # 拼接：[旧物体, 新物体, 背景]
+        final_cls_w = torch.cat([old_obj_w, new_obj_w, bg_w], dim=0)
+        final_cls_b = torch.cat([old_obj_b, new_obj_b, bg_b], dim=0)
+
+        # 重新创建分类层
+        self.roi_heads.box_predictor.cls_score = nn.Linear(
+            in_features, new_total_classes + 1
+        ).to(device)
+        self.roi_heads.box_predictor.cls_score.weight = nn.Parameter(final_cls_w)
+        self.roi_heads.box_predictor.cls_score.bias = nn.Parameter(final_cls_b)
+
+        # --- 回归层 (bbox_pred) 权重处理 ---
+        # 检查是否为 Class-Specific (输出维度 > 4)
+        if self.roi_heads.box_predictor.bbox_pred.out_features > 4:
+            old_box_w = self.roi_heads.box_predictor.bbox_pred.weight.data
+            old_box_b = self.roi_heads.box_predictor.bbox_pred.bias.data
+
+            # 初始化新类别的回归权重
+            new_box_w = torch.randn(num_new_classes * 4, in_features, device=device) * 0.001
+            new_box_b = torch.zeros(num_new_classes * 4, device=device)
+
+            final_box_w = torch.cat([old_box_w, new_box_w], dim=0)
+            final_box_b = torch.cat([old_box_b, new_box_b], dim=0)
+
+            self.roi_heads.box_predictor.bbox_pred = nn.Linear(
+                in_features, new_total_classes * 4
+            ).to(device)
+            self.roi_heads.box_predictor.bbox_pred.weight = nn.Parameter(final_box_w)
+            self.roi_heads.box_predictor.bbox_pred.bias = nn.Parameter(final_box_b)
+
+        # --- Mask Head 处理 ---
+        if hasattr(self.roi_heads, "mask_head"):
+            mask_predictor = self.roi_heads.mask_head.predictor
+            old_mask_w = mask_predictor.weight.data
+            old_mask_b = mask_predictor.bias.data
+            
+            # Mask Head 只有物体通道，直接在后面拼
+            new_mask_w = torch.randn(
+                num_new_classes, mask_predictor.in_channels, 
+                *mask_predictor.kernel_size, device=device
+            ) * 0.01
+            new_mask_b = torch.zeros(num_new_classes, device=device)
+
+            final_mask_w = torch.cat([old_mask_w, new_mask_w], dim=0)
+            final_mask_b = torch.cat([old_mask_b, new_mask_b], dim=0)
+
+            # 假设是 Conv2d，重新初始化
+            new_m_predictor = nn.Conv2d(
+                mask_predictor.in_channels, new_total_classes,
+                mask_predictor.kernel_size, mask_predictor.stride, mask_predictor.padding
+            ).to(device)
+            new_m_predictor.weight = nn.Parameter(final_mask_w)
+            new_m_predictor.bias = nn.Parameter(final_mask_b)
+            
+            self.roi_heads.mask_head.predictor = new_m_predictor
+            self.roi_heads.mask_head.num_classes = new_total_classes
+
+        # 更新元数据
+        self.roi_heads.num_classes = new_total_classes
+        self.roi_heads.box_predictor.num_classes = new_total_classes
 
     def reinit_head_list(self, classes_idxs):
         # 1. 确定基本参数
@@ -542,7 +628,7 @@ class PruneRCNN(GeneralizedRCNN):
         device = next(self.parameters()).device
         
         # 2. 遍历 Cascade R-CNN 的所有预测阶段
-        # Cascade R-CNN 的 predictors 存储在 self.roi_heads.box_predictors (是一个 ModuleList)
+        # Cascade R-CNN 的 predictors 存储在 self.roi_heads.box_predictor (是一个 ModuleList)
         for i, predictor in enumerate(self.roi_heads.box_predictor):
             
             # --- 处理分类层 (cls_score) ---
@@ -633,3 +719,85 @@ class PruneRCNN(GeneralizedRCNN):
                 
                 # 更新 mask_head 中的类别属性
                 self.roi_heads.mask_head.num_classes = len(classes_idxs)
+                
+    def extend_head_list(self, num_new_classes, init_std=0.01):
+        """
+        用于head是list的，比如cascade rcnn
+        Args:
+            num_new_classes (int): 需要增加的类别数量 m
+            init_std (float): 新类别的初始化标准差
+        """
+        device = next(self.parameters()).device
+        
+        # 遍历所有阶段的 Predictors
+        for i, predictor in enumerate(self.roi_heads.box_predictor):
+            old_num_classes = predictor.num_classes  # 这里的 n
+            new_total_classes = old_num_classes + num_new_classes # n + m
+            in_features = predictor.cls_score.in_features
+            
+            # --- 1. 扩展分类层 (cls_score) ---
+            old_cls_w = predictor.cls_score.weight.data # [n+1, in_features]
+            old_cls_b = predictor.cls_score.bias.data   # [n+1]
+            
+            # 创建新的分类层 (n + m + 1)
+            new_cls_score = nn.Linear(in_features, new_total_classes + 1).to(device)
+            
+            # 初始化
+            nn.init.normal_(new_cls_score.weight, std=init_std)
+            nn.init.constant_(new_cls_score.bias, 0)
+            
+            with torch.no_grad():
+                # 拷贝前 n 个指定类别的权重
+                new_cls_score.weight[:old_num_classes].copy_(old_cls_w[:old_num_classes])
+                new_cls_score.bias[:old_num_classes].copy_(old_cls_b[:old_num_classes])
+                
+                # 拷贝原有的背景类权重到最后一个位置
+                new_cls_score.weight[-1].copy_(old_cls_w[-1])
+                new_cls_score.bias[-1].copy_(old_cls_b[-1])
+                
+            predictor.cls_score = new_cls_score
+
+            # --- 2. 扩展回归层 (bbox_pred) ---
+            if predictor.bbox_pred.out_features > 4:  # Class-Specific
+                old_box_w = predictor.bbox_pred.weight.data
+                old_box_b = predictor.bbox_pred.bias.data
+                
+                new_bbox_pred = nn.Linear(in_features, new_total_classes * 4).to(device)
+                nn.init.normal_(new_bbox_pred.weight, std=init_std)
+                nn.init.constant_(new_bbox_pred.bias, 0)
+                
+                with torch.no_grad():
+                    # 拷贝前 n 个类的回归权重
+                    new_bbox_pred.weight[:old_num_classes * 4].copy_(old_box_w)
+                    new_bbox_pred.bias[:old_num_classes * 4].copy_(old_box_b)
+                
+                predictor.bbox_pred = new_bbox_pred
+                
+            # 更新类别属性
+            predictor.num_classes = new_total_classes
+
+        # --- 3. 扩展 Mask Head (如果有) ---
+        if hasattr(self.roi_heads, "mask_head"):
+            mask_predictor = self.roi_heads.mask_head.predictor
+            old_mask_w = mask_predictor.weight.data
+            old_mask_b = mask_predictor.bias.data
+            
+            # 假设是 ConvTranspose2d
+            out_channels = new_total_classes
+            new_mask_predictor = nn.Conv2d(
+                mask_predictor.in_channels, out_channels, 
+                mask_predictor.kernel_size, mask_predictor.stride, mask_predictor.padding
+            ).to(device)
+            
+            nn.init.normal_(new_mask_predictor.weight, std=init_std)
+            nn.init.constant_(new_mask_predictor.bias, 0)
+            
+            with torch.no_grad():
+                new_mask_predictor.weight[:old_num_classes].copy_(old_mask_w)
+                new_mask_predictor.bias[:old_num_classes].copy_(old_mask_b)
+                
+            self.roi_heads.mask_head.predictor = new_mask_predictor
+            self.roi_heads.mask_head.num_classes = new_total_classes
+
+        # 更新整体属性
+        self.roi_heads.num_classes = new_total_classes

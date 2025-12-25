@@ -36,6 +36,7 @@ from detectron2.data import (
     build_detection_test_loader,
     build_detection_train_loader,
 )
+from detectron2.data.datasets.builtin_meta import get_proj_metadata
 from detectron2.engine import default_setup, default_writers, launch
 from detectron2.evaluation import (
     CityscapesInstanceEvaluator,
@@ -113,7 +114,8 @@ def do_test(cfg, model):
         )
         results_i = inference_on_dataset(model, data_loader, evaluator, 
                                          vis=cfg.VIS,
-                                         save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs", )
+                                         save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs", ),
+                                         metadata=get_proj_metadata(cfg.DATASET_NAME)
                                          )
         results[dataset_name] = results_i
         if comm.is_main_process():
@@ -192,6 +194,7 @@ def setup(args):
     # 新变量直接添加
     cfg.VIS = False     
     cfg.SAVE_PTH = ''
+    cfg.DATASET_NAME = ''
     
     cfg.merge_from_file(args.config_file)       # 只能覆盖已有变量
     cfg.merge_from_list(args.opts)
@@ -209,10 +212,12 @@ def main(args):
     
     keep_class = {
     # 1: "bicylcle",
-    2: "car",
-    
-    
-}
+    2: "car",       # key为原数据类别中的id
+}   
+    extend_class = {    #把旧的n个类放在最前面，中间插入m 个新类，最后把旧的背景权重挪到第 n+m的位置。
+    1: "building",
+    2: "grass",
+    }
     
         
     logger.info("Model:\n{}".format(model))
@@ -226,6 +231,12 @@ def main(args):
                 model.reinit_head_list(keep_class)
             else:
                 model.reinit_head(keep_class)
+        
+        if args.extend_cls:
+            if cfg.MODEL.ROI_HEADS.NAME == "CascadeROIHeads":
+                model.extend_head_list(len(extend_class))
+            else:
+                model.extend_head(len(extend_class))
         return do_test(cfg, model)
 
     
@@ -294,6 +305,11 @@ Run on multiple machines:
         "--prune",
         action="store_true",
         help="Whether to prune the model.",
+    )
+    parser.add_argument(
+        "--extend-cls",
+        action="store_true",
+        help="Whether to extend the model.",
     )
     parser.add_argument(
         "--visualize",

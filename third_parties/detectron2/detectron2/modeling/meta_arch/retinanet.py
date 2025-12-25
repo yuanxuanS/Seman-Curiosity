@@ -698,3 +698,77 @@ class PruneRetinaNet(RetinaNet):
         self.num_classes = new_num_classes # 如果外层也有该属性
         
         print(f"成功将类别从 80 剪切为 {new_num_classes}")
+    
+    def extend_head(self, num_new_classes, init_prob=0.01):
+        """
+        在 RetinaNet 现有类别基础上增加 m 个新类别
+        num_new_classes: 增加的数量 m
+        init_prob: 用于初始化新类别的偏置（参考 RetinaNet 论文的 pi 值）
+        """
+        def get_extended_indices(old_num_classes, num_new_classes, num_anchors):
+            """
+            计算旧权重在新扩展权重矩阵中的位置索引
+            """
+            new_num_classes = old_num_classes + num_new_classes
+            old_indices = []
+            for a in range(num_anchors):
+                # 计算第 a 个 anchor 对应的旧类别起始位置
+                start = a * old_num_classes
+                end = (a + 1) * old_num_classes
+                old_indices.extend(range(start, end))
+            return torch.tensor(old_indices)
+
+        def get_new_positions(old_num_classes, num_new_classes, num_anchors):
+            """
+            计算旧权重在“新权重矩阵”中应该放到的位置
+            """
+            new_num_classes = old_num_classes + num_new_classes
+            new_indices = []
+            for a in range(num_anchors):
+                start = a * new_num_classes
+                end = start + old_num_classes
+                new_indices.extend(range(start, end))
+            return torch.tensor(new_indices)
+            
+        
+        num_anchors = 9 # 通常 RetinaNet 默认每层 9 个 anchor
+        old_num_classes = self.head.num_classes
+        new_num_classes = old_num_classes + num_new_classes
+        
+        device = self.head.cls_score.weight.device
+        
+        # 1. 获取旧权重数据
+        old_weight = self.head.cls_score.weight.data # [A*n, C, 3, 3]
+        old_bias = self.head.cls_score.bias.data     # [A*n]
+        in_channels = old_weight.shape[1]
+        
+        # 2. 创建全新的卷积层
+        # 输出维度从 A*n 变为 A*(n+m)
+        new_out_channels = num_anchors * new_num_classes
+        new_cls_score = nn.Conv2d(
+            in_channels, new_out_channels, 
+            kernel_size=3, stride=1, padding=1
+        ).to(device)
+        
+        # 3. 初始化新层
+        # 参照 RetinaNet 论文：偏置初始化为 -log((1-pi)/pi) 使初始 score 接近 0
+        bias_value = -math.log((1 - init_prob) / init_prob)
+        nn.init.constant_(new_cls_score.bias, bias_value)
+        nn.init.normal_(new_cls_score.weight, std=0.01)
+
+        # 4. 将旧权重填入新层
+        # 获取旧权重在新矩阵中的目标位置映射
+        new_positions = get_new_positions(old_num_classes, num_new_classes, num_anchors)
+        
+        with torch.no_grad():
+            new_cls_score.weight.data[new_positions] = old_weight
+            new_cls_score.bias.data[new_positions] = old_bias
+            
+        # 5. 替换模型中的层
+        self.head.cls_score = new_cls_score
+        
+        # 6. 更新类别属性
+        self.head.num_classes = new_num_classes
+        self.num_classes = new_num_classes
+        
+        print(f"成功将 RetinaNet 类别从 {old_num_classes} 扩展为 {new_num_classes}")
