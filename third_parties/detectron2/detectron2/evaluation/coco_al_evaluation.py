@@ -1,4 +1,10 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+import numpy as np
+import pycocotools.mask as mask_util
+
+from detectron2.structures import Boxes, BoxMode, pairwise_iou
 from .coco_evaluation import COCOEvaluator
+
 
 class COCOALEvaluator(COCOEvaluator):
     def __init__(
@@ -11,9 +17,15 @@ class COCOALEvaluator(COCOEvaluator):
         use_fast_impl=True,
         kpt_oks_sigmas=(),
     ):
-        super().__init__(dataset_name, tasks, distributed, output_dir, use_fast_impl, kpt_oks_sigmas)
-
-
+        super().__init__(
+            dataset_name,
+            tasks,
+            distributed,
+            output_dir,
+            use_fast_impl=use_fast_impl,
+            kpt_oks_sigmas=kpt_oks_sigmas,
+        )
+    
     def process(self, inputs, outputs):
         """
         Args:
@@ -54,7 +66,10 @@ def instances_to_coco_json_al(instances, img_id):
     boxes = boxes.tolist()
     scores = instances.scores.tolist()
     classes = instances.pred_classes.tolist()
-
+    # 
+    cls_uncertainty = instances.cls_uncertainty.cpu().numpy().tolist()
+    box_uncertainty = instances.box_uncertainty.cpu().numpy().tolist()
+      
     has_mask = instances.has("pred_masks")
     if has_mask:
         # use RLE to encode the masks, because they are too large and takes memory
@@ -81,6 +96,8 @@ def instances_to_coco_json_al(instances, img_id):
             "category_id": classes[k],
             "bbox": boxes[k],
             "score": scores[k],
+            "cls_uncertainty": cls_uncertainty[k],
+            "box_uncertainty": box_uncertainty[k]
         }
         if has_mask:
             result["segmentation"] = rles[k]

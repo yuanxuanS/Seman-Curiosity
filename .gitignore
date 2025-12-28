@@ -8,6 +8,8 @@ third_parties/GroundingDINO
 third_parties/Orient_Anything
 third_parties/segment_anything
 third_parties/detectron2/output
+third_parties/detectron2/output_al
+
 outputs/
 images/
 env_orients/

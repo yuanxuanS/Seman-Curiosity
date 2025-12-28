@@ -478,11 +478,12 @@ class RetinaNet(nn.Module):
         ]
         keep = batched_nms(boxes_all, scores_all, class_idxs_all, self.test_nms_thresh)
         keep = keep[: self.max_detections_per_image]
-
+        
         result = Instances(image_size)
         result.pred_boxes = Boxes(boxes_all[keep])
         result.scores = scores_all[keep]
         result.pred_classes = class_idxs_all[keep]
+        
         return result
 
     def preprocess_image(self, batched_inputs: Tuple[Dict[str, Tensor]]):

@@ -46,7 +46,8 @@ def display_latest_results(output_dir, latest_round, output_txt=None):
         with open(os.path.join(round_work_dir, 'eval.txt')) as f:
             lines = [x.strip() for x in f.readlines()]
             for line in lines:
-                if line.startswith('OrderedDict'):
+                # if line.startswith('OrderedDict'):
+                if 'copypaste' in line:
                     res_str = 'Round %d: ' % i + line
                     sys_echo(res_str)
                     if not res_str.endswith('\n'):
