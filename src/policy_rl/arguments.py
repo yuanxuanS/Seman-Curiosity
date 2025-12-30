@@ -203,6 +203,11 @@ def get_args():
                         help='number of forward steps in A2C (default: 5)')
     parser.add_argument('--poni_num_sem_categories', type=float, default=16,
                         help="number of semantic plus 1 in poni")
+    
+    # for diversity reward
+    parser.add_argument(
+        "--use_diversity_reward", action="store_true", default=False
+    )
     # parse arguments
     args = parser.parse_args()
 

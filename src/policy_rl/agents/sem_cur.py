@@ -13,7 +13,9 @@ from src.finetune.dataset_utils import save_obs
 import quaternion
 from .utils.detect_utils import box_iou_calc
 from detectron2.utils.visualizer import ColorMode, Visualizer
-
+from src.vqf_constants import target_coco_categories, \
+                            target_coco_categories_mapping, \
+                                clsid_name_maps
 class Sem_Cur_Env_Agent(Seman_Curio_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
     object is used for each environment thread.
@@ -46,6 +48,17 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             self.vis_image = None
             self.rgb_vis = None
             self.goal_name = "No"
+            
+        # for diversity reward
+        if args.use_diversity_reward:
+            self.category_obj_id = {name:[] for name in target_coco_categories.keys()}
+            
+            for obj in self.habitat_env.sim.semantic_scene.objects[1:]:
+                if obj.category.name() in target_coco_categories.keys():
+                    self.category_obj_id[obj.category.name()].append(int(obj.id.replace('_', '')))
+                    
+            self.found_class = []
+            self.found_id = []
     def reset(self):
         args = self.args
         
@@ -112,7 +125,6 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         obs, _, done, info = super().step(action)       # 4,256,256
 
         
-        
         # preprocess obs
         obs, info = self._preprocess_obs(obs, info) 
         self.last_action = action['action']     
@@ -122,8 +134,42 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
 
         return obs, 0., done, info
     
+    def filter_instance(self, instance):
+        '''
+        实时推理并没有剪切模型，而是通过过滤结果类别
+        '''
+        
+        if len(instance) == 0:
+            return instance
+        
+        classes = instance.pred_classes
+        new_instance = Instances(
+                            pred_boxes=Boxes(torch.Tensor()),
+                            image_size=instance.image_size,
+                            pred_classes=torch.Tensor(),
+                            pred_masks=torch.Tensor(),
+                            scores=torch.Tensor(),
+                        )
+        for i in range(len(classes)):
+            class_idx = classes[i]
+            if class_idx in list(target_coco_categories_mapping.keys()):
+                new_instance = new_instance.cat([instance[i]])
+            else:
+                continue
+        return new_instance
     
-    
+    def get_instance_id(self, semantic, category):
+        '''
+        返回gt的，当前frame的指定类别的所有物体ids
+        '''
+        object_ids = []
+        for id in np.unique(semantic):
+            if id > 0:
+                if id in self.category_obj_id[category]:
+                    object_ids.append(id)
+        
+        return len(object_ids) > 0, object_ids   
+                     
     def _preprocess_obs(self, obs, info, use_seg=True):
         args = self.args
         obs = obs.transpose(1, 2, 0)
@@ -163,28 +209,45 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             reward = min(obj) if len(obj) > 0 else -0.01
             info['reward'] = torch.exp(2*torch.tensor(1 - reward)) - 1 if reward > 0. else reward
         elif return_instance:
-            save_pred_ins = True
+            save_pred_ins = True if (self.args.eval and self.args.save_samples) else False
             if save_pred_ins:
                 self.save_data({'bbs': {'instances': obj}})
             
-            if info['semantic_gt'] is None:
+            if self.args.use_diversity_reward:
                 info['reward'] = 0.
-            else:
-                instance_gt = info['semantic_gt']['instances']
-                instance_pred = obj
-                if len(instance_gt) > 0:
-                    if len(instance_pred) == 0:
-                        info['reward'] = len(instance_gt)       # 漏检个数
-                    else:
-                        is_exist = self.obj_exist(instance_gt, instance_pred)
-                        info['reward'] = is_exist.sum()                        
+                bbsgt = info['bbsgt']['instances']
+                
+                if len(bbsgt) > 0:
+                    # 找到新类别, 奖励为5
+                    gt_cls = np.unique(bbsgt.pred_classes.cpu().numpy())
+                    new_cls = np.setdiff1d(gt_cls, np.array(self.found_class))
+                    if len(new_cls) > 0:
+                        info['reward'] += 5. * len(new_cls)     
+                        self.found_class.extend(new_cls.tolist())
+                        # 记录新类别的物体id
+                        curr_obj_ids = []
+                        for category in new_cls:
+                            category_ = clsid_name_maps[category]
+                            exists, cate_oi = self.get_instance_id(info['semantic_gt'], category_)
+                            curr_obj_ids.extend(cate_oi)
+                        self.found_id.extend(curr_obj_ids)
+                        
+                    # 找到旧类别的新物体id，奖励为3
+                    old_cls = np.setdiff1d(gt_cls, new_cls)
+                    curr_obj_ids = []
+                    for category in old_cls:
+                        category_ = clsid_name_maps[category]
+                        exists, cate_oi = self.get_instance_id(info['semantic_gt'], category_)
+                        curr_obj_ids.extend(cate_oi)
+                    new_obj_ids = np.setdiff1d(np.array(curr_obj_ids), np.array(self.found_id))
+                    if len(new_obj_ids) > 0:
+                        info['reward'] += 3.*len(new_obj_ids)
+                        self.found_id.extend(new_obj_ids.tolist())
                 else:
-                    info['reward'] = 0.
+                    info['reward'] = 0
         
         if not info['reward'] > 0.:
             info['reward'] = -0.01 
-        else:
-            info['reward'] = info['reward'] / 3.
         
         state = np.concatenate((rgb, depth, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)
@@ -247,8 +310,8 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             return semantic_pred
         else:
             return semantic_pred, obj
-        
-        
+    
+    
     def _visualize(self, inputs, mode="full"):
         
         args = self.args
