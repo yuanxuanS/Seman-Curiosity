@@ -79,7 +79,7 @@ def get_evaluator(cfg, dataset_name, output_folder=None):
             )
         )
     if evaluator_type in ["coco", "coco_panoptic_seg"]:
-        evaluator_list.append(COCOEvaluator(dataset_name, output_dir=output_folder))
+        evaluator_list.append(COCOEvaluator(dataset_name, output_dir=output_folder, use_fast_impl=False))
     if evaluator_type == "coco_panoptic_seg":
         evaluator_list.append(COCOPanopticEvaluator(dataset_name, output_folder))
     if evaluator_type == "cityscapes_instance":
@@ -114,7 +114,7 @@ def do_test(cfg, model):
         )
         results_i = inference_on_dataset(model, data_loader, evaluator, 
                                          vis=cfg.VIS,
-                                         save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs", ),
+                                         save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs/", ),
                                          metadata=get_custom_metadata(cfg.DATASET_NAME)
                                          )
         results[dataset_name] = results_i
