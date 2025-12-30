@@ -101,7 +101,7 @@ class VectorEnv:
         self,
         make_env_fn: Callable[..., Union[Env, RLEnv]] = _make_env_fn,
         env_fn_args: Sequence[Tuple] = None,
-        auto_reset_done: bool = False,
+        auto_reset_done: bool = True,
         multiprocessing_start_method: str = "forkserver",
     ) -> None:
         """..
