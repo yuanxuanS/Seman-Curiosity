@@ -36,7 +36,7 @@ from detectron2.data import (
     build_detection_test_loader,
     build_detection_train_loader,
 )
-from detectron2.data.datasets.builtin_meta import get_proj_metadata
+from detectron2.data.datasets.builtin_meta import get_custom_metadata
 from detectron2.engine import default_setup, default_writers, launch
 from detectron2.evaluation import (
     CityscapesInstanceEvaluator,
@@ -79,7 +79,7 @@ def get_evaluator(cfg, dataset_name, output_folder=None):
             )
         )
     if evaluator_type in ["coco", "coco_panoptic_seg"]:
-        evaluator_list.append(COCOEvaluator(dataset_name, output_dir=output_folder))
+        evaluator_list.append(COCOEvaluator(dataset_name, output_dir=output_folder, use_fast_impl=False))
     if evaluator_type == "coco_panoptic_seg":
         evaluator_list.append(COCOPanopticEvaluator(dataset_name, output_folder))
     if evaluator_type == "cityscapes_instance":
@@ -114,8 +114,8 @@ def do_test(cfg, model):
         )
         results_i = inference_on_dataset(model, data_loader, evaluator, 
                                          vis=cfg.VIS,
-                                         save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs", ),
-                                         metadata=get_proj_metadata(cfg.DATASET_NAME)
+                                         save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs/", ),
+                                         metadata=get_custom_metadata(cfg.DATASET_NAME)
                                          )
         results[dataset_name] = results_i
         if comm.is_main_process():
@@ -211,8 +211,14 @@ def main(args):
     model = build_model(cfg)
     
     keep_class = {
-    # 1: "bicylcle",
-    2: "car",       # key为原数据类别中的id
+    # # 1: "bicylcle",
+    # 2: "car",       # key为COCO原数据类别中的id
+    
+    56: "chair",
+    57: "couch",
+    59: "bed",
+    61: "toilet",
+    72: "refrigerator",
 }   
     extend_class = {    #把旧的n个类放在最前面，中间插入m 个新类，最后把旧的背景权重挪到第 n+m的位置。
     1: "building",

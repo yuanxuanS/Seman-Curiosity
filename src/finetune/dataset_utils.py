@@ -129,9 +129,11 @@ class SampleLoader:
         except Exception as ex:
             raise Exception(f"{env}, {episode}, {step}, {mod}")
 
-    def get_env_episode_and_steps_dense_list(self, filter_envs=None, filter_episodes=None):
-        mask = _mask_more_n_limit(self.steps_list, 1, limit_cnt=7) # 连续step相同的mask掉，去重复
-
+    def get_env_episode_and_steps_dense_list(self, filter_envs=None, filter_episodes=None, more_mode=True):
+        if more_mode:
+            mask = _mask_more_n_limit(self.steps_list, 1, limit_cnt=7) # 连续step相同的mask掉，去重复
+        else:
+            mask = _mask_more_n(self.steps_list, 1)
         if filter_envs is not None:
             mask_envs = np.array(
                 [li in filter_envs for li in self.env_list]

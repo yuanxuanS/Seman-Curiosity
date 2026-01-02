@@ -2,24 +2,24 @@ _BASE_: "../Base-RCNN-FPN.yaml"
 MODEL:
   META_ARCHITECTURE: "PruneRCNN"
   WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
-  MASK_ON: False
+  
+  MASK_ON: True
   RESNETS:
     DEPTH: 50
+  # NUM_CLASSES: 5
   ROI_HEADS:
-    IOU_THRESHOLDS: [0.5]
-  DEVICE: "cuda:1"
+    SCORE_THRESH_TEST: 0.5
 
-  
 DATASETS:
-  TRAIN: ("proj_train",)
-  TEST: ("proj_test",)
-DATASET_NAME: "proj"    # 
+  TRAIN: ("embodied_val",)
+  TEST: ("embodied_val",)
+DATASET_NAME: "embodied"    # 
 
 SOLVER:
   IMS_PER_BATCH: 16
   BASE_LR: 0.01  # Note that RetinaNet uses a different default learning rate
   STEPS: (60000, 80000)     
-  MAX_ITER: 510     #90000   # 
+  MAX_ITER: 50     #90000   # 
 
 VIS: False
 

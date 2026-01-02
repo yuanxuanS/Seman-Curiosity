@@ -227,7 +227,7 @@ def main():
         
         # diversity reward
         if args.use_diversity_reward:
-            diversity_reward = torch.tensor([info['reward'] for info in infos])
+            diversity_reward = torch.tensor([info['reward'] for info in infos], device=device)
         
            
         # get reward: map change after state transition
