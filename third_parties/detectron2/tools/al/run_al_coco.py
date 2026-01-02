@@ -152,8 +152,8 @@ def run(round, run_al):
                     ' ROUND_IDX %d ' % round + \
                     ' DATA_JSON %s ' % round_labeled_json + \
                     ' OUTPUT_DIR %s ' % round_work_dir + \
-                    ' IMG_ROOT %s ' % cfg.IMG_ROOT + \
-                    " MODEL.WEIGHTS ./models/model_final_bfca0b.pkl"
+                    ' IMG_ROOT %s ' % cfg.IMG_ROOT #+ \
+                    # " MODEL.WEIGHTS ./models/model_final_bfca0b.pkl"
                     
                     # ' MODEL.WEIGHTS ./models/model_final_bfca0b.pkl' + \
                     

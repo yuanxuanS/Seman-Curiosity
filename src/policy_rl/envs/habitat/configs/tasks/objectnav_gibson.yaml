@@ -54,7 +54,7 @@ DATASET:
   EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
   SCENES_DIR: "data/scene_datasets/"
   CONTENT_SCENES: [
-    # "Allensville.glb", 
+    "Allensville.glb", 
     # "Beechwood.glb", 
     # "Coffeen.glb", 
     # "Cosmos.glb",
@@ -83,7 +83,7 @@ DATASET:
     # "Corozal.glb",
     # "Darden.glb",
     # "Markleeville.glb",
-    "Wiconisco.glb"
+    # "Wiconisco.glb"
   # ]
 
   # dataset1 train
