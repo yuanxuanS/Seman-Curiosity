@@ -1,8 +1,8 @@
 import json
 
-offset = 853 # 432      # 134
-file = "./instance3.json"     # "./instance.json"
-file_new = "./instance_new_3.json"
+offset = 545 # 432      # 134
+file = "./anno/lyr-3.json"     # "./instance.json"
+file_new = "./anno/lyr-3-new.json"
 with open(file, "r") as f:
     data = json.load(f)
 
@@ -23,4 +23,4 @@ with open(file_new, "r") as f:
 ids = []
 for img in data['images']:
     ids.append(img['id'])
-print(ids)
+print(max(ids), min(ids))
