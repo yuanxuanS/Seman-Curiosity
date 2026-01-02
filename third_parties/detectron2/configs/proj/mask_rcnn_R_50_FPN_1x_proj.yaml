@@ -11,14 +11,14 @@ MODEL:
 
 DATASETS:
   TRAIN: ("proj_train",)
-  TEST: ("proj_train",)
+  TEST: ("proj_test",)
 DATASET_NAME: "proj"    # 
 
 SOLVER:
-  IMS_PER_BATCH: 16
+  IMS_PER_BATCH: 8
   BASE_LR: 0.01  # Note that RetinaNet uses a different default learning rate
   STEPS: (60000, 80000)     
-  MAX_ITER: 50     #90000   # 
+  MAX_ITER: 510     #90000   # 
 
 VIS: True
 
