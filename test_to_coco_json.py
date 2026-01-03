@@ -4,6 +4,8 @@ from src.finetune.dataset_utils import get_loader, SampleLoader
 from detectron2.structures.boxes import Boxes, BoxMode
 import numpy as np
 from pycocotools import mask as mask_utils
+import cv2
+import os
 def mask_to_rle(binary_mask):
     # 1. 确保 mask 是 uint8 类型的 Numpy 数组，并且是列优先(Fortran-order)
     # 这是 pycocotools 的强制要求
@@ -18,10 +20,15 @@ def mask_to_rle(binary_mask):
     return rle
 
 
-coco_json = "./test_instances.json"     # save path
-base_dir = "/home/wpp/Seman-Curiosity/data/vsqf_test_val5"
-data_pth = base_dir + "/data"
-
+coco_json = "./third_parties/detectron2/datasets/embodied/annotations/instances_val.json"     # save path
+base_dir = "/home/wpp/Seman-Curiosity/data/visibles"
+data_pth = base_dir + "/Collierville"
+save_rgb = True     # 转化为rgb进行保存
+save_rgb_dir = data_pth + "_imgs/"
+save_pos = True     # 是否保存采集位置
+if not os.path.exists(save_rgb_dir):
+    os.mkdir(save_rgb_dir,)
+    
 from src.vqf_constants import clsid_name_maps        # TODO
 
 CLASSES = clsid_name_maps
@@ -40,15 +47,30 @@ inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)
 img_id = 0
 anno_id = 0
 for env, episode, step in zip(inputs[0], inputs[1], inputs[2]):
+    type = ["bbsgt", "rgb", "depth"]
+    if save_pos:
+        type.append("position")
     sample_data = sampler.get_sample_multimodality(
-        env, episode, step, ["bbsgt", "rgb", "depth"])
+        env, episode, step, type)
+    
+    name = f"epi{episode}_env{env}_step{step}.png"
     
     instance = sample_data['bbsgt'].data
     if len(instance) > 0:
         rgb = sample_data['rgb'].data
+        if save_rgb:
+            cv2.imwrite(save_rgb_dir+name, rgb)
+        
         height, width = rgb.shape[:2]     #
         # print(rgb.shape)
+        
         # depth = sample_data['depth'].data
+        if save_pos:
+            position_info = sample_data['position']
+            pos = position_info.position.tolist()
+            rot = position_info.orientation.components.tolist()
+        
+        
         gt = sample_data['bbsgt']
         file_name = gt.frame.sense_info.get_path()
         y = gt.get_bbs_as_gt()
@@ -56,14 +78,20 @@ for env, episode, step in zip(inputs[0], inputs[1], inputs[2]):
         class_labels = np.array(
             [CLASSES_TO_IDX[x.item()] for x in class_labels]
         )       # 从0开始的cls id
-        # 
-        coco_dict['images'].append(
-            {
+        
+        info = {
+            
             "id": img_id,
-            "file_name": f"epi{episode}_env{env}_step{step}.png",
+            "file_name": name,
             "width": width,
             "height": height,
             }
+        if save_pos:
+            info["position"] = pos
+            info["rotation"] = rot
+            
+        coco_dict['images'].append(
+            info
         )
 
         for id_instance in range(len(instance)): 

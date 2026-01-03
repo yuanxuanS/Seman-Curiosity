@@ -15,6 +15,7 @@ from src.policy_rl.agents.vsqf_v1_1 import Vsqf_v1_1_Env_Agent
 from src.policy_rl.agents.vsqf_v2 import Vsqf_v2_Env_Agent
 from src.policy_rl.agents.vsqf_active import Vsqf_Active_Env_Agent
 from src.policy_rl.agents.expert import Expert_Env_Agent
+from src.policy_rl.agents.transport import Transport_Env_Agent
 from src.policy_rl.agents.vsqf_v3 import Vsqf_v3_Env_Agent
 from src.policy_rl.agents.active_cam import Active_cam_Agent
 from .curio_env import Seman_Curio_Env
@@ -35,6 +36,11 @@ def make_env_fn(args, config_env, rank):
                                 )
     elif args.env == "expert_exp":      # TODO
         env = Expert_Env_Agent(args=args, rank=rank,
+                                config_env=config_env,
+                                dataset=dataset
+                                )
+    elif args.env == "tp_exp":      # TODO
+        env = Transport_Env_Agent(args=args, rank=rank,
                                 config_env=config_env,
                                 dataset=dataset
                                 )
