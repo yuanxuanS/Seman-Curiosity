@@ -61,6 +61,9 @@ class Transport_Env_Agent(Transport_Env):
                     
             self.found_class = []
             self.found_id = []
+        
+        # for transport action
+        
     def reset(self):
         args = self.args
         
@@ -122,7 +125,7 @@ class Transport_Env_Agent(Transport_Env):
             self._visualize(inputs)
 
         # act and step
-        action = action + np.ones_like(action)   # output: 0-2, add to 1-3
+        # action = action + np.ones_like(action)   # output: 0-2, add to 1-3 这里是为了避开stop动作
         action = {'action': action}
         obs, _, done, info = super().step(action)       # 4,256,256
 

@@ -17,6 +17,7 @@ from habitat_sim.utils.common import quat_from_angle_axis
 import math
 import pickle
 import cv2
+import queue
 
 class Transport_Env(habitat.RLEnv):
     """The Semantic Curiosity environment class. The class is responsible
@@ -39,7 +40,7 @@ class Transport_Env(habitat.RLEnv):
             self.dataset_info = cPickle.load(f)
             
         # Specifying action and observation space
-        self.action_space = gym.spaces.Discrete(3)
+        self.action_space = gym.spaces.Discrete(4)
 
         self.observation_space = gym.spaces.Box(0, 255,
                                                 (3, args.frame_height,
@@ -57,7 +58,8 @@ class Transport_Env(habitat.RLEnv):
         
         # episode id 
         self.episode_no = 0
-
+        
+        # for sample locs
         # object loc
         categories = list(target_coco_categories.keys())
         category_objects = {name: [] for name in categories}
@@ -79,6 +81,13 @@ class Transport_Env(habitat.RLEnv):
         with open(saved_file+".pkl", "wb") as f:
             pickle.dump(category_objects, f)
         
+        # for transport action
+        tp_loc_f = "./data/visibles/"+scene_name+"_tploc.json"
+        with open(tp_loc_f, "r") as f:
+            self.tp_loc = json.load(f)       # dict: objid, loc
+            
+        self.tp_budget = 5
+        
     def reset(self):
         """Resets the environment to a new episode.
                 reset traversible initial location
@@ -96,11 +105,11 @@ class Transport_Env(habitat.RLEnv):
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
         if self.split == "val":
-            # obs = self.load_episode_loc()       # load episode for inital start position
-            self.sample_obj_visible_loc()
+            obs = self.load_episode_loc()       # load episode for inital start position
+            # self.sample_obj_visible_loc()
         else:
-            # obs = self.initial_possible_loc()       # train时，随机生成初始位置
-            self.sample_obj_visible_loc()
+            obs = self.initial_possible_loc()       # train时，随机生成初始位置
+            # self.sample_obj_visible_loc()
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
@@ -122,7 +131,9 @@ class Transport_Env(habitat.RLEnv):
             self.info['bbsgt'] = obs['bbsgt']
             self.found_class = []
             self.found_id = []
-        
+        # for transport
+        self.tp_budget = 5
+        self.info['tp_budget'] = self.tp_budget
         return state, self.info
     
     def get_navigable_points(self):
@@ -220,6 +231,13 @@ class Transport_Env(habitat.RLEnv):
                     action={'action': 0, 'action_args':{}},
                     task=self._env.task,
             ))
+        
+        # for transport action
+        tp_loc = self.tp_loc
+        self.q = queue.Queue(maxsize=len(tp_loc))
+        for i in range(len(tp_loc)):
+            # 2. 存入数据
+            self.q.put(list(tp_loc.values())[i])
         return obs
     
     def initial_possible_loc(self):
@@ -340,25 +358,35 @@ class Transport_Env(habitat.RLEnv):
         # action = action["action"]
 
         # step
-        obs, _, done, _ = super().step(action)
+        if action["action"] == 3:
+            print(f"action is transport")
+            loc = self.q.get()
+            self.q.put(loc)
+            self.tp_budget -= 1
+            action["action_args"] = {"tp_loc": [loc[0], loc[1]]}
+            obs, _, done, _ = super().step(action,)
+            
+            
+        else:
+            obs, _, done, _ = super().step(action)
 
         # reset location if on floor
         last_sim_location_z = self.this_sim_location_z
         this_sim_location_z, this_sim_rot = self.get_sim_location_z()
-        self.info['on_floor'] = (abs(this_sim_location_z - last_sim_location_z) > 0.1)
-        if self.info['on_floor']:
-            x, y, o = self.this_sim_location    # not update, thus 'this_sim_'
-            z = self.this_sim_location_z
-            pos = np.array([-y, z, -x])
-            self._env.sim.set_agent_state(pos, self.this_sim_rot)
-            obs = self._env.sim.get_observations_at(pos, self.this_sim_rot)
-            obs.update(
-                self._env.task.sensor_suite.get_observations(
-                    observations=obs,
-                    episode=self._env.current_episode,
-                    action={'action': 0, 'action_args':{}},
-                    task=self._env.task,
-            ))
+        # self.info['on_floor'] = (abs(this_sim_location_z - last_sim_location_z) > 0.1)
+        # if self.info['on_floor']:
+        #     x, y, o = self.this_sim_location    # not update, thus 'this_sim_'
+        #     z = self.this_sim_location_z
+        #     pos = np.array([-y, z, -x])
+        #     self._env.sim.set_agent_state(pos, self.this_sim_rot)
+        #     obs = self._env.sim.get_observations_at(pos, self.this_sim_rot)
+        #     obs.update(
+        #         self._env.task.sensor_suite.get_observations(
+        #             observations=obs,
+        #             episode=self._env.current_episode,
+        #             action={'action': 0, 'action_args':{}},
+        #             task=self._env.task,
+        #     ))
         # get newest pose( especially after checking if on floor)
         # self.last_sim_location = self.this_sim_location
         # self.this_sim_location = self.get_sim_location()
@@ -385,6 +413,9 @@ class Transport_Env(habitat.RLEnv):
         # for diverisity reward
         if self.args.use_diversity_reward:
             self.info['bbsgt'] = obs['bbsgt']
+            
+        # for transport action
+        self.info['tp_budget'] =self.tp_budget
         return state, 0., done, self.info
     
     def save_data(self, observations, env=None, episode=None, step=None, data_dir=""):

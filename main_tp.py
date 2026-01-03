@@ -78,7 +78,7 @@ def main():
     envs = make_vec_envs(args)      
     obs, infos = envs.reset()   # obs: rgb +depth + categories 16 TODO: ?
 
-    '''
+    # '''
     torch.set_grad_enabled(False)
 
     # Initializing Maps
@@ -91,6 +91,10 @@ def main():
     maps = Maps_Env(args)
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
+    
+    # fro transport action
+    tp_budget =np.array([info['tp_budget'] for info in infos])
+        
     
     # for visualize
     full_map = maps.full_map
@@ -110,12 +114,12 @@ def main():
             full_map[e, -1, :, :] = 1e-5
             p_input['sem_map_pred_full'] = full_map[e, 4:, :, :].argmax(0).cpu().numpy()
 
-
+    l_action_space = envs.get_action_space()[0]
     if args.agent == "rl":
         # Local policy observation space
         es = 3      # extra size: x, y, orientation
         l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
-        l_action_space = envs.get_action_space()[0]
+        
 
         # local policy recurrent layer size
         l_hidden_size = args.local_hidden_size
@@ -184,7 +188,9 @@ def main():
         l_action = l_action.cpu().numpy()
     
     elif args.agent == "random":
-        l_action = np.random.randint(0, 3, num_scenes)
+        l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
+        l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
     elif args.agent == "frontier":
         l_policy = Frontier(args)
         l_policy.reset(num_scenes)
@@ -292,7 +298,10 @@ def main():
 
             if args.agent == "frontier":
                 l_policy.reset(num_scenes)
-                
+        
+        # fro transport action
+        tp_budget =np.array([info['tp_budget'] for info in infos])
+    
         # Sample next action
         if args.agent == "rl":
             l_value, l_action, l_action_log_prob, l_rec_states = \
@@ -305,8 +314,9 @@ def main():
                 )
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
-            l_action = np.random.randint(0, 3, num_scenes)
-
+            l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
+            l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
+            l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
@@ -354,7 +364,7 @@ def main():
         # Training
         torch.set_grad_enabled(True)
         if l_step == args.num_local_steps - 1:
-            if not args.eval:
+            if not args.eval and args.agent == "rl":
                 l_next_value = l_policy.get_value(
                     l_rollouts.obs[-1],
                     l_rollouts.rec_states[-1],
@@ -437,7 +447,7 @@ def main():
         if (step * num_scenes) % args.save_periodic < \
                 num_scenes:
             total_steps = step * num_scenes
-            if not args.eval:
+            if not args.eval and args.agent == "rl":
                 torch.save(l_policy.state_dict(),
                            os.path.join(dump_dir,
                                         "periodic_{}.pth".format(total_steps)))
@@ -456,7 +466,7 @@ def main():
     if args.eval:
         print("Dumping eval details...")
         
-    '''
+    # '''
         
 if __name__ == "__main__":
     main()
