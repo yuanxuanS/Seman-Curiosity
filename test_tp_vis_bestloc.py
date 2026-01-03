@@ -59,9 +59,13 @@ img_dir = "./data/visibles/Collierville_imgs/"
 save_dir = "./data/visibles/Collierville_best/"
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
+    
+
+
 with open(best_loc_file, "r") as f:
     best_locs = json.load(f)
-# print(best_locs['3'][1][0])
+
+
 for obj_id, info in best_locs.items():
     if info[0] < 0:     # 不存在看到的
         continue
@@ -73,4 +77,5 @@ for obj_id, info in best_locs.items():
     rgb_img = cv2.imread(img_dir+rgb_name)
     # print(obj_id,info)
     rgb_img = visualize_coco_result(rgb_img, info[1][0])
-    cv2.imwrite(save_dir + f"/{step}.png", rgb_img)
+    cv2.imwrite(save_dir + f"/{step}_id{int(obj_id)}.png", rgb_img)
+    
