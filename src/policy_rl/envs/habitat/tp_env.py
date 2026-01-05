@@ -361,7 +361,7 @@ class Transport_Env(habitat.RLEnv):
 
         # step
         if action["action"] == 3:
-            print(f"action is transport")
+            print(f"action is transport in {self.rank}")
             loc = self.q.get()
             self.q.put(loc)
             self.tp_budget -= 1
@@ -449,7 +449,7 @@ class Transport_Env(habitat.RLEnv):
 
 
     def get_done(self, observations, *args):
-        if self.info['time'] >= self.args.max_episode_length - 2:       # 
+        if self.info['time'] >= self.args.max_episode_length - 1:       # 
             done = True
         else:
             done = False

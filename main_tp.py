@@ -69,6 +69,10 @@ def main():
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
     
+    # tp action distribution
+    episode_tp_step = np.zeros((num_scenes, 5))
+    episode_tp_idx = [0] * num_scenes
+    
     l_value_losses = deque(maxlen=1000)
     l_action_losses = deque(maxlen=1000)
     l_dist_entropies = deque(maxlen=1000)
@@ -213,6 +217,13 @@ def main():
     # print(f"action is {l_action}")
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
+    
+    # tp action
+    for i in range(num_scenes):
+        if l_action[i] ==3:
+            episode_tp_step[i][episode_tp_idx[i]] = 0
+            episode_tp_idx[i] += 1
+    
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
@@ -254,16 +265,19 @@ def main():
         if args.diversity_only:
             l_reward = torch.zeros_like(l_reward)
         
-        l_reward += penalty_r
+        l_reward += penalty_r * args.diver_coeff
         # divesity reward
         if args.use_diversity_reward:
-            l_reward += diversity_reward
-            l_reward *= args.diver_coeff
+            l_reward += diversity_reward * args.diver_coeff
 
         # ------------------------------------------------------------------ 
         # update local input, next state
         locs = full_pose.cpu().numpy()
         
+        # fro transport action
+        tp_budget =np.array([info['tp_budget'] for info in infos])
+        category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
+    
         if args.agent == "rl":
             # for e in range(num_scenes):
             #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
@@ -306,6 +320,13 @@ def main():
             l_reward = torch.zeros(num_scenes).to(device)
             last_reward = l_reward
             
+            episode_tp_mean = np.mean(episode_tp_step, axis=1).mean()
+            episode_tp_var = np.var(episode_tp_step, axis=1).mean()
+            print(f"tp action mean={episode_tp_mean}")
+            print(f"tp action var={episode_tp_var}")
+            print(episode_tp_step)
+            episode_tp_step = np.zeros_like(episode_tp_step)
+            episode_tp_idx = [0] * num_scenes
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
                     if x:
@@ -316,10 +337,7 @@ def main():
             if args.agent == "frontier":
                 l_policy.reset(num_scenes)
         
-        # fro transport action
-        tp_budget =np.array([info['tp_budget'] for info in infos])
-        category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
-    
+        
         # Sample next action
         if args.agent == "rl":
             l_value, l_action, l_action_log_prob, l_rec_states = \
@@ -341,6 +359,12 @@ def main():
                 l_action = np.random.randint(3, l_action_space.n, num_scenes)
             else:
                 l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        
+        # tp action
+        for i in range(num_scenes):
+            if l_action[i] ==3:
+                episode_tp_step[i, episode_tp_idx[i]] = (step + 1) % 500 
+                episode_tp_idx[i] += 1
             
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
@@ -376,11 +400,13 @@ def main():
         # print(f"action is {l_action}")
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
+        
+        
         # if episode over, reset maps
         for e, x in enumerate(done):    # if done, maps from new obs
             if x:
                 maps._init_map_and_pose_for_env(e)
-                print(f"Env {e}'s episode over in {step} step, {l_step} local step, reset maps")
+                print(f"Env {e}'s episode over in {step + 1} step, {l_step+ 1} local step, reset maps")
                 
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)

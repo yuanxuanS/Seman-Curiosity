@@ -303,12 +303,12 @@ class Uncertainty_Diversity_Policy(NNBase):
         # mask invalid tp action
         # --- 计算 Mask ---
         # 初始化全 1 掩码 [Batch, Num_Actions]
-        action_mask = torch.ones_like(x)
-        # 找到 budget 为 0 的索引
+        # action_mask = torch.ones_like(budget, )
+        # # 找到 budget 为 0 的索引
         invalid_indices = (budget <= 0)
-        # 将这些样本的最后一个动作（索引 -1）设为不可选 (0)
-        action_mask[invalid_indices, -1] = 0
-        return self.critic_linear(x).squeeze(-1), x, rnn_hxs, action_mask
+        # # 将这些样本的最后一个动作（索引 -1）设为不可选 (0)
+        # action_mask[invalid_indices] = 0
+        return self.critic_linear(x).squeeze(-1), x, rnn_hxs, invalid_indices
 
 
 # https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/model.py#L15
@@ -348,6 +348,7 @@ class RL_Policy(nn.Module):
         
 
         self.model_type = model_type
+        self.num_outputs = num_outputs
 
     @property
     def is_recurrent(self):
@@ -367,13 +368,16 @@ class RL_Policy(nn.Module):
 
     def act(self, inputs, rnn_hxs, masks, extras=None, deterministic=False):
         if self.model_type == 3:
-            value, actor_features, rnn_hxs, action_mask = self(inputs, rnn_hxs, masks, extras)
+            value, actor_features, rnn_hxs, invalid_indices = self(inputs, rnn_hxs, masks, extras)
             # 将 action_mask 为 0 的位置对应的 Logits 设为极负值
             # 这样在 Softmax 之后，这些动作的概率几乎为 0
-            actor_features = actor_features.masked_fill(action_mask == 0, -1e10)
+            dist = self.dist(actor_features)
+            action_mask = torch.ones((dist.logits.shape), device=dist.logits.device)
+            action_mask[invalid_indices, -1] = 0
+            dist.logits = dist.logits.masked_fill(action_mask == 0, -1e10)
         else:
             value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
-        dist = self.dist(actor_features)
+            dist = self.dist(actor_features)
 
         if deterministic:
             action = dist.mode()
@@ -386,14 +390,19 @@ class RL_Policy(nn.Module):
         return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks, extras=None):
-        value, _, _ = self(inputs, rnn_hxs, masks, extras)
+        value, _, _, _ = self(inputs, rnn_hxs, masks, extras)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action, extras=None):
-
-        value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
-        dist = self.dist(actor_features)
-
+        if self.model_type == 3:
+            value, actor_features, rnn_hxs,invalid_indices = self(inputs, rnn_hxs, masks, extras)
+            dist = self.dist(actor_features)
+            action_mask = torch.ones((dist.logits.shape), device=dist.logits.device)
+            action_mask[invalid_indices, -1] = 0
+            dist.logits = dist.logits.masked_fill(action_mask == 0, -1e10)
+        else:
+            value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
+            dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
