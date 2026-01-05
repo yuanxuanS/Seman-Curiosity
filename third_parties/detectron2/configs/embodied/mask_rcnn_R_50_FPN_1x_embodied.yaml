@@ -11,15 +11,15 @@ MODEL:
     SCORE_THRESH_TEST: 0.5
 
 DATASETS:
-  TRAIN: ("embodied_val",)
+  TRAIN: ("embodied_train",)
   TEST: ("embodied_val",)
 DATASET_NAME: "embodied"    # 
 
 SOLVER:
   IMS_PER_BATCH: 16
   BASE_LR: 0.01  # Note that RetinaNet uses a different default learning rate
-  STEPS: (60000, 80000)     
-  MAX_ITER: 50     #90000   # 
+  STEPS: (10000, ) # (60000, 80000)     
+  MAX_ITER: 15000   # 
 
 VIS: False
 

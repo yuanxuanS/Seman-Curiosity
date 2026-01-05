@@ -16,6 +16,7 @@ from habitat.core.embodied_task import (
     SimulatorTaskAction,
 )
 import magnum as mn
+import quaternion
 
 
 
@@ -177,7 +178,37 @@ class BaseAction(SimulatorTaskAction):
             sensor.rotation = self.quat_to_mnquat(camera_rotation_new)
         # self._sim.get_agent(0).set_state(agent_state)
         # self._sim._sim.get_agent(0).set_state(agent_state, infer_sensor_states=False)
+
+@registry.register_task_action
+class TransportAction(BaseAction):
+    '''
+    传送到指定地点
+    '''
+    def _get_uuid(self, *args, **kwargs) -> str:
+        return "transport"
     
+    def step(self, *args, **kwargs):
+        kwargs['task'].is_found_called = False
+        
+        target_loc = kwargs['tp_loc']
+        pos, rot = target_loc
+        pos = np.array(pos)
+        rot = quaternion.from_float_array(np.array(rot))
+        # self._sim.set_agent_state(pos, rot)
+        agent_state = self._sim.get_agent(0).get_state()
+        agent_state.position = pos
+        agent_state.rotation = rot
+        self._sim.get_agent(0).set_state(agent_state, infer_sensor_states=True)
+
+        # sensor_names = list(self._sim.agents[0]._sensors.keys())
+        # for sensor_name in sensor_names:
+        #     sensor = self._sim.agents[0]._sensors[sensor_name].node
+        #     sensor.position = pos
+        #     sensor.rotation = rot
+            
+        observations = super().step()
+
+        return observations
     
 @registry.register_task_action
 class CameraCaptureAction(BaseAction):

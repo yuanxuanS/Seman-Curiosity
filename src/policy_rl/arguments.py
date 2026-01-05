@@ -208,6 +208,16 @@ def get_args():
     parser.add_argument(
         "--use_diversity_reward", action="store_true", default=False
     )
+    # sample locs
+    parser.add_argument(
+        "--sampled_dir",
+        type=str,
+        default="",
+        help="path for sampled data",
+    )
+    parser.add_argument(
+        "--sample_mode", action="store_true", default=False
+    )
     # parse arguments
     args = parser.parse_args()
 
