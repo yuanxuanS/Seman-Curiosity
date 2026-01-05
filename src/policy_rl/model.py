@@ -298,7 +298,17 @@ class Uncertainty_Diversity_Policy(NNBase):
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         x = nn.ReLU()(self.policy_linear(x))        # action feature
-        return self.critic_linear(x).squeeze(-1), x, rnn_hxs
+        
+        
+        # mask invalid tp action
+        # --- 计算 Mask ---
+        # 初始化全 1 掩码 [Batch, Num_Actions]
+        action_mask = torch.ones_like(x)
+        # 找到 budget 为 0 的索引
+        invalid_indices = (budget <= 0)
+        # 将这些样本的最后一个动作（索引 -1）设为不可选 (0)
+        action_mask[invalid_indices, -1] = 0
+        return self.critic_linear(x).squeeze(-1), x, rnn_hxs, action_mask
 
 
 # https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/model.py#L15
@@ -356,8 +366,13 @@ class RL_Policy(nn.Module):
             return self.network(inputs, rnn_hxs, masks, extras)
 
     def act(self, inputs, rnn_hxs, masks, extras=None, deterministic=False):
-
-        value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
+        if self.model_type == 3:
+            value, actor_features, rnn_hxs, action_mask = self(inputs, rnn_hxs, masks, extras)
+            # 将 action_mask 为 0 的位置对应的 Logits 设为极负值
+            # 这样在 Softmax 之后，这些动作的概率几乎为 0
+            actor_features = actor_features.masked_fill(action_mask == 0, -1e10)
+        else:
+            value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -578,7 +593,7 @@ if __name__ == "__main__":
                                       'num_sem_categories': 5,
                                       'max_budget': 5,
                                       'input_category': True,
-                                      'input_budget': False
+                                      'input_budget': True
                                       })
 
     bs = 3
