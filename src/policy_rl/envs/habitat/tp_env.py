@@ -82,9 +82,10 @@ class Transport_Env(habitat.RLEnv):
             pickle.dump(category_objects, f)
         
         # for transport action
-        tp_loc_f = "./data/visibles/"+scene_name+"_tploc.json"
-        with open(tp_loc_f, "r") as f:
-            self.tp_loc = json.load(f)       # dict: objid, loc
+        if not args.sample_mode:
+            tp_loc_f = "./data/visibles/"+scene_name+"_tploc.json"
+            with open(tp_loc_f, "r") as f:
+                self.tp_loc = json.load(f)       # dict: objid, loc
             
         self.tp_budget = 5
         
@@ -105,11 +106,15 @@ class Transport_Env(habitat.RLEnv):
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
         if self.split == "val":
-            obs = self.load_episode_loc()       # load episode for inital start position
-            # self.sample_obj_visible_loc()
+            if not self.args.sample_mode:
+                obs = self.load_episode_loc()       # load episode for inital start position
+            else:
+                self.sample_obj_visible_loc()
         else:
-            obs = self.initial_possible_loc()       # train时，随机生成初始位置
-            # self.sample_obj_visible_loc()
+            if not self.args.sample_mode:
+                obs = self.initial_possible_loc()       # train时，随机生成初始位置
+            else:
+                self.sample_obj_visible_loc()
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']

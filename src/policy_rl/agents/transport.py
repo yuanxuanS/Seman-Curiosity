@@ -179,7 +179,7 @@ class Transport_Env_Agent(Transport_Env):
         args = self.args
         obs = obs.transpose(1, 2, 0)
         
-        rgb_ = obs[:, :, :3]     # 256,256,3
+        rgb_ = obs[:, :, :3]     # w,h,3
         depth_ = obs[:, :, 3:4]
         
         

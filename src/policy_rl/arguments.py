@@ -215,6 +215,9 @@ def get_args():
         default="",
         help="path for sampled data",
     )
+    parser.add_argument(
+        "--sample_mode", action="store_true", default=False
+    )
     # parse arguments
     args = parser.parse_args()
 

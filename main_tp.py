@@ -78,7 +78,7 @@ def main():
     envs = make_vec_envs(args)      
     obs, infos = envs.reset()   # obs: rgb +depth + categories 16 TODO: ?
 
-    # '''
+    
     torch.set_grad_enabled(False)
 
     # Initializing Maps
@@ -191,6 +191,8 @@ def main():
         l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
         l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
         l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
+    elif args.agent == "heuristic":
+        l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
     elif args.agent == "frontier":
         l_policy = Frontier(args)
         l_policy.reset(num_scenes)
@@ -199,6 +201,7 @@ def main():
             if args.visualize or args.print_images:
                 p_input["frontier_goal"] = goals[e]
                 p_input["short_time_goal"] = short_time_goals[e]
+    
     # transition:
     # pred instance, get semantic masks and step env: 
     actions = []
@@ -317,6 +320,13 @@ def main():
             l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
             l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
             l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
+        elif args.agent == "heuristic":
+            t = step % 500
+            if t % 83  == 82:
+                l_action = np.random.randint(3, l_action_space.n, num_scenes)
+            else:
+                l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+            
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
@@ -466,7 +476,7 @@ def main():
     if args.eval:
         print("Dumping eval details...")
         
-    # '''
+    
         
 if __name__ == "__main__":
     main()
