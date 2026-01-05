@@ -243,6 +243,7 @@ def main():
         if args.use_diversity_reward:
             diversity_reward = torch.tensor([info['diver_reward'] for info in infos], device=device)
         
+        penalty_r = torch.tensor([info['tp_penalty'] for info in infos], device=device)
            
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
@@ -252,9 +253,12 @@ def main():
 
         if args.diversity_only:
             l_reward = torch.zeros_like(l_reward)
+        
+        l_reward += penalty_r
         # divesity reward
         if args.use_diversity_reward:
             l_reward += diversity_reward
+            l_reward *= args.diver_coeff
 
         # ------------------------------------------------------------------ 
         # update local input, next state

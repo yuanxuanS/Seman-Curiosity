@@ -87,6 +87,7 @@ class Transport_Env_Agent(Transport_Env):
         
         # 初始位置的物体不作为奖励， 初始为0
         self.info['diver_reward'] = 0.
+        self.info['tp_penalty'] = 0.
         
         # for transport
         self.tp_budget = 5
@@ -141,9 +142,15 @@ class Transport_Env_Agent(Transport_Env):
         
         # preprocess obs
         obs, info = self._preprocess_obs(obs, info) 
+        
         self.last_action = action['action']     
         self.obs = obs
         self.info = info
+        
+        if action['action'] == 3:
+            self.info['tp_penalty'] = -4.       # 惩罚-4， 低于新类别奖励
+        else:
+            self.info['tp_penalty'] = 0.
 
 
         return obs, 0., done, info
@@ -242,7 +249,7 @@ class Transport_Env_Agent(Transport_Env):
                     gt_cls = np.unique(bbsgt.pred_classes.cpu().numpy())
                     new_cls = np.setdiff1d(gt_cls, np.array(self.found_class))
                     if len(new_cls) > 0:
-                        info['diver_reward'] += 5. * len(new_cls)     
+                        info['diver_reward'] += 6. * len(new_cls)     
                         self.found_class.extend(new_cls.tolist())
                         # 记录新类别的物体id
                         curr_obj_ids = []
