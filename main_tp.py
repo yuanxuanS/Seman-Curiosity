@@ -235,6 +235,7 @@ def main():
     
     l_reward = torch.zeros(num_scenes).to(device)
     last_reward = torch.zeros(num_scenes).to(device)
+    diver_cumu_r = torch.zeros(num_scenes).to(device)
 
     
     torch.set_grad_enabled(False)
@@ -261,14 +262,17 @@ def main():
             l_reward = last_reward
         else:
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+        reward = l_reward - last_reward
+        
 
         if args.diversity_only:
-            l_reward = torch.zeros_like(l_reward)
+            reward = torch.zeros_like(reward)
         
-        l_reward += penalty_r * args.diver_coeff
+        reward += penalty_r * args.diver_coeff
         # divesity reward
         if args.use_diversity_reward:
-            l_reward += diversity_reward * args.diver_coeff
+            reward += diversity_reward * args.diver_coeff
+            diver_cumu_r += diversity_reward * args.diver_coeff
 
         # ------------------------------------------------------------------ 
         # update local input, next state
@@ -292,7 +296,6 @@ def main():
             # print(f"input sxtras: {extras}")
             
         # Add samples to local policy storage
-        reward = l_reward - last_reward
         
         if args.agent == "rl":
             l_rollouts.insert(
@@ -305,6 +308,7 @@ def main():
         # 
         reward_mean = np.mean(reward.cpu().numpy())
         l_reward_mean = np.mean(l_reward.cpu().numpy())
+        diver_cumu_mean = np.mean(diver_cumu_r.cpu().numpy())
         per_step_rewards.append(reward_mean)
         per_step_l_rewards.append(l_reward_mean)
 
@@ -313,12 +317,16 @@ def main():
         
         if done[0]:
             r_ = np.mean(l_reward.cpu().numpy())
-            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
-            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
+            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean curios reward={r_}")
+            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean curios reward={r_}")
+            
+            print(f"episode mean diver reward={diver_cumu_mean}")
+            logging.info(f"episode mean diver reward={diver_cumu_mean}")
             l_episode_rewards.append(r_)
 
             l_reward = torch.zeros(num_scenes).to(device)
             last_reward = l_reward
+            diver_cumu_mean = torch.zeros(num_scenes).to(device)
             
             episode_tp_mean = np.mean(episode_tp_step, axis=1).mean()
             episode_tp_var = np.var(episode_tp_step, axis=1).mean()
@@ -327,6 +335,7 @@ def main():
             print(episode_tp_step)
             episode_tp_step = np.zeros_like(episode_tp_step)
             episode_tp_idx = [0] * num_scenes
+            
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
                     if x:
