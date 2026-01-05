@@ -85,6 +85,13 @@ class Transport_Env_Agent(Transport_Env):
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
         
+        # 初始位置的物体不作为奖励， 初始为0
+        self.info['diver_reward'] = 0.
+        
+        # for transport
+        self.tp_budget = 5
+        self.info['tp_budget'] = self.tp_budget
+        self.info['category_object'] = [len(self.curr_category_obj_id[name]) for name in sorted(list(target_coco_categories.keys()))]
         return obs, info
     
     def step_and_preprocess(self, action, inputs):
@@ -227,9 +234,9 @@ class Transport_Env_Agent(Transport_Env):
                 if len(bbsgt) > 0:
                     # 更新object个数统计
                     for category in self.curr_category_obj_id.keys():
-                        cate_objs = self.get_instance_id(info['semantic_gt'], category)
-                        self.curr_category_obj_id[category].append(cate_objs)
-                        self.curr_category_obj_id[category] = set(self.curr_category_obj_id[category])
+                        cate_objs = self.get_instance_id(info['semantic_gt'], category)[1]
+                        self.curr_category_obj_id[category].extend(cate_objs)
+                        self.curr_category_obj_id[category] = list(set(self.curr_category_obj_id[category]))
                         
                     # 找到新类别, 奖励为5
                     gt_cls = np.unique(bbsgt.pred_classes.cpu().numpy())

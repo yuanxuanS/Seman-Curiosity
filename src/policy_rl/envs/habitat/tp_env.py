@@ -77,9 +77,9 @@ class Transport_Env(habitat.RLEnv):
         sem_map = scene_info[floor_idx]['sem_map']
         self.sample_pts_num = int(sem_map[0].sum() / 5)
         
-        saved_file = "./data/visibles/info/cate_objs_"+scene_name
-        with open(saved_file+".pkl", "wb") as f:
-            pickle.dump(category_objects, f)
+        # saved_file = "./data/visibles/info/cate_objs_"+scene_name
+        # with open(saved_file+".pkl", "wb") as f:
+        #     pickle.dump(category_objects, f)
         
         # for transport action
         if not args.sample_mode:
@@ -136,10 +136,6 @@ class Transport_Env(habitat.RLEnv):
             self.info['bbsgt'] = obs['bbsgt']
             self.found_class = []
             self.found_id = []
-        # for transport
-        self.tp_budget = 5
-        self.info['tp_budget'] = self.tp_budget
-        self.info['category_object'] = [len(self.curr_category_obj_id[name]) for name in sorted(list(target_coco_categories.keys()))]
         return state, self.info
     
     def get_navigable_points(self):

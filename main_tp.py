@@ -94,7 +94,7 @@ def main():
     
     # fro transport action
     tp_budget =np.array([info['tp_budget'] for info in infos])
-    category_object = np.concat([info['category_object'] for info in infos])
+    category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
     
     # for visualize
     full_map = maps.full_map
@@ -174,8 +174,8 @@ def main():
             
         extras = torch.zeros(num_scenes, es)
         # extras[:, 0] = local_orientation[:, 0]
-        extras[:, :5] = category_object
-        extras[:, 5] = tp_budget.T
+        extras[:, :5] = torch.from_numpy(category_object)
+        extras[:, 5] = torch.from_numpy(tp_budget.T)
 
         l_rollouts.obs[0].copy_(local_input)   # 
         l_rollouts.extras[0].copy_(extras)
@@ -250,6 +250,8 @@ def main():
         else:
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
 
+        if args.diversity_only:
+            l_reward = torch.zeros_like(l_reward)
         # divesity reward
         if args.use_diversity_reward:
             l_reward += diversity_reward
@@ -267,8 +269,8 @@ def main():
             # extras[:, 0] = local_orientation[:, 0]
             # extras[:, :2] = local_xy[:]
             extras = torch.zeros(num_scenes, es)
-            extras[:, :5] = category_object
-            extras[:, 5] = tp_budget.T
+            extras[:, :5] = torch.from_numpy(category_object)
+            extras[:, 5] = torch.from_numpy(tp_budget.T)
             # print(f"input sxtras: {extras}")
             
         # Add samples to local policy storage
@@ -312,7 +314,7 @@ def main():
         
         # fro transport action
         tp_budget =np.array([info['tp_budget'] for info in infos])
-        category_object = np.concat([info['category_object'] for info in infos])
+        category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
     
         # Sample next action
         if args.agent == "rl":
