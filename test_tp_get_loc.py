@@ -17,20 +17,21 @@ for img_info in rgb_infos['images']:
         # print(step_num)  # 输出: 125
         rgb_input_info[step_num] = img_info
 
-     
-result_info = "/home/wpp/Seman-Curiosity/third_parties/detectron2/output/embodied_Coll/inference/embodied_val/coco_instances_results.json"
+scene_name = "Wiconisco"
+output_dir = f"embodied_{scene_name}"
+result_info = f"/home/wpp/Seman-Curiosity/third_parties/detectron2/output/{output_dir}/inference/embodied_val/coco_instances_results.json"
 with open(result_info, "r") as f:
     result_infos = json.load(f)     
 result_dict = {}
 for ri in result_infos:
     result_dict[ri['image_id']] = ri
 
-obj_rgbs_info="./data/visibles/info/Collierville.json"
+obj_rgbs_info=f"./data/visibles/info/{scene_name}.json"
 with open(obj_rgbs_info, 'r') as f:
     obj_rgb_ids = json.load(f)
 
 
-cate_obj = "./data/visibles/info/cate_objs_Collierville.pkl"
+cate_obj = f"./data/visibles/info/cate_objs_{scene_name}.pkl"
 with open(cate_obj, "rb") as f:
     cate_obj_info = pickle.load(f)
     
@@ -42,7 +43,7 @@ cate_mapping = {
     "refrigerator": 4,
 }
 
-best_loc_file = "./coll_best_loc.json"
+best_loc_file = f"./{scene_name}_best_loc.json"
 best_locs = {}
 for obj_id, rgb_ids in obj_rgb_ids.items():
     obj_id = int(obj_id)
@@ -57,6 +58,8 @@ for obj_id, rgb_ids in obj_rgb_ids.items():
     best_score = -10
     best_img = None
     for step in rgb_ids:
+        if step not in list(rgb_input_info.keys()):
+            continue
         image_id = rgb_input_info[step]['id']
         if image_id not in result_dict.keys():
             continue

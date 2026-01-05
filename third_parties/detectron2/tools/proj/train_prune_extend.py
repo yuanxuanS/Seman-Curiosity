@@ -115,7 +115,8 @@ def do_test(cfg, model):
         results_i = inference_on_dataset(model, data_loader, evaluator, 
                                          vis=cfg.VIS,
                                          save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs/", ),
-                                         metadata=get_custom_metadata(cfg.DATASET_NAME)
+                                         metadata=get_custom_metadata(cfg.DATASET_NAME),
+                                         embodied_type=True
                                          )
         results[dataset_name] = results_i
         if comm.is_main_process():
@@ -212,14 +213,14 @@ def main(args):
     
     keep_class = {
     
-    2: "car",       # key为COCO原数据类别中的id, 顺序对应最后的预测顺序
-    1: "bicylcle",
+    # 2: "car",       # key为COCO原数据类别中的id, 顺序对应最后的预测顺序
+    # 1: "bicylcle",
     
-    # 56: "chair",
-    # 57: "couch",
-    # 59: "bed",
-    # 61: "toilet",
-    # 72: "refrigerator",
+    56: "chair",
+    57: "couch",
+    59: "bed",
+    61: "toilet",
+    72: "refrigerator",
 }   
     extend_class = {    #把旧的n个类放在最前面，中间插入m 个新类，最后把旧的背景权重挪到第 n+m的位置。
     1: "building",

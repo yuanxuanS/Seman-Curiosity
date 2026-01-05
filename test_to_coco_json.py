@@ -19,13 +19,24 @@ def mask_to_rle(binary_mask):
     
     return rle
 
+json_dir = "./third_parties/detectron2/datasets/embodied/"
+if not os.path.exists(json_dir):
+    os.mkdir(json_dir)
 
-coco_json = "./third_parties/detectron2/datasets/embodied/annotations/instances_val.json"     # save path
-base_dir = "/home/wpp/Seman-Curiosity/data/visibles"
-data_pth = base_dir + "/Collierville"
-save_rgb = True     # 转化为rgb进行保存
+json_dir = json_dir + "annotations/"
+if not os.path.exists(json_dir):
+    os.mkdir(json_dir)
+
+coco_json = json_dir+"/instances_val.json"     # save path
+base_dir = "./data/visibles"
+scene_name = "Wiconisco"
+
+# data_pth = base_dir + "/" + scene_name
+data_pth = "data/vsqf_test_val5/data"
+# data_pth = "./exps/dump/tp_rand/episodes_data"
+save_rgb = False     # 转化为rgb进行保存
 save_rgb_dir = data_pth + "_imgs/"
-save_pos = True     # 是否保存采集位置
+save_pos = False     # 是否保存采集位置
 if not os.path.exists(save_rgb_dir):
     os.mkdir(save_rgb_dir,)
     

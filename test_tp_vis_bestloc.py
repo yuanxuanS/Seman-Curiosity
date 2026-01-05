@@ -53,10 +53,11 @@ def visualize_coco_result(rgb_img, coco_result, metadata_name="my_dataset"):
     
     return vis_output.get_image()
 
-
-best_loc_file = "./coll_best_loc.json"
-img_dir = "./data/visibles/Collierville_imgs/"
-save_dir = "./data/visibles/Collierville_best/"
+scene_name = "Wiconisco"
+envid = 1
+best_loc_file = f"./{scene_name}_best_loc.json"
+img_dir = f"./data/visibles/{scene_name}_imgs/"
+save_dir = f"./data/visibles/{scene_name}_best/"
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
     
@@ -72,7 +73,7 @@ for obj_id, info in best_locs.items():
     
     
     step = info[1][-1]
-    rgb_name = f"epi0_env0_step{step}.png"
+    rgb_name = f"epi0_env{envid}_step{step}.png"
     
     rgb_img = cv2.imread(img_dir+rgb_name)
     # print(obj_id,info)
