@@ -53,7 +53,7 @@ class Transport_Env_Agent(Transport_Env):
             
         # for diversity reward
         if args.use_diversity_reward:
-            self.category_obj_id = {name:[] for name in target_coco_categories.keys()}
+            self.category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
             
             for obj in self.habitat_env.sim.semantic_scene.objects[1:]:
                 if obj.category.name() in target_coco_categories.keys():
@@ -62,6 +62,8 @@ class Transport_Env_Agent(Transport_Env):
             self.found_class = []
             self.found_id = []
         
+        # for category object
+        self.curr_category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
         # for transport action
         
     def reset(self):
@@ -165,7 +167,7 @@ class Transport_Env_Agent(Transport_Env):
     
     def get_instance_id(self, semantic, category):
         '''
-        返回gt的，当前frame的指定类别的所有物体ids
+        返回当前frame的目标类别的所有物体ids
         '''
         object_ids = []
         for id in np.unique(semantic):
@@ -219,15 +221,21 @@ class Transport_Env_Agent(Transport_Env):
                 self.save_data({'bbs': {'instances': obj}})
             
             if self.args.use_diversity_reward:
-                info['reward'] = 0.
+                info['diver_reward'] = 0.
                 bbsgt = info['bbsgt']['instances']
                 
                 if len(bbsgt) > 0:
+                    # 更新object个数统计
+                    for category in self.curr_category_obj_id.keys():
+                        cate_objs = self.get_instance_id(info['semantic_gt'], category)
+                        self.curr_category_obj_id[category].append(cate_objs)
+                        self.curr_category_obj_id[category] = set(self.curr_category_obj_id[category])
+                        
                     # 找到新类别, 奖励为5
                     gt_cls = np.unique(bbsgt.pred_classes.cpu().numpy())
                     new_cls = np.setdiff1d(gt_cls, np.array(self.found_class))
                     if len(new_cls) > 0:
-                        info['reward'] += 5. * len(new_cls)     
+                        info['diver_reward'] += 5. * len(new_cls)     
                         self.found_class.extend(new_cls.tolist())
                         # 记录新类别的物体id
                         curr_obj_ids = []
@@ -246,13 +254,13 @@ class Transport_Env_Agent(Transport_Env):
                         curr_obj_ids.extend(cate_oi)
                     new_obj_ids = np.setdiff1d(np.array(curr_obj_ids), np.array(self.found_id))
                     if len(new_obj_ids) > 0:
-                        info['reward'] += 3.*len(new_obj_ids)
+                        info['diver_reward'] += 3.*len(new_obj_ids)
                         self.found_id.extend(new_obj_ids.tolist())
                 else:
-                    info['reward'] = 0
+                    info['diver_reward'] = 0
         
-        if not info['reward'] > 0.:
-            info['reward'] = -0.01 
+        # if not info['diver_reward'] > 0.:
+        #     info['diver_reward'] = -0.01 
         
         state = np.concatenate((rgb, depth, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)

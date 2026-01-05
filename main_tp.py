@@ -94,7 +94,7 @@ def main():
     
     # fro transport action
     tp_budget =np.array([info['tp_budget'] for info in infos])
-        
+    category_object = np.concat([info['category_object'] for info in infos])
     
     # for visualize
     full_map = maps.full_map
@@ -117,7 +117,7 @@ def main():
     l_action_space = envs.get_action_space()[0]
     if args.agent == "rl":
         # Local policy observation space
-        es = 3      # extra size: x, y, orientation
+        es = 5 + 1      # extra size: object count of categories, budget
         l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
         
 
@@ -125,11 +125,15 @@ def main():
         l_hidden_size = args.local_hidden_size
 
         # Local policy: TODO
-        l_policy = RL_Policy(l_observation_space.shape, l_action_space,
-                            model_type=1,
+        l_policy = RL_Policy(l_observation_space.shape, 
+                             l_action_space,
+                            model_type=3,
                             base_kwargs={'recurrent': args.use_recurrent_local,
                                         'hidden_size': l_hidden_size,
-                                        'num_sem_categories': args.num_sem_categories
+                                        'num_sem_categories': args.num_sem_categories - 1,
+                                        'max_budget': 5,
+                                        'input_category': True,
+                                        'input_budget': True
                                         }).to(device)
         
         l_agent = algo.PPO(l_policy, args.clip_param, args.ppo_epoch,
@@ -159,19 +163,19 @@ def main():
         # Get local policy input
         # local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
         local_input = obs[:, :3, ...]
-        local_orientation = torch.zeros(num_scenes, 1).long()
-        local_xy = torch.zeros(num_scenes, 2)
+        # local_orientation = torch.zeros(num_scenes, 1).long()
+        # local_xy = torch.zeros(num_scenes, 2)
         
         # locs = local_pose.cpu().numpy()
-        locs = full_pose.cpu().numpy()      # 使用全局pose
-        for e in range(num_scenes):
-            local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
-            local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+        # locs = full_pose.cpu().numpy()      # 使用全局pose
+        # for e in range(num_scenes):
+        #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
+        #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
             
         extras = torch.zeros(num_scenes, es)
         # extras[:, 0] = local_orientation[:, 0]
-        extras[:, 2] = local_orientation[:, 0]
-        extras[:, :2] = local_xy[:]
+        extras[:, :5] = category_object
+        extras[:, 5] = tp_budget.T
 
         l_rollouts.obs[0].copy_(local_input)   # 
         l_rollouts.extras[0].copy_(extras)
@@ -237,7 +241,7 @@ def main():
         
         # diversity reward
         if args.use_diversity_reward:
-            diversity_reward = torch.tensor([info['reward'] for info in infos], device=device)
+            diversity_reward = torch.tensor([info['diver_reward'] for info in infos], device=device)
         
            
         # get reward: map change after state transition
@@ -255,14 +259,18 @@ def main():
         locs = full_pose.cpu().numpy()
         
         if args.agent == "rl":
-            for e in range(num_scenes):
-                local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
-                local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+            # for e in range(num_scenes):
+            #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
+            #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
                 
             local_input = obs[:, :3, ...]       # rgb
-            extras[:, 0] = local_orientation[:, 0]
-            extras[:, :2] = local_xy[:]
+            # extras[:, 0] = local_orientation[:, 0]
+            # extras[:, :2] = local_xy[:]
+            extras = torch.zeros(num_scenes, es)
+            extras[:, :5] = category_object
+            extras[:, 5] = tp_budget.T
             # print(f"input sxtras: {extras}")
+            
         # Add samples to local policy storage
         reward = l_reward - last_reward
         
@@ -304,6 +312,7 @@ def main():
         
         # fro transport action
         tp_budget =np.array([info['tp_budget'] for info in infos])
+        category_object = np.concat([info['category_object'] for info in infos])
     
         # Sample next action
         if args.agent == "rl":

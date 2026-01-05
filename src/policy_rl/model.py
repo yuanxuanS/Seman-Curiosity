@@ -5,9 +5,9 @@ import torchvision.models as models
 
 import numpy as np
 
-from .utils.distributions import Categorical, DiagGaussian
-from .utils.model import get_grid, ChannelPool, Flatten, NNBase
-from .envs.utils import depth_utils as du
+from src.policy_rl.utils.distributions import Categorical, DiagGaussian
+from src.policy_rl.utils.model import get_grid, ChannelPool, Flatten, NNBase
+from src.policy_rl.envs.utils import depth_utils as du
 import cv2
 
 class Goal_Oriented_Semantic_Policy(NNBase):
@@ -89,7 +89,7 @@ class Semantic_map_policy(NNBase):
         self.linear1 = nn.Linear(out_size * 32 + 8, hidden_size)
         self.linear2 = nn.Linear(hidden_size, 256)
         self.critic_linear = nn.Linear(256, 1)
-        self.orientation_emb = nn.Embedding(72, 8)
+        self.orientation_emb = nn.Embedding(72, 8)      # 输入索引，映射为8维向量
         # self.goal_emb = nn.Embedding(num_sem_categories, 8)
         self.train()
 
@@ -171,6 +171,135 @@ class Semantic_Curiosity_Policy(NNBase):
         return self.critic_linear(x).squeeze(-1), x, rnn_hxs
 
 
+class Uncertainty_Diversity_Policy(NNBase):
+    def __init__(self, input_shape, num_actions,
+                 recurrent=True, hidden_size=512,
+                 num_sem_categories=5, 
+                 max_budget=5,
+                 input_category=False,
+                 input_budget=False):
+        super(Uncertainty_Diversity_Policy, self).__init__(
+            recurrent, hidden_size, hidden_size)
+        self.num_sem_categories = num_sem_categories
+        self.input_category = input_category
+        self.input_budget = input_budget
+        self.dropout = 0.5
+
+        resnet = models.resnet18(pretrained=True)
+        # resnet = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.resnet_l5 = nn.Sequential(*list(resnet.children())[0:8])
+
+        # Extra convolution layer
+        self.conv = nn.Sequential(*filter(bool, [
+            nn.Conv2d(512, 64, (1, 1), stride=(1, 1)),
+            nn.ReLU()
+        ]))
+
+        # convolution output size
+        input_test = torch.randn(1, 3, input_shape[1], input_shape[2])
+        conv_output = self.conv(self.resnet_l5(input_test))
+        self.conv_output_size = conv_output.view(-1).size(0)
+
+        if input_category:
+            # input object statis state
+            self.category_encoder = nn.Sequential(
+                nn.Linear(num_sem_categories, 64),
+                nn.ReLU(),
+                nn.Linear(64, 32), # 增加深度，使模型能理解标量间的复杂关系
+                nn.ReLU()
+            )
+        
+        if input_budget:
+            budget_dim = max_budget + 1
+            self.budget_encoder = nn.Sequential(
+                nn.Linear(budget_dim, 32),
+                nn.ReLU()
+            )
+        # projection layers
+        self.extra_dim = 0
+        if self.input_category:
+            self.extra_dim += 32
+        if self.input_budget:
+            self.extra_dim += 32
+        self.linear1 = nn.Linear(self.conv_output_size + self.extra_dim, hidden_size)
+        if self.dropout > 0:
+            self.dropout1 = nn.Dropout(self.dropout)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+
+        # Policy linear layer
+        self.policy_linear = nn.Linear(hidden_size, hidden_size // 2)
+        # critic linear layer
+        self.critic_linear = nn.Linear(hidden_size // 2, 1)
+
+        self.train()
+
+    @property
+    def output_size(self):
+        return self._hidden_size // 2
+
+    def get_budget_one_hot(self, current_budget, max_budget=5):
+        """
+        current_budget: 当前剩余的次数 (Tensor, shape: [batch_size])
+        max_budget: 最大允许的次数
+        return: batch_size, max_budget +1
+        """
+        # 确保 budget 是长整型，且范围在 [0, max_budget]
+        # 注意：one_hot 的类别数通常设为 max_budget + 1，因为包含 0
+        current_budget = current_budget.long().clamp(0, max_budget)
+        
+        # 转换为 one-hot
+        # 输出 shape: [batch_size, max_budget + 1]
+        one_hot = F.one_hot(current_budget, num_classes=max_budget + 1).float()
+        
+        return one_hot
+    
+    def forward(self, rgb, rnn_hxs, masks, extras=None):
+        resnet_output = self.resnet_l5(rgb[:, :3, :, :])
+        conv_output = self.conv(resnet_output)
+        
+        # extras[:, : num_sem_categories] 是物体个数
+        # extras[:, -1] 是动作 budget
+        # 注意：物体个数通常需要做简单的归一化(如 /10)或者保持 float
+        
+        category_info = extras[:, :self.num_sem_categories].float()
+        if self.input_category:
+            category_info = self.category_encoder(category_info)
+        
+        budget = extras[:, -1].float()
+        budget_vector = self.get_budget_one_hot(budget.T)
+        if self.input_budget:
+            budget_info = self.budget_encoder(budget_vector)
+        
+        if self.input_category and self.input_budget:
+            combined = torch.concat([conv_output.view(  # fnn 1
+                    -1, self.conv_output_size), category_info, budget_info], dim=1)
+        else:
+            if self.input_category:
+                combined = torch.concat([conv_output.view(  # fnn 1
+                    -1, self.conv_output_size), category_info,], dim=1)
+            if self.input_budget:
+                combined = torch.concat([conv_output.view(  # fnn 1
+                    -1, self.conv_output_size), budget_info], dim=1)
+            if (not self.input_category) and (not self.input_budget):
+                combined = conv_output.view(-1, self.conv_output_size)
+                
+        x = nn.ReLU()(self.linear1(combined))
+        
+        # print(f"resnet output: {resnet_output.shape}")
+        # print(f"conv output: {conv_output.shape}")
+        # print(f"x output: {x.shape}")
+        
+        if self.dropout > 0:
+            x = self.dropout1(x)
+        
+        x = nn.ReLU()(self.linear2(x))       # fnn 2
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        x = nn.ReLU()(self.policy_linear(x))        # action feature
+        return self.critic_linear(x).squeeze(-1), x, rnn_hxs
+
 
 # https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/model.py#L15
 class RL_Policy(nn.Module):
@@ -193,6 +322,9 @@ class RL_Policy(nn.Module):
         elif model_type == 2:
             self.network = Semantic_map_policy(
                 obs_shape, **base_kwargs)
+        elif model_type == 3:
+            self.network = Uncertainty_Diversity_Policy(
+                obs_shape, num_outputs, **base_kwargs)
         else:
             raise NotImplementedError
 
@@ -435,21 +567,27 @@ if __name__ == "__main__":
                                                 (3, 128,
                                                  128),
                                                 dtype='uint8')
-    action_space = gym.spaces.Discrete(3)
+    action_space = gym.spaces.Discrete(4)
     print(f"obs shape:{observation_space.shape}")
     
     device = "cuda:1"
     policy = RL_Policy(observation_space.shape,
-                action_space, model_type=1,
+                action_space, model_type=3,
                 base_kwargs={'recurrent': True,
                                       'hidden_size': 512,
-                                    #   'num_sem_categories': args.num_sem_categories
+                                      'num_sem_categories': 5,
+                                      'max_budget': 5,
+                                      'input_category': True,
+                                      'input_budget': False
                                       })
 
-    bs = 10
+    bs = 3
     rnn_hxs = torch.rand(bs, 512)
     l_masks = torch.ones(bs)
-    extras = None
+    extras = torch.zeros(bs, 6)
+    extras[:, :-1] = torch.randint(low=0, high=10, size=(bs, 5))
+    extras[:, -1] = torch.randint(low=0, high=5, size=(bs, ))
+    
     input = torch.rand(bs, 3, 128, 128)
     # value, action_feature, rnn_hxs = policy(input, rnn_hxs, l_masks, extras)
     # print(f"shape: \nvalue:{value.shape}\naction feature:{action_feature.shape}\n")

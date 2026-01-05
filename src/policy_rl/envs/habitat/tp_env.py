@@ -129,7 +129,7 @@ class Transport_Env(habitat.RLEnv):
         self.info['sensor_pose'] = [0., 0., 0.]
         self.info['semantic_gt'] = obs['semantic']
         self.info['depth'] = depth
-        self.info['reward'] = 0.
+        self.info['diver_reward'] = 0.
         
         # for diverisity reward
         if self.args.use_diversity_reward:
@@ -139,6 +139,7 @@ class Transport_Env(habitat.RLEnv):
         # for transport
         self.tp_budget = 5
         self.info['tp_budget'] = self.tp_budget
+        self.info['category_object'] = [len(self.curr_category_obj_id[name]) for name in sorted(list(target_coco_categories.keys()))]
         return state, self.info
     
     def get_navigable_points(self):
@@ -418,11 +419,14 @@ class Transport_Env(habitat.RLEnv):
         # for diverisity reward
         if self.args.use_diversity_reward:
             self.info['bbsgt'] = obs['bbsgt']
-            
+        
+        # for category object id 
+        self.info['category_object'] = [len(self.curr_category_obj_id[name]) for name in sorted(list(target_coco_categories.keys()))]
         # for transport action
         self.info['tp_budget'] =self.tp_budget
         return state, 0., done, self.info
-    
+
+        
     def save_data(self, observations, env=None, episode=None, step=None, data_dir=""):
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
