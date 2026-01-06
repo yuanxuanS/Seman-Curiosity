@@ -124,7 +124,7 @@ def main():
     l_action_space = envs.get_action_space()[0]
     if args.agent == "rl":
         # Local policy observation space
-        es = 5 + 1      # extra size: object count of categories, budget
+        es = 5 + 1 + 1      # extra size: object count of categories, budget, sslj
         l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
         
 
@@ -140,7 +140,8 @@ def main():
                                         'num_sem_categories': args.num_sem_categories - 1,
                                         'max_budget': 5,
                                         'input_category': True,
-                                        'input_budget': True
+                                        'input_budget': True,
+                                        'input_sslj': True
                                         }).to(device)
         
         l_agent = algo.PPO(l_policy, args.clip_param, args.ppo_epoch,
@@ -183,6 +184,7 @@ def main():
         # extras[:, 0] = local_orientation[:, 0]
         extras[:, :5] = torch.from_numpy(category_object)
         extras[:, 5] = torch.from_numpy(tp_budget.T)
+        extras[:, 6] = step_since_last_tp.T
 
         l_rollouts.obs[0].copy_(local_input)   # 
         l_rollouts.extras[0].copy_(extras)
@@ -303,6 +305,7 @@ def main():
             extras = torch.zeros(num_scenes, es)
             extras[:, :5] = torch.from_numpy(category_object)
             extras[:, 5] = torch.from_numpy(tp_budget.T)
+            extras[:, 6] = step_since_last_tp.T
             # print(f"input sxtras: {extras}")
             
         # Add samples to local policy storage
