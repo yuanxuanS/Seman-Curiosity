@@ -48,7 +48,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -72,6 +72,9 @@ def main():
     # tp action distribution
     episode_tp_step = np.zeros((num_scenes, 5))
     episode_tp_idx = [0] * num_scenes
+    
+    # tp penalty
+    step_since_last_tp = torch.zeros((num_scenes))
     
     l_value_losses = deque(maxlen=1000)
     l_action_losses = deque(maxlen=1000)
@@ -223,6 +226,8 @@ def main():
         if l_action[i] ==3:
             episode_tp_step[i][episode_tp_idx[i]] = 0
             episode_tp_idx[i] += 1
+            
+            step_since_last_tp[i] = 0       # 第一步tp，则惩罚大；（鼓励在原点先探索）
     
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
@@ -254,9 +259,14 @@ def main():
         # diversity reward
         if args.use_diversity_reward:
             diversity_reward = torch.tensor([info['diver_reward'] for info in infos], device=device)
-        
+                
         penalty_r = torch.tensor([info['tp_penalty'] for info in infos], device=device)
-           
+        # penalty_r *= (1 + 2 * torch.exp(- step_since_last_tp/ 25)).to(device) 
+        penalty_r = 0.8 * torch.tanh((step_since_last_tp - 40) / 20) - 0.2
+        # penalty_r *= args.diver_coeff
+        penalty_r = penalty_r.to(device)
+        
+        
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
@@ -268,7 +278,7 @@ def main():
         if args.diversity_only:
             reward = torch.zeros_like(reward)
         
-        reward += penalty_r * args.diver_coeff
+        reward += penalty_r
         # divesity reward
         if args.use_diversity_reward:
             reward += diversity_reward * args.diver_coeff
@@ -326,7 +336,7 @@ def main():
 
             l_reward = torch.zeros(num_scenes).to(device)
             last_reward = l_reward
-            diver_cumu_mean = torch.zeros(num_scenes).to(device)
+            diver_cumu_r = torch.zeros(num_scenes).to(device)
             
             episode_tp_mean = np.mean(episode_tp_step, axis=1).mean()
             episode_tp_var = np.var(episode_tp_step, axis=1).mean()
@@ -336,6 +346,7 @@ def main():
             episode_tp_step = np.zeros_like(episode_tp_step)
             episode_tp_idx = [0] * num_scenes
             
+            step_since_last_tp = torch.zeros_like(step_since_last_tp)
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
                     if x:
@@ -374,6 +385,7 @@ def main():
             if l_action[i] ==3:
                 episode_tp_step[i, episode_tp_idx[i]] = (step + 1) % 500 
                 episode_tp_idx[i] += 1
+                step_since_last_tp[i] = 0
             
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
@@ -409,7 +421,7 @@ def main():
         # print(f"action is {l_action}")
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
-        
+        step_since_last_tp += torch.ones_like(step_since_last_tp)
         
         # if episode over, reset maps
         for e, x in enumerate(done):    # if done, maps from new obs
