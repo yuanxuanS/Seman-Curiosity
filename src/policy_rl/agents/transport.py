@@ -148,7 +148,7 @@ class Transport_Env_Agent(Transport_Env):
         self.info = info
         
         if action['action'] == 3:
-            self.info['tp_penalty'] = -4.       # 惩罚-4， 低于新类别奖励
+            self.info['tp_penalty'] = 1.       # 做出惩罚
         else:
             self.info['tp_penalty'] = 0.
 

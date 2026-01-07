@@ -48,7 +48,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -243,6 +243,7 @@ def main():
     l_reward = torch.zeros(num_scenes).to(device)
     last_reward = torch.zeros(num_scenes).to(device)
     diver_cumu_r = torch.zeros(num_scenes).to(device)
+    cumu_r = torch.zeros(num_scenes).to(device)
 
     
     torch.set_grad_enabled(False)
@@ -264,11 +265,14 @@ def main():
                 
         penalty_r = torch.tensor([info['tp_penalty'] for info in infos], device=device)
         # penalty_r *= (1 + 2 * torch.exp(- step_since_last_tp/ 25)).to(device) 
-        penalty_r = 0.8 * torch.tanh((step_since_last_tp - 40) / 20) - 0.2
+        penalty_r *= (0.8 * torch.tanh((step_since_last_tp - 40) / 20) - 0.2).to(device)
         # penalty_r *= args.diver_coeff
         penalty_r = penalty_r.to(device)
         
-        
+        # update after use it
+        for i in range(num_scenes):
+            if l_action[i] ==3:
+                step_since_last_tp[i] = 0
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
@@ -286,6 +290,7 @@ def main():
             reward += diversity_reward * args.diver_coeff
             diver_cumu_r += diversity_reward * args.diver_coeff
 
+        cumu_r += reward
         # ------------------------------------------------------------------ 
         # update local input, next state
         locs = full_pose.cpu().numpy()
@@ -322,6 +327,7 @@ def main():
         reward_mean = np.mean(reward.cpu().numpy())
         l_reward_mean = np.mean(l_reward.cpu().numpy())
         diver_cumu_mean = np.mean(diver_cumu_r.cpu().numpy())
+        all_r_mean = np.mean(cumu_r.cpu().numpy())
         per_step_rewards.append(reward_mean)
         per_step_l_rewards.append(l_reward_mean)
 
@@ -336,10 +342,14 @@ def main():
             print(f"episode mean diver reward={diver_cumu_mean}")
             logging.info(f"episode mean diver reward={diver_cumu_mean}")
             l_episode_rewards.append(r_)
+            
+            print(f"all episode mean reward={all_r_mean}")
+            logging.info(f"all episode mean reward={all_r_mean}")
 
             l_reward = torch.zeros(num_scenes).to(device)
             last_reward = l_reward
             diver_cumu_r = torch.zeros(num_scenes).to(device)
+            cumu_r = torch.zeros(num_scenes).to(device)
             
             episode_tp_mean = np.mean(episode_tp_step, axis=1).mean()
             episode_tp_var = np.var(episode_tp_step, axis=1).mean()
@@ -377,8 +387,8 @@ def main():
             l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
             l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
         elif args.agent == "heuristic":
-            t = step % 500
-            if t % 83  == 82:
+            t = (step + 1) % 500
+            if t % 90  == 0:
                 l_action = np.random.randint(3, l_action_space.n, num_scenes)
             else:
                 l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
@@ -388,7 +398,7 @@ def main():
             if l_action[i] ==3:
                 episode_tp_step[i, episode_tp_idx[i]] = (step + 1) % 500 
                 episode_tp_idx[i] += 1
-                step_since_last_tp[i] = 0
+                # step_since_last_tp[i] = 0
             
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
