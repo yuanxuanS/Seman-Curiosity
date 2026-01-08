@@ -131,6 +131,10 @@ class Transport_Env(habitat.RLEnv):
         self.info['depth'] = depth
         self.info['diver_reward'] = 0.
         
+        
+        self.curr_category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
+        self.cumu_detected_category = {name:0 for name in sorted(list(target_coco_categories.keys()))}
+        
         # for diverisity reward
         if self.args.use_diversity_reward:
             self.info['bbsgt'] = obs['bbsgt']

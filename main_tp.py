@@ -48,7 +48,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -284,7 +284,8 @@ def main():
         if args.diversity_only:
             reward = torch.zeros_like(reward)
         
-        reward += penalty_r
+        if args.with_penalty:
+            reward += penalty_r
         # divesity reward
         if args.use_diversity_reward:
             reward += diversity_reward * args.diver_coeff
