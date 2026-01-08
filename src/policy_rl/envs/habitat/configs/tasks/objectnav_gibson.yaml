@@ -79,11 +79,11 @@ DATASET:
     # "Wainscott.glb", 
     # "Woodbine.glb" 
   # ]
-    # "Collierville.glb",
+    "Collierville.glb",
     # "Corozal.glb",
     # "Darden.glb",
     # "Markleeville.glb",
-    "Wiconisco.glb"
+    # "Wiconisco.glb"
   # ]
 
   # dataset1 train
