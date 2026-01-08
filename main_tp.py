@@ -48,7 +48,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -68,6 +68,13 @@ def main():
     l_episode_rewards = []
     per_step_l_rewards = deque(maxlen=1000)
     per_step_rewards = deque(maxlen=1000)
+    
+    # tp action distribution
+    episode_tp_step = np.zeros((num_scenes, 5))
+    episode_tp_idx = [0] * num_scenes
+    
+    # tp penalty
+    step_since_last_tp = torch.zeros((num_scenes))
     
     l_value_losses = deque(maxlen=1000)
     l_action_losses = deque(maxlen=1000)
@@ -94,7 +101,7 @@ def main():
     
     # fro transport action
     tp_budget =np.array([info['tp_budget'] for info in infos])
-    category_object = np.concat([info['category_object'] for info in infos])
+    category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
     
     # for visualize
     full_map = maps.full_map
@@ -117,7 +124,7 @@ def main():
     l_action_space = envs.get_action_space()[0]
     if args.agent == "rl":
         # Local policy observation space
-        es = 5 + 1      # extra size: object count of categories, budget
+        es = 5 + 1 + 1      # extra size: object count of categories, budget, sslj
         l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
         
 
@@ -133,7 +140,8 @@ def main():
                                         'num_sem_categories': args.num_sem_categories - 1,
                                         'max_budget': 5,
                                         'input_category': True,
-                                        'input_budget': True
+                                        'input_budget': True,
+                                        'input_sslj': True
                                         }).to(device)
         
         l_agent = algo.PPO(l_policy, args.clip_param, args.ppo_epoch,
@@ -174,8 +182,9 @@ def main():
             
         extras = torch.zeros(num_scenes, es)
         # extras[:, 0] = local_orientation[:, 0]
-        extras[:, :5] = category_object
-        extras[:, 5] = tp_budget.T
+        extras[:, :5] = torch.from_numpy(category_object)
+        extras[:, 5] = torch.from_numpy(tp_budget.T)
+        extras[:, 6] = step_since_last_tp.T
 
         l_rollouts.obs[0].copy_(local_input)   # 
         l_rollouts.extras[0].copy_(extras)
@@ -213,6 +222,15 @@ def main():
     # print(f"action is {l_action}")
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
+    
+    # tp action
+    for i in range(num_scenes):
+        if l_action[i] ==3:
+            episode_tp_step[i][episode_tp_idx[i]] = 0
+            episode_tp_idx[i] += 1
+            
+            step_since_last_tp[i] = 0       # 第一步tp，则惩罚大；（鼓励在原点先探索）
+    
     # update map
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
@@ -224,6 +242,8 @@ def main():
     
     l_reward = torch.zeros(num_scenes).to(device)
     last_reward = torch.zeros(num_scenes).to(device)
+    diver_cumu_r = torch.zeros(num_scenes).to(device)
+    cumu_r = torch.zeros(num_scenes).to(device)
 
     
     torch.set_grad_enabled(False)
@@ -242,22 +262,44 @@ def main():
         # diversity reward
         if args.use_diversity_reward:
             diversity_reward = torch.tensor([info['diver_reward'] for info in infos], device=device)
+                
+        penalty_r = torch.tensor([info['tp_penalty'] for info in infos], device=device)
+        # penalty_r *= (1 + 2 * torch.exp(- step_since_last_tp/ 25)).to(device) 
+        penalty_r *= (0.8 * torch.tanh((step_since_last_tp - 40) / 20) - 0.2).to(device)
+        # penalty_r *= args.diver_coeff
+        penalty_r = penalty_r.to(device)
         
-           
+        # update after use it
+        for i in range(num_scenes):
+            if l_action[i] ==3:
+                step_since_last_tp[i] = 0
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+        reward = l_reward - last_reward
+        
 
+        if args.diversity_only:
+            reward = torch.zeros_like(reward)
+        
+        if args.with_penalty:
+            reward += penalty_r
         # divesity reward
         if args.use_diversity_reward:
-            l_reward += diversity_reward
+            reward += diversity_reward * args.diver_coeff
+            diver_cumu_r += diversity_reward * args.diver_coeff
 
+        cumu_r += reward
         # ------------------------------------------------------------------ 
         # update local input, next state
         locs = full_pose.cpu().numpy()
         
+        # fro transport action
+        tp_budget =np.array([info['tp_budget'] for info in infos])
+        category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
+    
         if args.agent == "rl":
             # for e in range(num_scenes):
             #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
@@ -267,12 +309,12 @@ def main():
             # extras[:, 0] = local_orientation[:, 0]
             # extras[:, :2] = local_xy[:]
             extras = torch.zeros(num_scenes, es)
-            extras[:, :5] = category_object
-            extras[:, 5] = tp_budget.T
+            extras[:, :5] = torch.from_numpy(category_object)
+            extras[:, 5] = torch.from_numpy(tp_budget.T)
+            extras[:, 6] = step_since_last_tp.T
             # print(f"input sxtras: {extras}")
             
         # Add samples to local policy storage
-        reward = l_reward - last_reward
         
         if args.agent == "rl":
             l_rollouts.insert(
@@ -285,6 +327,8 @@ def main():
         # 
         reward_mean = np.mean(reward.cpu().numpy())
         l_reward_mean = np.mean(l_reward.cpu().numpy())
+        diver_cumu_mean = np.mean(diver_cumu_r.cpu().numpy())
+        all_r_mean = np.mean(cumu_r.cpu().numpy())
         per_step_rewards.append(reward_mean)
         per_step_l_rewards.append(l_reward_mean)
 
@@ -293,13 +337,30 @@ def main():
         
         if done[0]:
             r_ = np.mean(l_reward.cpu().numpy())
-            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
-            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean reward={r_}")
+            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean curios reward={r_}")
+            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean curios reward={r_}")
+            
+            print(f"episode mean diver reward={diver_cumu_mean}")
+            logging.info(f"episode mean diver reward={diver_cumu_mean}")
             l_episode_rewards.append(r_)
+            
+            print(f"all episode mean reward={all_r_mean}")
+            logging.info(f"all episode mean reward={all_r_mean}")
 
             l_reward = torch.zeros(num_scenes).to(device)
             last_reward = l_reward
+            diver_cumu_r = torch.zeros(num_scenes).to(device)
+            cumu_r = torch.zeros(num_scenes).to(device)
             
+            episode_tp_mean = np.mean(episode_tp_step, axis=1).mean()
+            episode_tp_var = np.var(episode_tp_step, axis=1).mean()
+            print(f"tp action mean={episode_tp_mean}")
+            print(f"tp action var={episode_tp_var}")
+            print(episode_tp_step)
+            episode_tp_step = np.zeros_like(episode_tp_step)
+            episode_tp_idx = [0] * num_scenes
+            
+            step_since_last_tp = torch.zeros_like(step_since_last_tp)
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
                     if x:
@@ -310,10 +371,7 @@ def main():
             if args.agent == "frontier":
                 l_policy.reset(num_scenes)
         
-        # fro transport action
-        tp_budget =np.array([info['tp_budget'] for info in infos])
-        category_object = np.concat([info['category_object'] for info in infos])
-    
+        
         # Sample next action
         if args.agent == "rl":
             l_value, l_action, l_action_log_prob, l_rec_states = \
@@ -330,11 +388,18 @@ def main():
             l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
             l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
         elif args.agent == "heuristic":
-            t = step % 500
-            if t % 83  == 82:
+            t = (step + 1) % 500
+            if t % 90  == 0:
                 l_action = np.random.randint(3, l_action_space.n, num_scenes)
             else:
                 l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        
+        # tp action
+        for i in range(num_scenes):
+            if l_action[i] ==3:
+                episode_tp_step[i, episode_tp_idx[i]] = (step + 1) % 500 
+                episode_tp_idx[i] += 1
+                # step_since_last_tp[i] = 0
             
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
@@ -370,11 +435,13 @@ def main():
         # print(f"action is {l_action}")
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
+        step_since_last_tp += torch.ones_like(step_since_last_tp)
+        
         # if episode over, reset maps
         for e, x in enumerate(done):    # if done, maps from new obs
             if x:
                 maps._init_map_and_pose_for_env(e)
-                print(f"Env {e}'s episode over in {step} step, {l_step} local step, reset maps")
+                print(f"Env {e}'s episode over in {step + 1} step, {l_step+ 1} local step, reset maps")
                 
         # update map
         local_map, local_pose = maps.update_semantic_map(obs, infos)

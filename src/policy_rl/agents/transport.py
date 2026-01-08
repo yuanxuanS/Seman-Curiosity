@@ -52,18 +52,19 @@ class Transport_Env_Agent(Transport_Env):
             self.goal_name = "No"
             
         # for diversity reward
-        if args.use_diversity_reward:
-            self.category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
-            
-            for obj in self.habitat_env.sim.semantic_scene.objects[1:]:
-                if obj.category.name() in target_coco_categories.keys():
-                    self.category_obj_id[obj.category.name()].append(int(obj.id.replace('_', '')))
-                    
+        
+        self.category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
+        
+        for obj in self.habitat_env.sim.semantic_scene.objects[1:]:
+            if obj.category.name() in target_coco_categories.keys():
+                self.category_obj_id[obj.category.name()].append(int(obj.id.replace('_', '')))
+        if args.use_diversity_reward:          
             self.found_class = []
             self.found_id = []
         
         # for category object
         self.curr_category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
+        self.cumu_detected_category = {name:0 for name in sorted(list(target_coco_categories.keys()))}
         # for transport action
         
     def reset(self):
@@ -85,6 +86,15 @@ class Transport_Env_Agent(Transport_Env):
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
         
+        # 初始位置的物体不作为奖励， 初始为0
+        self.info['diver_reward'] = 0.
+        self.info['tp_penalty'] = 0.
+        
+        # for transport
+        self.tp_budget = 5
+        self.info['tp_budget'] = self.tp_budget
+        self.info['category_object'] = [len(self.curr_category_obj_id[name]) for name in sorted(list(target_coco_categories.keys()))]
+        self.info['detected_category_object']= [self.cumu_detected_category[name] for name in sorted(list(target_coco_categories.keys()))]
         return obs, info
     
     def step_and_preprocess(self, action, inputs):
@@ -134,9 +144,15 @@ class Transport_Env_Agent(Transport_Env):
         
         # preprocess obs
         obs, info = self._preprocess_obs(obs, info) 
+        
         self.last_action = action['action']     
         self.obs = obs
         self.info = info
+        
+        if action['action'] == 3:
+            self.info['tp_penalty'] = 1.       # 做出惩罚
+        else:
+            self.info['tp_penalty'] = 0.
 
 
         return obs, 0., done, info
@@ -220,22 +236,45 @@ class Transport_Env_Agent(Transport_Env):
             if save_pred_ins:
                 self.save_data({'bbs': {'instances': obj}})
             
+            # 更新object个数统计
+            for category in self.curr_category_obj_id.keys():
+                cate_objs = self.get_instance_id(info['semantic_gt'], category)[1]
+                self.curr_category_obj_id[category].extend(cate_objs)
+                self.curr_category_obj_id[category] = list(set(self.curr_category_obj_id[category]))
+            
+            # 更新每帧检测到的isntance类型
+            if len(obj) > 1:
+                for pcls in obj.pred_classes.cpu().numpy():
+                    if pcls in clsid_name_maps.keys():
+                        category = clsid_name_maps[pcls]
+                        self.cumu_detected_category[category] += 1
+
             if self.args.use_diversity_reward:
                 info['diver_reward'] = 0.
                 bbsgt = info['bbsgt']['instances']
                 
+                if len(obj) > 0:
+                    ## diver reward 2
+                    # R(n_c) = max(0, 1 - n_c/T) * W
+                    base_W = 1  # W
+                    T = 100
+                    d_r = 0.
+                    for pcls in obj.pred_classes.cpu().numpy():
+                        if pcls in clsid_name_maps.keys():
+                            category = clsid_name_maps[pcls]
+                            cumu_n = self.cumu_detected_category[category]
+                            d_r += max(0, 1-cumu_n/T )
+                    info['diver_reward'] = d_r * base_W
+                    '''
                 if len(bbsgt) > 0:
-                    # 更新object个数统计
-                    for category in self.curr_category_obj_id.keys():
-                        cate_objs = self.get_instance_id(info['semantic_gt'], category)
-                        self.curr_category_obj_id[category].append(cate_objs)
-                        self.curr_category_obj_id[category] = set(self.curr_category_obj_id[category])
-                        
+                    
+                    
+                    ## diver reward 1
                     # 找到新类别, 奖励为5
                     gt_cls = np.unique(bbsgt.pred_classes.cpu().numpy())
                     new_cls = np.setdiff1d(gt_cls, np.array(self.found_class))
                     if len(new_cls) > 0:
-                        info['diver_reward'] += 5. * len(new_cls)     
+                        info['diver_reward'] += 6. * len(new_cls)     
                         self.found_class.extend(new_cls.tolist())
                         # 记录新类别的物体id
                         curr_obj_ids = []
@@ -256,6 +295,7 @@ class Transport_Env_Agent(Transport_Env):
                     if len(new_obj_ids) > 0:
                         info['diver_reward'] += 3.*len(new_obj_ids)
                         self.found_id.extend(new_obj_ids.tolist())
+                     '''
                 else:
                     info['diver_reward'] = 0
         

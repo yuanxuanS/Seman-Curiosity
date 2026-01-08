@@ -10,6 +10,19 @@ from src.policy_rl.utils.model import get_grid, ChannelPool, Flatten, NNBase
 from src.policy_rl.envs.utils import depth_utils as du
 import cv2
 
+class RBFEncoding(nn.Module):
+    def __init__(self, centers, sigma=15.0):
+        super(RBFEncoding, self).__init__()
+        # centers: 预设的关键步数点，例如 [0, 10, 20, 40, 60, 80]
+        self.register_buffer('centers', torch.tensor(centers).float())
+        self.sigma = sigma
+
+    def forward(self, d):
+        # d: batch * 1
+        # 利用广播机制计算: (batch * 1) - (1 * num_centers) -> batch * num_centers
+        distances = d - self.centers.unsqueeze(0)
+        return torch.exp(-(distances**2) / (2 * self.sigma**2))
+    
 class Goal_Oriented_Semantic_Policy(NNBase):
 
     def __init__(self, input_shape, recurrent=False, hidden_size=512,
@@ -177,12 +190,14 @@ class Uncertainty_Diversity_Policy(NNBase):
                  num_sem_categories=5, 
                  max_budget=5,
                  input_category=False,
-                 input_budget=False):
+                 input_budget=False,
+                 input_sslj=False):
         super(Uncertainty_Diversity_Policy, self).__init__(
             recurrent, hidden_size, hidden_size)
         self.num_sem_categories = num_sem_categories
         self.input_category = input_category
         self.input_budget = input_budget
+        self.input_sslj = input_sslj
         self.dropout = 0.5
 
         resnet = models.resnet18(pretrained=True)
@@ -215,11 +230,22 @@ class Uncertainty_Diversity_Policy(NNBase):
                 nn.Linear(budget_dim, 32),
                 nn.ReLU()
             )
+        
+        # for step encoding
+        if input_sslj:
+            self.step_encoding = RBFEncoding([10, 20, 40, 60, 80])
+            self.sslj_encoder = nn.Sequential(
+                nn.Linear(5, 32),
+                nn.ReLU()
+            )
+        
         # projection layers
         self.extra_dim = 0
         if self.input_category:
             self.extra_dim += 32
         if self.input_budget:
+            self.extra_dim += 32
+        if self.input_sslj:
             self.extra_dim += 32
         self.linear1 = nn.Linear(self.conv_output_size + self.extra_dim, hidden_size)
         if self.dropout > 0:
@@ -231,6 +257,7 @@ class Uncertainty_Diversity_Policy(NNBase):
         # critic linear layer
         self.critic_linear = nn.Linear(hidden_size // 2, 1)
 
+        
         self.train()
 
     @property
@@ -253,6 +280,8 @@ class Uncertainty_Diversity_Policy(NNBase):
         
         return one_hot
     
+
+    
     def forward(self, rgb, rnn_hxs, masks, extras=None):
         resnet_output = self.resnet_l5(rgb[:, :3, :, :])
         conv_output = self.conv(resnet_output)
@@ -265,15 +294,25 @@ class Uncertainty_Diversity_Policy(NNBase):
         if self.input_category:
             category_info = self.category_encoder(category_info)
         
-        budget = extras[:, -1].float()
+        budget = extras[:, -2].float()
         budget_vector = self.get_budget_one_hot(budget.T)
         if self.input_budget:
             budget_info = self.budget_encoder(budget_vector)
         
-        if self.input_category and self.input_budget:
+        # 编码距离上一次的步数
+        step_since_last_jump = extras[:, -1]
+        if self.input_sslj:
+            sslj = self.step_encoding(step_since_last_jump.unsqueeze(1))
+            sslj = self.sslj_encoder(sslj)
+        
+        if self.input_category and self.input_budget and self.input_sslj:
             combined = torch.concat([conv_output.view(  # fnn 1
-                    -1, self.conv_output_size), category_info, budget_info], dim=1)
+                    -1, self.conv_output_size), 
+                                     category_info, 
+                                     budget_info,
+                                     sslj], dim=1)
         else:
+            # TODO
             if self.input_category:
                 combined = torch.concat([conv_output.view(  # fnn 1
                     -1, self.conv_output_size), category_info,], dim=1)
@@ -303,12 +342,12 @@ class Uncertainty_Diversity_Policy(NNBase):
         # mask invalid tp action
         # --- 计算 Mask ---
         # 初始化全 1 掩码 [Batch, Num_Actions]
-        action_mask = torch.ones_like(x)
-        # 找到 budget 为 0 的索引
+        # action_mask = torch.ones_like(budget, )
+        # # 找到 budget 为 0 的索引
         invalid_indices = (budget <= 0)
-        # 将这些样本的最后一个动作（索引 -1）设为不可选 (0)
-        action_mask[invalid_indices, -1] = 0
-        return self.critic_linear(x).squeeze(-1), x, rnn_hxs, action_mask
+        # # 将这些样本的最后一个动作（索引 -1）设为不可选 (0)
+        # action_mask[invalid_indices] = 0
+        return self.critic_linear(x).squeeze(-1), x, rnn_hxs, invalid_indices
 
 
 # https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/model.py#L15
@@ -348,6 +387,7 @@ class RL_Policy(nn.Module):
         
 
         self.model_type = model_type
+        self.num_outputs = num_outputs
 
     @property
     def is_recurrent(self):
@@ -367,13 +407,16 @@ class RL_Policy(nn.Module):
 
     def act(self, inputs, rnn_hxs, masks, extras=None, deterministic=False):
         if self.model_type == 3:
-            value, actor_features, rnn_hxs, action_mask = self(inputs, rnn_hxs, masks, extras)
+            value, actor_features, rnn_hxs, invalid_indices = self(inputs, rnn_hxs, masks, extras)
             # 将 action_mask 为 0 的位置对应的 Logits 设为极负值
             # 这样在 Softmax 之后，这些动作的概率几乎为 0
-            actor_features = actor_features.masked_fill(action_mask == 0, -1e10)
+            dist = self.dist(actor_features)
+            action_mask = torch.ones((dist.logits.shape), device=dist.logits.device)
+            action_mask[invalid_indices, -1] = 0
+            dist.logits = dist.logits.masked_fill(action_mask == 0, -1e10)
         else:
             value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
-        dist = self.dist(actor_features)
+            dist = self.dist(actor_features)
 
         if deterministic:
             action = dist.mode()
@@ -386,14 +429,19 @@ class RL_Policy(nn.Module):
         return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks, extras=None):
-        value, _, _ = self(inputs, rnn_hxs, masks, extras)
+        value, _, _, _ = self(inputs, rnn_hxs, masks, extras)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action, extras=None):
-
-        value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
-        dist = self.dist(actor_features)
-
+        if self.model_type == 3:
+            value, actor_features, rnn_hxs,invalid_indices = self(inputs, rnn_hxs, masks, extras)
+            dist = self.dist(actor_features)
+            action_mask = torch.ones((dist.logits.shape), device=dist.logits.device)
+            action_mask[invalid_indices, -1] = 0
+            dist.logits = dist.logits.masked_fill(action_mask == 0, -1e10)
+        else:
+            value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
+            dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
@@ -593,14 +641,16 @@ if __name__ == "__main__":
                                       'num_sem_categories': 5,
                                       'max_budget': 5,
                                       'input_category': True,
-                                      'input_budget': True
+                                      'input_budget': True,
+                                      'input_sslj': True
                                       })
 
     bs = 3
     rnn_hxs = torch.rand(bs, 512)
     l_masks = torch.ones(bs)
-    extras = torch.zeros(bs, 6)
-    extras[:, :-1] = torch.randint(low=0, high=10, size=(bs, 5))
+    extras = torch.zeros(bs, 7)
+    extras[:, :-2] = torch.randint(low=0, high=10, size=(bs, 5))
+    extras[:, -2] = torch.randint(low=10, high=80, size=(bs, ))
     extras[:, -1] = torch.randint(low=0, high=5, size=(bs, ))
     
     input = torch.rand(bs, 3, 128, 128)

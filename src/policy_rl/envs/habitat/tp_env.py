@@ -77,9 +77,9 @@ class Transport_Env(habitat.RLEnv):
         sem_map = scene_info[floor_idx]['sem_map']
         self.sample_pts_num = int(sem_map[0].sum() / 5)
         
-        saved_file = "./data/visibles/info/cate_objs_"+scene_name
-        with open(saved_file+".pkl", "wb") as f:
-            pickle.dump(category_objects, f)
+        # saved_file = "./data/visibles/info/cate_objs_"+scene_name
+        # with open(saved_file+".pkl", "wb") as f:
+        #     pickle.dump(category_objects, f)
         
         # for transport action
         if not args.sample_mode:
@@ -131,15 +131,15 @@ class Transport_Env(habitat.RLEnv):
         self.info['depth'] = depth
         self.info['diver_reward'] = 0.
         
+        
+        self.curr_category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
+        self.cumu_detected_category = {name:0 for name in sorted(list(target_coco_categories.keys()))}
+        
         # for diverisity reward
         if self.args.use_diversity_reward:
             self.info['bbsgt'] = obs['bbsgt']
             self.found_class = []
             self.found_id = []
-        # for transport
-        self.tp_budget = 5
-        self.info['tp_budget'] = self.tp_budget
-        self.info['category_object'] = [len(self.curr_category_obj_id[name]) for name in sorted(list(target_coco_categories.keys()))]
         return state, self.info
     
     def get_navigable_points(self):
@@ -365,7 +365,7 @@ class Transport_Env(habitat.RLEnv):
 
         # step
         if action["action"] == 3:
-            print(f"action is transport")
+            print(f"action is transport in {self.rank}")
             loc = self.q.get()
             self.q.put(loc)
             self.tp_budget -= 1
@@ -453,7 +453,7 @@ class Transport_Env(habitat.RLEnv):
 
 
     def get_done(self, observations, *args):
-        if self.info['time'] >= self.args.max_episode_length - 2:       # 
+        if self.info['time'] >= self.args.max_episode_length - 1:       # 
             done = True
         else:
             done = False

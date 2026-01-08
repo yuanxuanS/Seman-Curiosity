@@ -208,6 +208,13 @@ def get_args():
     parser.add_argument(
         "--use_diversity_reward", action="store_true", default=False
     )
+    parser.add_argument(
+        "--diversity_only", action="store_true", default=False
+    )
+    parser.add_argument("--diver_coeff", type=float, default=0.1)
+    parser.add_argument(
+        "--with_penalty", action="store_true", default=False
+    )
     # sample locs
     parser.add_argument(
         "--sampled_dir",
