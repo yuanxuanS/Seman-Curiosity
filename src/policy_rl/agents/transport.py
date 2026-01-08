@@ -242,12 +242,7 @@ class Transport_Env_Agent(Transport_Env):
                 self.curr_category_obj_id[category].extend(cate_objs)
                 self.curr_category_obj_id[category] = list(set(self.curr_category_obj_id[category]))
             
-            # 更新每帧检测到的isntance类型
-            if len(obj) > 1:
-                for pcls in obj.pred_classes.cpu().numpy():
-                    if pcls in clsid_name_maps.keys():
-                        category = clsid_name_maps[pcls]
-                        self.cumu_detected_category[category] += 1
+            
 
             if self.args.use_diversity_reward:
                 info['diver_reward'] = 0.
@@ -299,6 +294,12 @@ class Transport_Env_Agent(Transport_Env):
                 else:
                     info['diver_reward'] = 0
         
+            # 更新每帧检测到的isntance类型
+            if len(obj) > 0:
+                for pcls in obj.pred_classes.cpu().numpy():
+                    if pcls in clsid_name_maps.keys():
+                        category = clsid_name_maps[pcls]
+                        self.cumu_detected_category[category] += 1        
         # if not info['diver_reward'] > 0.:
         #     info['diver_reward'] = -0.01 
         
