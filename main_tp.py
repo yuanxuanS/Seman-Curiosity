@@ -284,12 +284,18 @@ def main():
         if args.diversity_only:
             reward = torch.zeros_like(reward)
         
+        if step == int((args.num_training_frames // args.num_processes + 1) / 2):
+            print(f"in step : {step}, r1, r2 from {args.r1_coeff}-{args.r2_coeff}")
+            args.r1_coeff = 1
+            args.r2_coeff = 1
+            print(f"to {args.r1_coeff}-{args.r2_coeff}")
+            
         if args.with_penalty:
-            reward += penalty_r
+            reward += penalty_r * args.r1_coeff
         # divesity reward
         if args.use_diversity_reward:
-            reward += diversity_reward * args.diver_coeff
-            diver_cumu_r += diversity_reward * args.diver_coeff
+            reward += diversity_reward * args.diver_coeff * args.r2_coeff
+        diver_cumu_r += diversity_reward * args.diver_coeff * args.r2_coeff
 
         cumu_r += reward
         # ------------------------------------------------------------------ 
