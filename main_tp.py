@@ -48,7 +48,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -253,6 +253,8 @@ def main():
     if not args.eval:
         print(f"training frames is {args.num_training_frames}")
         logging.info(f"training frames is {args.num_training_frames}")
+        
+    total_step_num = args.num_training_frames // args.num_processes + 1
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
         
@@ -284,11 +286,12 @@ def main():
         if args.diversity_only:
             reward = torch.zeros_like(reward)
         
-        if step == int((args.num_training_frames // args.num_processes + 1) / 2):
-            print(f"in step : {step}, r1, r2 from {args.r1_coeff}-{args.r2_coeff}")
+        if args.curriculum and step >= int(total_step_num / 2) :
+            # print(f"in step : {step}, r1, r2 from {args.r1_coeff}-{args.r2_coeff}")
             args.r1_coeff = 1
-            args.r2_coeff = 1
-            print(f"to {args.r1_coeff}-{args.r2_coeff}")
+            args.r2_coeff = min((step - int(total_step_num / 2)) / 10000, 1)
+            if step % (args.log_interval * 5) == 0:
+                print(f" step {step}, to {args.r1_coeff}-{args.r2_coeff}")
             
         if args.with_penalty:
             reward += penalty_r * args.r1_coeff
