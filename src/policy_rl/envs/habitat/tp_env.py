@@ -140,6 +140,8 @@ class Transport_Env(habitat.RLEnv):
             self.info['bbsgt'] = obs['bbsgt']
             self.found_class = []
             self.found_id = []
+        # for topo reward
+        self.info['position'] = self.this_sim_location[:2]
         return state, self.info
     
     def get_navigable_points(self):
@@ -395,7 +397,7 @@ class Transport_Env(habitat.RLEnv):
         #     ))
         # get newest pose( especially after checking if on floor)
         # self.last_sim_location = self.this_sim_location
-        # self.this_sim_location = self.get_sim_location()
+        self.this_sim_location = self.get_sim_location()
         self.last_sim_location_z = self.this_sim_location_z
         self.last_sim_rot = self.this_sim_rot
         self.this_sim_location_z, self.this_sim_rot = self.get_sim_location_z()
@@ -419,6 +421,9 @@ class Transport_Env(habitat.RLEnv):
         # for diverisity reward
         if self.args.use_diversity_reward:
             self.info['bbsgt'] = obs['bbsgt']
+        
+        # for topo reward
+        self.info['position'] = self.this_sim_location[:2]
         
         # for category object id 
         self.info['category_object'] = [len(self.curr_category_obj_id[name]) for name in sorted(list(target_coco_categories.keys()))]
