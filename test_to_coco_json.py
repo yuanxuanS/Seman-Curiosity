@@ -42,6 +42,7 @@ if not os.path.exists(save_rgb_dir):
     
 from src.vqf_constants import clsid_name_maps        # TODO
 
+
 CLASSES = clsid_name_maps
 CLASSES_TO_IDX = {k: i for i, k in enumerate(CLASSES.keys())}
 categories = [{"id": id_from_zero, "name": CLASSES[cls_id]} 
