@@ -215,6 +215,16 @@ def get_args():
     parser.add_argument(
         "--with_penalty", action="store_true", default=False
     )
+    # reward curriculum
+    parser.add_argument("--r1_coeff", type=float, default=1)
+    parser.add_argument("--r2_coeff", type=float, default=0.01)
+    parser.add_argument(
+        "--curriculum", action="store_true", default=False
+    )
+    # for topo reward
+    parser.add_argument(
+        "--check_target", action="store_true", default=False
+    )
     # sample locs
     parser.add_argument(
         "--sampled_dir",

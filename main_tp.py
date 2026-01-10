@@ -16,7 +16,7 @@ from  src.policy_rl import algo
 from src.policy_rl.baseline_frontier import Frontier
 import cv2
 import json
-
+from src.policy_rl.tp_topo_reward import VectorizedTopologyManager
 def main():
     args = get_args()
     
@@ -88,6 +88,9 @@ def main():
     
     torch.set_grad_enabled(False)
 
+    # for topo reward
+    topo_manager = VectorizedTopologyManager(num_scenes,check_target=args.check_target)
+    
     # Initializing Maps
     # Full map consists of multiple channels containing the following:
     # 1. Obstacle Map
@@ -102,6 +105,14 @@ def main():
     # fro transport action
     tp_budget =np.array([info['tp_budget'] for info in infos])
     category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
+    
+    # for topo reward
+    curr_pos = [info['position'] for info in infos]
+    has_targets = [info['has_target'] for info in infos]
+    topo_manager.update([i for i in range(num_scenes)],
+                        curr_pos,
+                        has_targets
+                        )
     
     # for visualize
     full_map = maps.full_map
@@ -253,6 +264,8 @@ def main():
     if not args.eval:
         print(f"training frames is {args.num_training_frames}")
         logging.info(f"training frames is {args.num_training_frames}")
+        
+    total_step_num = args.num_training_frames // args.num_processes + 1
     for step in range(args.num_training_frames // args.num_processes + 1):
         l_step = step % args.num_local_steps
         
@@ -261,7 +274,14 @@ def main():
         
         # diversity reward
         if args.use_diversity_reward:
-            diversity_reward = torch.tensor([info['diver_reward'] for info in infos], device=device)
+            # for topo reward
+            curr_pos = [info['position'] for info in infos]
+            has_targets = [info['has_target'] for info in infos]
+            diversity_reward = topo_manager.update([i for i in range(num_scenes)],
+                                curr_pos, 
+                                has_targets,)
+            diversity_reward = torch.from_numpy(diversity_reward).to(device)
+            # diversity_reward = torch.tensor([info['diver_reward'] for info in infos], device=device)
                 
         penalty_r = torch.tensor([info['tp_penalty'] for info in infos], device=device)
         # penalty_r *= (1 + 2 * torch.exp(- step_since_last_tp/ 25)).to(device) 
@@ -284,12 +304,19 @@ def main():
         if args.diversity_only:
             reward = torch.zeros_like(reward)
         
+        if args.curriculum and step >= int(total_step_num / 2) :
+            # print(f"in step : {step}, r1, r2 from {args.r1_coeff}-{args.r2_coeff}")
+            args.r1_coeff = 1
+            args.r2_coeff = min((step - int(total_step_num / 2)) / 10000, 1)
+            if step % (args.log_interval * 5) == 0:
+                print(f" step {step}, to {args.r1_coeff}-{args.r2_coeff}")
+            
         if args.with_penalty:
-            reward += penalty_r
+            reward += penalty_r * args.r1_coeff
         # divesity reward
         if args.use_diversity_reward:
-            reward += diversity_reward * args.diver_coeff
-            diver_cumu_r += diversity_reward * args.diver_coeff
+            reward += diversity_reward * args.diver_coeff * args.r2_coeff
+        diver_cumu_r += diversity_reward * args.diver_coeff * args.r2_coeff
 
         cumu_r += reward
         # ------------------------------------------------------------------ 
@@ -361,6 +388,13 @@ def main():
             episode_tp_idx = [0] * num_scenes
             
             step_since_last_tp = torch.zeros_like(step_since_last_tp)
+            
+            # topo reward
+            
+            for i in range(num_scenes):
+                print(f"env {i}, node={len(topo_manager.env_nodes[i])}")
+                topo_manager.reset_env(i)
+            
             if args.eval:
                 for e, x in enumerate(done):    # if done, maps from new obs
                     if x:

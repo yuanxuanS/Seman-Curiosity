@@ -242,33 +242,36 @@ class Transport_Env_Agent(Transport_Env):
                 self.curr_category_obj_id[category].extend(cate_objs)
                 self.curr_category_obj_id[category] = list(set(self.curr_category_obj_id[category]))
             
-            # 更新每帧检测到的isntance类型
-            if len(obj) > 1:
-                for pcls in obj.pred_classes.cpu().numpy():
-                    if pcls in clsid_name_maps.keys():
-                        category = clsid_name_maps[pcls]
-                        self.cumu_detected_category[category] += 1
+            
 
             if self.args.use_diversity_reward:
                 info['diver_reward'] = 0.
                 bbsgt = info['bbsgt']['instances']
                 
-                if len(obj) > 0:
+                # for topo reward
+                info['has_target'] = False
+                if len(bbsgt) > 0:
+                    gt_cls = np.unique(bbsgt.pred_classes.cpu().numpy())
+                    for c in gt_cls:
+                        if c in clsid_name_maps.keys():
+                            info['has_target'] = True
+                            break
+                        
+                # if len(obj) > 0:
                     ## diver reward 2
                     # R(n_c) = max(0, 1 - n_c/T) * W
-                    base_W = 1  # W
-                    T = 100
-                    d_r = 0.
-                    for pcls in obj.pred_classes.cpu().numpy():
-                        if pcls in clsid_name_maps.keys():
-                            category = clsid_name_maps[pcls]
-                            cumu_n = self.cumu_detected_category[category]
-                            d_r += max(0, 1-cumu_n/T )
-                    info['diver_reward'] = d_r * base_W
+                    # base_W = 1  # W
+                    # T = 100
+                    # d_r = 0.
+                    # for pcls in obj.pred_classes.cpu().numpy():
+                    #     if pcls in clsid_name_maps.keys():
+                    #         category = clsid_name_maps[pcls]
+                    #         cumu_n = self.cumu_detected_category[category]
+                    #         d_r += max(0, 1-cumu_n/T )
+                    # info['diver_reward'] = d_r * base_W
+                    
                     '''
                 if len(bbsgt) > 0:
-                    
-                    
                     ## diver reward 1
                     # 找到新类别, 奖励为5
                     gt_cls = np.unique(bbsgt.pred_classes.cpu().numpy())
@@ -296,9 +299,15 @@ class Transport_Env_Agent(Transport_Env):
                         info['diver_reward'] += 3.*len(new_obj_ids)
                         self.found_id.extend(new_obj_ids.tolist())
                      '''
-                else:
-                    info['diver_reward'] = 0
+                # else:
+                #     info['diver_reward'] = 0
         
+            # 更新每帧检测到的isntance类型
+            if len(obj) > 0:
+                for pcls in obj.pred_classes.cpu().numpy():
+                    if pcls in clsid_name_maps.keys():
+                        category = clsid_name_maps[pcls]
+                        self.cumu_detected_category[category] += 1        
         # if not info['diver_reward'] > 0.:
         #     info['diver_reward'] = -0.01 
         
