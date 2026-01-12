@@ -21,7 +21,7 @@ import os
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
-from .builtin_meta import ADE20K_SEM_SEG_CATEGORIES, _get_builtin_metadata
+from .builtin_meta import ADE20K_SEM_SEG_CATEGORIES, _get_builtin_metadata, get_proj_metadata
 from .cityscapes import load_cityscapes_instances, load_cityscapes_semantic
 from .cityscapes_panoptic import register_all_cityscapes_panoptic
 from .coco import load_sem_seg, register_coco_instances
@@ -259,7 +259,25 @@ def register_all_ade20k(root):
             ignore_label=255,
         )
 
-
+# =============================custom dataset
+        
+_MY_PROJ_SPLIT = {}
+_MY_PROJ_SPLIT['proj'] = {
+    'proj_train': ('proj/train', 'proj/annotations/instances_train.json'),
+    'proj_val': ('proj/val', 'proj/annotations/instances_val.json'),
+    'proj_test': ('proj/test', 'proj/annotations/instances_test.json'),
+}
+def register_proj(root):
+    for dataset_name, splits_per_dataset in _MY_PROJ_SPLIT.items():
+        for key, (image_root, json_file) in splits_per_dataset.items():
+            # Assume pre-defined datasets live in `./datasets`.
+            register_coco_instances(
+                key,
+                get_proj_metadata('proj'),      # 数据集原数据格式
+                os.path.join(root, json_file) if "://" not in json_file else json_file,     # json文件路径
+                os.path.join(root, image_root),     # img文件路径
+            )
+            
 # True for open source;
 # Internally at fb, we register them elsewhere
 if __name__.endswith(".builtin"):
@@ -272,3 +290,6 @@ if __name__.endswith(".builtin"):
     register_all_pascal_voc(_root)
     register_new_pascal_voc(_root)
     register_all_ade20k(_root)
+    
+    # --------------custom dataset
+    register_proj(_root)

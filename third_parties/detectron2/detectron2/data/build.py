@@ -347,7 +347,7 @@ def _train_loader_from_config(cfg, mapper=None, *, dataset=None, sampler=None):
 # TODO can allow dataset as an iterable or IterableDataset to make this function more general
 @configurable(from_config=_train_loader_from_config)
 def build_detection_train_loader(
-    dataset, *, mapper, sampler=None, total_batch_size, aspect_ratio_grouping=True, num_workers=0
+    dataset, *, mapper, sampler=None, total_batch_size, aspect_ratio_grouping=False, num_workers=0
 ):
     """
     Build a dataloader for object detection with some default features.

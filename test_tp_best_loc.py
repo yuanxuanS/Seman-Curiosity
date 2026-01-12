@@ -1,7 +1,7 @@
 import json
 import re
 
-Colli_best_loc = {
+Collierville_best_loc = {
     31: [
         [0.14721623063087463, 0., -1.0926159620285034],
          [0.8660253882408142, 0.0, 0.5, 0.0]
@@ -152,11 +152,12 @@ Wiconisco_best_loc = {
         [0.7071067690849304, 0.0, 0.7071067690849304, 0.0]
     ]
 }
-scene_name = "Wiconisco"
+scene_name = "Collierville"
 save_json = f"./data/visibles/{scene_name}_tploc.json"
 with open(save_json, "w") as f:
-    json.dump(Wiconisco_best_loc, f)
+    json.dump(Collierville_best_loc, f)
 
+'''
 rgb_info = "./third_parties/detectron2/datasets/embodied/annotations/instances_val.json"
 with open(rgb_info, 'r') as f:
     rgb_infos = json.load(f)
@@ -172,3 +173,4 @@ for img_info in rgb_infos['images']:
         rgb_input_info[step_num] = img_info
 
 print(rgb_input_info[22921])
+'''

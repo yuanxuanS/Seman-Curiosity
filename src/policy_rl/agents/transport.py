@@ -124,6 +124,28 @@ class Transport_Env_Agent(Transport_Env):
                  int(c * 100.0 / self.args.map_resolution - gy1)]
         start = pu.threshold_poses(start, map_pred.shape)
         
+        # for topo map
+        init_loc = self.args.map_size_cm / 100.0 / 2.0
+        init_al_map = [int(init_loc * 100.0 / self.args.map_resolution),
+                               int(init_loc * 100.0 / self.args.map_resolution)]
+        
+        topo_nodes = inputs['topo_nodes']
+        topo_nodes_map = []
+        for tn in topo_nodes:
+            x, y = tn
+            o = self.init_agent_loc[-1]
+            dx, dy = pu.get_rel_pose_change(      # obj相对初始agent坐标
+                    [x, y, o], self.init_agent_loc
+                )[:2]
+            
+            # map resolution
+            dx_, dy_ = int(dx * 100.0 / self.args.map_resolution),  int(dy * 100.0 / self.args.map_resolution)
+            obj_c = init_al_map[0] + dx_
+            obj_r = init_al_map[1] + dy_
+            obj_r, obj_c = pu.threshold_poses([obj_r, obj_c], (479, 479))
+            topo_nodes_map.append([obj_r, obj_c])
+        inputs['topo_nodes'] = topo_nodes_map
+        
         if self.args.visualize or self.args.print_images:
             # Get last loc
             last_start_x, last_start_y = self.last_loc[0], self.last_loc[1]
@@ -411,9 +433,16 @@ class Transport_Env_Agent(Transport_Env):
         
         sem_map[vis_mask] = 3       # 可视化区域赋值3
         
-        # add goal
-        
-        
+        # plot topo map 
+        origin = (670, 50)  
+        w, h = sem_map_full.shape
+        radius = 5
+        topo_node = np.zeros_like(sem_map_full)
+        rows, cols = np.ogrid[:h, :w]
+        for center in inputs['topo_nodes']:
+            dist_sq = (rows - center[0])**2 + (cols - center[1])**2
+            topo_node[dist_sq <= radius**2] = 1
+        sem_map_full[topo_node.astype(bool)] = 19
         
         # full map
         map_pred_full = inputs['map_pred_full']
@@ -519,7 +548,7 @@ class Transport_Env_Agent(Transport_Env):
             
             
             
-        origin = (670, 50)  
+        
         agent_arrow = vu.get_contour_points(pos, origin)
         color = (int(color_palette[11] * 255),
                  int(color_palette[10] * 255),

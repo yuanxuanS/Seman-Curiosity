@@ -2,7 +2,7 @@ import numpy as np
 
 
 class VectorizedTopologyManager:
-    def __init__(self, num_envs, dist_threshold=0.5, check_target=False):
+    def __init__(self, num_envs, dist_threshold=0.5, check_target=True):
         self.num_envs = num_envs
         self.dist_threshold = dist_threshold
         # 为每个环境维护一个独立的节点列表

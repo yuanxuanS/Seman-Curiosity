@@ -1,8 +1,8 @@
 import json
 
-offset = 545 # 432      # 134
-file = "./anno/lyr-3.json"     # "./instance.json"
-file_new = "./anno/lyr-3-new.json"
+offset = 200 # 432      # 134
+file = "./anno/frontier_wpp.json"     # "./instance.json"
+file_new = "./anno/frontier_wpp_new.json"
 with open(file, "r") as f:
     data = json.load(f)
 
