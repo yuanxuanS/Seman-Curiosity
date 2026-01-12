@@ -355,12 +355,16 @@ PROJ_CATEGORIES = [
     # {"color": [0, 0, 142], "isthing": 1, "id": 0, "name": "car"}, # proj_prune
     
     {"color": [220, 20, 60], "isthing": 1, "id": 0, "name": "car"},
-    {"color": [119, 11, 32], "isthing": 1, "id": 1, "name": "building"},
-    {"color": [0, 0, 142], "isthing": 1, "id": 2, "name": "grass"},
+    {"color": [0, 0, 230], "isthing": 1, "id": 1, "name": "bicycle"},
+    {"color": [119, 11, 32], "isthing": 1, "id": 2, "name": "building"},
+    {"color": [0, 0, 142], "isthing": 1, "id": 3, "name": "grass"},
+    {"color": [106, 0, 228], "isthing": 1, "id": 4, "name": "fence"},
+    {"color": [0, 60, 100], "isthing": 1, "id": 5, "name": "billboard"},
+    {"color": [142, 108, 45], "isthing": 1, "id": 6, "name": "bench"},
 
 ]
 
-def get_proj_metadata(dataset_name):
+def get_custom_metadata(dataset_name):
     if dataset_name == "proj":
         thing_ids = [k["id"] for k in PROJ_CATEGORIES]
         thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(thing_ids)}     # 标注中的id可能是不连续值，映射到连续区间
