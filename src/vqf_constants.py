@@ -41,9 +41,9 @@ target_coco_categories_mapping = {
 clsid_name_maps = {
     56: "chair",
     57: "couch",
-    72: "refrigerator",
     59: "bed",
     61: "toilet",
+    72: "refrigerator",
 }
 
 SIM_TO_COCO_MAPPING = {

@@ -15,6 +15,7 @@ from test_gt_orient import OriAny_pred
 from third_parties.Orient_Anything.inference import get_3angle, get_3angle_infer_aug
 from third_parties.Orient_Anything.utils import background_preprocess
 from vqf_train import visualize
+from vqf_utils import return_bin_idx
 from src.vqf_constants import category_maps, category_id_maps, target_cls_id_in_scene
 
 gt_angle = {"Collierville": {
@@ -69,23 +70,8 @@ gt_angle = {"Collierville": {
             }
 
 }
-def return_bin_idx(value, bin_center: list, bin_interval: float):
-    '''
-    bin_center: 
-    bin_interval: bin间距的一半
-    '''
-    bins = [dis - bin_interval for dis in bin_center]
-    bins.append(bin_center[-1] + bin_interval)
-    bins = np.array(bins)
-    if value < bin_center[0] - bin_interval:
-        return 0
-    elif value >= bin_center[-1] + bin_interval:
-        return len(bin_center) - 1
-    # if not isinstance(value, np.ndarray):
-    #     value = np.array([value])
-    return np.digitize(value, bins) - 1
 
-scenes = ["Collierville", "Corozal", "Darden", "Markleeville", "Wiconisco"]
+scenes = ["Collierville", ] #"Corozal", "Darden", "Markleeville", "Wiconisco"]
 metadata = MetadataCatalog.get('coco_2017_val')
 pth = "/data1/wpp_data/data/obj_samples/"
 

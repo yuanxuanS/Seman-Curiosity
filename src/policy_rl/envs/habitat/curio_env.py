@@ -59,7 +59,8 @@ class Seman_Curio_Env(habitat.RLEnv):
                 reset traversible initial location
         
         """
-        new_scene = self.episode_no % self.args.num_train_episodes == 0
+        new_scene = True
+        # self.episode_no % self.args.num_train_episodes == 0
         # Initializations
         self.timestep = 0
         self.episode_no += 1
@@ -86,8 +87,16 @@ class Seman_Curio_Env(habitat.RLEnv):
         # Set info
         self.info['time'] = self.timestep
         self.info['sensor_pose'] = [0., 0., 0.]
-        self.info['semantic_gt'] = None
-
+        self.info['semantic_gt'] = obs['semantic']
+        self.info['depth'] = depth
+        self.info['reward'] = 0.
+        
+        # for diverisity reward
+        if self.args.use_diversity_reward:
+            self.info['bbsgt'] = obs['bbsgt']
+            self.found_class = []
+            self.found_id = []
+        
         return state, self.info
     
     def load_episode_loc(self):
@@ -116,6 +125,13 @@ class Seman_Curio_Env(habitat.RLEnv):
         
         self._env.sim.set_agent_state(pos, rot)
         obs = self._env.sim.get_observations_at(pos, rot)
+        obs.update(
+                self._env.task.sensor_suite.get_observations(
+                    observations=obs,
+                    episode=self._env.current_episode,
+                    action={'action': 0, 'action_args':{}},
+                    task=self._env.task,
+            ))
         return obs
     
     def initial_possible_loc(self):
@@ -204,7 +220,13 @@ class Seman_Curio_Env(habitat.RLEnv):
         rot = quaternion.from_rotation_vector(rvec)
         self._env.sim.set_agent_state(pos, rot)
         obs = self._env.sim.get_observations_at(pos, rot)
-        
+        obs.update(
+                self._env.task.sensor_suite.get_observations(
+                    observations=obs,
+                    episode=self._env.current_episode,
+                    action={'action': 0, 'action_args':{}},
+                    task=self._env.task,
+            ))
         self.map_obj_origin = map_obj_origin
         
         return obs
@@ -269,8 +291,12 @@ class Seman_Curio_Env(habitat.RLEnv):
 
         self.timestep += 1
         self.info['time'] = self.timestep
-        self.info['semantic_gt'] = obs['bbsgt']
-
+        self.info['semantic_gt'] = obs['semantic']
+        self.info['depth'] = depth
+        
+        # for diverisity reward
+        if self.args.use_diversity_reward:
+            self.info['bbsgt'] = obs['bbsgt']
         return state, 0., done, self.info
     
     def save_data(self, observations):
@@ -293,8 +319,8 @@ class Seman_Curio_Env(habitat.RLEnv):
     
 
 
-    def get_done(self, observations):
-        if self.info['time'] >= self.args.max_episode_length - 1:       # 
+    def get_done(self, observations, *args):
+        if self.info['time'] >= self.args.max_episode_length - 2:       # 
             done = True
         else:
             done = False

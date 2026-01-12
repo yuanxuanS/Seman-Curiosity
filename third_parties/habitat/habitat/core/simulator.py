@@ -186,7 +186,7 @@ class SensorSuite:
     """
 
     sensors: Dict[str, Sensor]
-    observation_spaces: Dict
+    observation_spaces: spaces.Dict
 
     def __init__(self, sensors: Iterable[Sensor]) -> None:
         """Constructor

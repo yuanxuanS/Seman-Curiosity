@@ -203,6 +203,7 @@ def main():
     local_map, local_pose = maps.update_semantic_map(obs, infos)
     full_pose = maps.full_pose
     
+    
     start = time.time()
     start_datetime = datetime.fromtimestamp(start)
     logging.info("Start date and time: %s", start_datetime)
@@ -224,14 +225,20 @@ def main():
         if finished.sum() == args.num_processes:    # eval over
             break
         
+        # diversity reward
+        if args.use_diversity_reward:
+            diversity_reward = torch.tensor([info['reward'] for info in infos], device=device)
+        
+           
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
 
-        # per step reward? TODO
-        # add explore metric: TODO
+        # divesity reward
+        if args.use_diversity_reward:
+            l_reward += diversity_reward
 
         # ------------------------------------------------------------------ 
         # update local input, next state

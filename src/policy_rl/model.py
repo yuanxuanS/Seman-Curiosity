@@ -5,11 +5,24 @@ import torchvision.models as models
 
 import numpy as np
 
-from .utils.distributions import Categorical, DiagGaussian
-from .utils.model import get_grid, ChannelPool, Flatten, NNBase
-from .envs.utils import depth_utils as du
+from src.policy_rl.utils.distributions import Categorical, DiagGaussian
+from src.policy_rl.utils.model import get_grid, ChannelPool, Flatten, NNBase
+from src.policy_rl.envs.utils import depth_utils as du
 import cv2
 
+class RBFEncoding(nn.Module):
+    def __init__(self, centers, sigma=15.0):
+        super(RBFEncoding, self).__init__()
+        # centers: 预设的关键步数点，例如 [0, 10, 20, 40, 60, 80]
+        self.register_buffer('centers', torch.tensor(centers).float())
+        self.sigma = sigma
+
+    def forward(self, d):
+        # d: batch * 1
+        # 利用广播机制计算: (batch * 1) - (1 * num_centers) -> batch * num_centers
+        distances = d - self.centers.unsqueeze(0)
+        return torch.exp(-(distances**2) / (2 * self.sigma**2))
+    
 class Goal_Oriented_Semantic_Policy(NNBase):
 
     def __init__(self, input_shape, recurrent=False, hidden_size=512,
@@ -89,7 +102,7 @@ class Semantic_map_policy(NNBase):
         self.linear1 = nn.Linear(out_size * 32 + 8, hidden_size)
         self.linear2 = nn.Linear(hidden_size, 256)
         self.critic_linear = nn.Linear(256, 1)
-        self.orientation_emb = nn.Embedding(72, 8)
+        self.orientation_emb = nn.Embedding(72, 8)      # 输入索引，映射为8维向量
         # self.goal_emb = nn.Embedding(num_sem_categories, 8)
         self.train()
 
@@ -171,6 +184,171 @@ class Semantic_Curiosity_Policy(NNBase):
         return self.critic_linear(x).squeeze(-1), x, rnn_hxs
 
 
+class Uncertainty_Diversity_Policy(NNBase):
+    def __init__(self, input_shape, num_actions,
+                 recurrent=True, hidden_size=512,
+                 num_sem_categories=5, 
+                 max_budget=5,
+                 input_category=False,
+                 input_budget=False,
+                 input_sslj=False):
+        super(Uncertainty_Diversity_Policy, self).__init__(
+            recurrent, hidden_size, hidden_size)
+        self.num_sem_categories = num_sem_categories
+        self.input_category = input_category
+        self.input_budget = input_budget
+        self.input_sslj = input_sslj
+        self.dropout = 0.5
+
+        resnet = models.resnet18(pretrained=True)
+        # resnet = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.resnet_l5 = nn.Sequential(*list(resnet.children())[0:8])
+
+        # Extra convolution layer
+        self.conv = nn.Sequential(*filter(bool, [
+            nn.Conv2d(512, 64, (1, 1), stride=(1, 1)),
+            nn.ReLU()
+        ]))
+
+        # convolution output size
+        input_test = torch.randn(1, 3, input_shape[1], input_shape[2])
+        conv_output = self.conv(self.resnet_l5(input_test))
+        self.conv_output_size = conv_output.view(-1).size(0)
+
+        if input_category:
+            # input object statis state
+            self.category_encoder = nn.Sequential(
+                nn.Linear(num_sem_categories, 64),
+                nn.ReLU(),
+                nn.Linear(64, 32), # 增加深度，使模型能理解标量间的复杂关系
+                nn.ReLU()
+            )
+        
+        if input_budget:
+            budget_dim = max_budget + 1
+            self.budget_encoder = nn.Sequential(
+                nn.Linear(budget_dim, 32),
+                nn.ReLU()
+            )
+        
+        # for step encoding
+        if input_sslj:
+            self.step_encoding = RBFEncoding([10, 20, 40, 60, 80])
+            self.sslj_encoder = nn.Sequential(
+                nn.Linear(5, 32),
+                nn.ReLU()
+            )
+        
+        # projection layers
+        self.extra_dim = 0
+        if self.input_category:
+            self.extra_dim += 32
+        if self.input_budget:
+            self.extra_dim += 32
+        if self.input_sslj:
+            self.extra_dim += 32
+        self.linear1 = nn.Linear(self.conv_output_size + self.extra_dim, hidden_size)
+        if self.dropout > 0:
+            self.dropout1 = nn.Dropout(self.dropout)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+
+        # Policy linear layer
+        self.policy_linear = nn.Linear(hidden_size, hidden_size // 2)
+        # critic linear layer
+        self.critic_linear = nn.Linear(hidden_size // 2, 1)
+
+        
+        self.train()
+
+    @property
+    def output_size(self):
+        return self._hidden_size // 2
+
+    def get_budget_one_hot(self, current_budget, max_budget=5):
+        """
+        current_budget: 当前剩余的次数 (Tensor, shape: [batch_size])
+        max_budget: 最大允许的次数
+        return: batch_size, max_budget +1
+        """
+        # 确保 budget 是长整型，且范围在 [0, max_budget]
+        # 注意：one_hot 的类别数通常设为 max_budget + 1，因为包含 0
+        current_budget = current_budget.long().clamp(0, max_budget)
+        
+        # 转换为 one-hot
+        # 输出 shape: [batch_size, max_budget + 1]
+        one_hot = F.one_hot(current_budget, num_classes=max_budget + 1).float()
+        
+        return one_hot
+    
+
+    
+    def forward(self, rgb, rnn_hxs, masks, extras=None):
+        resnet_output = self.resnet_l5(rgb[:, :3, :, :])
+        conv_output = self.conv(resnet_output)
+        
+        # extras[:, : num_sem_categories] 是物体个数
+        # extras[:, -1] 是动作 budget
+        # 注意：物体个数通常需要做简单的归一化(如 /10)或者保持 float
+        
+        category_info = extras[:, :self.num_sem_categories].float()
+        if self.input_category:
+            category_info = self.category_encoder(category_info)
+        
+        budget = extras[:, -2].float()
+        budget_vector = self.get_budget_one_hot(budget.T)
+        if self.input_budget:
+            budget_info = self.budget_encoder(budget_vector)
+        
+        # 编码距离上一次的步数
+        step_since_last_jump = extras[:, -1]
+        if self.input_sslj:
+            sslj = self.step_encoding(step_since_last_jump.unsqueeze(1))
+            sslj = self.sslj_encoder(sslj)
+        
+        if self.input_category and self.input_budget and self.input_sslj:
+            combined = torch.concat([conv_output.view(  # fnn 1
+                    -1, self.conv_output_size), 
+                                     category_info, 
+                                     budget_info,
+                                     sslj], dim=1)
+        else:
+            # TODO
+            if self.input_category:
+                combined = torch.concat([conv_output.view(  # fnn 1
+                    -1, self.conv_output_size), category_info,], dim=1)
+            if self.input_budget:
+                combined = torch.concat([conv_output.view(  # fnn 1
+                    -1, self.conv_output_size), budget_info], dim=1)
+            if (not self.input_category) and (not self.input_budget):
+                combined = conv_output.view(-1, self.conv_output_size)
+                
+        x = nn.ReLU()(self.linear1(combined))
+        
+        # print(f"resnet output: {resnet_output.shape}")
+        # print(f"conv output: {conv_output.shape}")
+        # print(f"x output: {x.shape}")
+        
+        if self.dropout > 0:
+            x = self.dropout1(x)
+        
+        x = nn.ReLU()(self.linear2(x))       # fnn 2
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        x = nn.ReLU()(self.policy_linear(x))        # action feature
+        
+        
+        # mask invalid tp action
+        # --- 计算 Mask ---
+        # 初始化全 1 掩码 [Batch, Num_Actions]
+        # action_mask = torch.ones_like(budget, )
+        # # 找到 budget 为 0 的索引
+        invalid_indices = (budget <= 0)
+        # # 将这些样本的最后一个动作（索引 -1）设为不可选 (0)
+        # action_mask[invalid_indices] = 0
+        return self.critic_linear(x).squeeze(-1), x, rnn_hxs, invalid_indices
+
 
 # https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail/blob/master/a2c_ppo_acktr/model.py#L15
 class RL_Policy(nn.Module):
@@ -193,6 +371,9 @@ class RL_Policy(nn.Module):
         elif model_type == 2:
             self.network = Semantic_map_policy(
                 obs_shape, **base_kwargs)
+        elif model_type == 3:
+            self.network = Uncertainty_Diversity_Policy(
+                obs_shape, num_outputs, **base_kwargs)
         else:
             raise NotImplementedError
 
@@ -206,6 +387,7 @@ class RL_Policy(nn.Module):
         
 
         self.model_type = model_type
+        self.num_outputs = num_outputs
 
     @property
     def is_recurrent(self):
@@ -224,9 +406,17 @@ class RL_Policy(nn.Module):
             return self.network(inputs, rnn_hxs, masks, extras)
 
     def act(self, inputs, rnn_hxs, masks, extras=None, deterministic=False):
-
-        value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
-        dist = self.dist(actor_features)
+        if self.model_type == 3:
+            value, actor_features, rnn_hxs, invalid_indices = self(inputs, rnn_hxs, masks, extras)
+            # 将 action_mask 为 0 的位置对应的 Logits 设为极负值
+            # 这样在 Softmax 之后，这些动作的概率几乎为 0
+            dist = self.dist(actor_features)
+            action_mask = torch.ones((dist.logits.shape), device=dist.logits.device)
+            action_mask[invalid_indices, -1] = 0
+            dist.logits = dist.logits.masked_fill(action_mask == 0, -1e10)
+        else:
+            value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
+            dist = self.dist(actor_features)
 
         if deterministic:
             action = dist.mode()
@@ -239,14 +429,19 @@ class RL_Policy(nn.Module):
         return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks, extras=None):
-        value, _, _ = self(inputs, rnn_hxs, masks, extras)
+        value, _, _, _ = self(inputs, rnn_hxs, masks, extras)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action, extras=None):
-
-        value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
-        dist = self.dist(actor_features)
-
+        if self.model_type == 3:
+            value, actor_features, rnn_hxs,invalid_indices = self(inputs, rnn_hxs, masks, extras)
+            dist = self.dist(actor_features)
+            action_mask = torch.ones((dist.logits.shape), device=dist.logits.device)
+            action_mask[invalid_indices, -1] = 0
+            dist.logits = dist.logits.masked_fill(action_mask == 0, -1e10)
+        else:
+            value, actor_features, rnn_hxs = self(inputs, rnn_hxs, masks, extras)
+            dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
@@ -263,8 +458,8 @@ class Semantic_Mapping(nn.Module):
         super(Semantic_Mapping, self).__init__()
 
         self.device = args.device
-        self.screen_h = args.frame_height
-        self.screen_w = args.frame_width
+        self.screen_h = args.det_frame_height
+        self.screen_w = args.det_frame_width
         self.resolution = args.map_resolution
         self.z_resolution = args.map_resolution
         self.map_size_cm = args.map_size_cm // args.global_downscaling
@@ -299,7 +494,7 @@ class Semantic_Mapping(nn.Module):
             self.screen_h // self.du_scale * self.screen_w // self.du_scale
         ).float().to(self.device)
 
-    def forward(self, obs, pose_obs, maps_last, poses_last):
+    def forward(self, obs, pose_obs, maps_last, poses_last, return_curr=False):
         '''
         obs: 0-2: rgb, 3:depth, 4...: semantic
         '''
@@ -308,7 +503,7 @@ class Semantic_Mapping(nn.Module):
         # get geo semantic voxel
         depth = obs[:, 3, :, :]
 
-        point_cloud_t = du.get_point_cloud_from_z_t(
+        point_cloud_t = du.get_point_cloud_from_z_t(    # point_cloud_t 维度2：高度
             depth, self.camera_matrix, self.device, scale=self.du_scale)
 
         agent_view_t = du.transform_camera_view_t(
@@ -409,7 +604,7 @@ class Semantic_Mapping(nn.Module):
                             * 100.0 / self.resolution
                             - self.map_size_cm // (self.resolution * 2)) /\
             (self.map_size_cm // (self.resolution * 2))
-        st_pose[:, 2] = 90. - (st_pose[:, 2])       # 向上，顺时针角度增加, 
+        st_pose[:, 2] = 90. - (st_pose[:, 2])       #转为： 向上为x正，，逆时针角度(图像坐标系)增加, 
         
         # 将当前地图进行平移+旋转，和上一时刻地图进行融合
         rot_mat, trans_mat = get_grid(st_pose, agent_view.size(),
@@ -423,8 +618,10 @@ class Semantic_Mapping(nn.Module):
 
         map_pred, _ = torch.max(maps2, 1)
 
-        return fp_map_pred, map_pred, pose_pred, current_poses
-
+        if return_curr:
+            return fp_map_pred, map_pred, pose_pred, current_poses, translated
+        else:
+            return fp_map_pred, map_pred, pose_pred, current_poses
 
 if __name__ == "__main__":
     import gym
@@ -433,21 +630,29 @@ if __name__ == "__main__":
                                                 (3, 128,
                                                  128),
                                                 dtype='uint8')
-    action_space = gym.spaces.Discrete(3)
+    action_space = gym.spaces.Discrete(4)
     print(f"obs shape:{observation_space.shape}")
     
     device = "cuda:1"
     policy = RL_Policy(observation_space.shape,
-                action_space, model_type=1,
+                action_space, model_type=3,
                 base_kwargs={'recurrent': True,
                                       'hidden_size': 512,
-                                    #   'num_sem_categories': args.num_sem_categories
+                                      'num_sem_categories': 5,
+                                      'max_budget': 5,
+                                      'input_category': True,
+                                      'input_budget': True,
+                                      'input_sslj': True
                                       })
 
-    bs = 10
+    bs = 3
     rnn_hxs = torch.rand(bs, 512)
     l_masks = torch.ones(bs)
-    extras = None
+    extras = torch.zeros(bs, 7)
+    extras[:, :-2] = torch.randint(low=0, high=10, size=(bs, 5))
+    extras[:, -2] = torch.randint(low=10, high=80, size=(bs, ))
+    extras[:, -1] = torch.randint(low=0, high=5, size=(bs, ))
+    
     input = torch.rand(bs, 3, 128, 128)
     # value, action_feature, rnn_hxs = policy(input, rnn_hxs, l_masks, extras)
     # print(f"shape: \nvalue:{value.shape}\naction feature:{action_feature.shape}\n")

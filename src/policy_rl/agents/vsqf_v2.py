@@ -73,7 +73,7 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         
         return obs, info
     
-    def step_and_preprocess(self, action, inputs):
+    def step_and_pre(self, action, inputs, wait_env=False):
         """Function responsible for taking the action and
         preprocessing observations
 
@@ -83,6 +83,13 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
             done (bool): whether the episode has ended
             info (dict): contains timestep
         """
+        if wait_env > 0:
+            self.last_action = None
+            self.info["sensor_pose"] = [0., 0., 0.]
+            self.timestep += 1
+            
+            return np.zeros(self.obs.shape), 0., False, self.info
+        
         # visualize 
         self.last_loc = self.curr_loc
         # Get Map prediction
@@ -128,7 +135,50 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
 
         return obs, 0., done, info
     
+    def update_collision_map(self, vis_input):
+        shape = self.collision_map.shape[-2:]
+        self.collision_map = np.zeros((shape[0], shape[1]))
+        self.collision_map[vis_input['map_pred_full'] > 0.5] = 1
     
+    
+    def get_mask_id(self, semantic, category, mask):
+        '''
+        在视野中是否有指定类别的物体, 且和mask重合
+        semantic值为object id; 只要id对应的object为目标类别即可；
+        用于开启检测，因此不限制范围
+        '''
+                
+        for id in np.unique(semantic):
+            if id > 0:
+                # 查找对应的object
+                obj = self.habitat_env.sim.semantic_scene.objects[id]
+                if obj.category.name() == category:
+                    if semantic.shape[0] != mask.shape[0]:
+                        semantic =  cv2.resize(semantic.astype(np.uint8), mask.shape)
+                    semantic_mask = semantic == id
+                    intersect = semantic_mask * mask
+                    if intersect.sum() > 0.1*mask.sum():
+                        return True, int(obj.id[1:])
+                    # if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
+                    
+        return False, None
+    
+    def get_object_id(self, semantic, category,):
+        '''
+        在视野中是否有指定类别的物体 
+        semantic值为object id; 只要id对应的object为目标类别即可；
+        用于开启检测，因此不限制范围
+        '''
+                
+        for id in np.unique(semantic):
+            if id > 0:
+                # 查找对应的object
+                obj = self.habitat_env.sim.semantic_scene.objects[id]
+                if obj.category.name() == category:
+                    num_occ_pixels = np.where(semantic == id)[0].shape[0]
+                    # if num_occ_pixels > 0.1 * semantic.shape[-1]*semantic.shape[-1]:
+                    return True, int(obj.id[1:])
+        return False, None
     
     def _preprocess_obs(self, obs, info, use_seg=True):
         args = self.args
@@ -177,16 +227,24 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
         # if pred objects, pred vsqf and Orient, (在depth处理之前)
         obj = self.filter_instance(obj)
         if info['sample_stage']:
-            if info['sample_step'] > 70:    # sample stage ends
+            # if info['sample_step'] > 70:    # sample stage ends
+            if self.found_classes[info['target_class']]['rgbs'] == 5:
+            # if info['sample_num'] == 5:      # 限制采集样本数
                 info['sample_stage'] = False
                 info['sample_step'] = 0
                 print("sample stage ends")
+                self.sampled_num += 1
+                self.found_classes[info['target_class']]['num'] += 1
+                    
+                    
             else:       # sample stage continues
                 info['sample_step'] += 1
                 info['find_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256)) 
+            
         else:
+            
             # maskrcnn检测到时开启sample stage
             if len(obj) > 0:
                 if len(obj) > 1:        # 选置信度最高
@@ -197,9 +255,18 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                 mask = obj.pred_masks[idx, ...].cpu().numpy()
                 
                 cls_name = clsid_name_maps[int(obj.pred_classes[idx].cpu())]
-                if not (cls_name in info['found_classes']):   # 之前没找到过该类物体
-                    # 存储物体信息， 避免重复查找
-                    info['found_classes'].append(cls_name)
+                has_obj, obj_id = self.get_mask_id(info['semantic'], cls_name, mask)
+                
+                if cls_name in self.found_classes.keys():
+                    target_cond = self.found_classes[cls_name]['num'] < 1 and has_obj
+                else:
+                    target_cond = False
+                if target_cond:   # 之前没找到过该类物体
+                    # info['found_classes'][cls_name]['num'] += 1
+                    # info['found_classes'][cls_name]['obj_id'].append(obj_id)
+                    
+                    self.found_classes[cls_name]['obj_id'].append(obj_id)
+                    
                     
                     rgb_t = cv2.resize(rgb, (256, 256))      # 256*256
                     rgb_obj = rgb_t * mask[:, :, None]
@@ -214,22 +281,46 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                     # 
                     info['sample_stage'] = True
                     info['sample_step'] += 1
-                else:       # 同类物体，不处理
+                    info['target_class'] = cls_name
+                else:       # 采集过的物体，不处理
                     info['find_goal'] = False
                     info['rgb_obj'] = np.zeros((256, 256, 3))
                     info['depth_obj'] = np.zeros((1, 256, 256))     
                     
                     info['sample_stage'] = False
                     info['sample_step'] = 0
-                    
+                # info['find_cand_goal'] = False
+                # info['cand_class'] = None
+                # info['cand_obj_id'] = None
             else:
+                # # 从候选队列选择目标
+                # if len(self.info['candidates']) > 0:
+                #     print("from candidate objects")
+                #     candidates_dict = self.info['candidates'].pop(0)
+                #     info['find_goal'] = True
+                #     info['get_cand_goal'] = True
+                #     info['rgb_obj'] = candidates_dict['rgb']
+                #     info['depth_obj'] = candidates_dict['depth']
+                #     info['sample_stage'] = True
+                #     info['sample_step'] = 1
+                #     info['sample_num'] = 0
+                #     info['cand_class'] = candidates_dict['class']
+                #     info['cand_obj_id'] = candidates_dict['obj_id']
+                # else:
                 info['find_goal'] = False
+                # info['get_cand_goal'] = False
                 info['rgb_obj'] = np.zeros((256, 256, 3))
                 info['depth_obj'] = np.zeros((1, 256, 256))     
                 
                 info['sample_stage'] = False
                 info['sample_step'] = 0
+                info['sample_num'] = 0
+                info['target_class'] = None
                 
+                # info['find_cand_goal'] = False
+                # info['cand_class'] = None
+                # info['cand_obj_id'] = None
+            
             
         return state, info
     
@@ -365,28 +456,60 @@ class Vsqf_v2_Env_Agent(Vsqf_v2_Env):
                 goal_x = goal_r
                 goal_y = goal_c
                 
-                st_goal = inputs['short_time_goal']
-                st_goal_r, st_goal_c = st_goal
-                st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
-                st_goal_x = st_goal_r
-                st_goal_y = st_goal_c
-
                 size = self.visited_vis.shape[0]
                 square_size = 20
                 half_size = square_size // 2
+                
                 for i in range(goal_x - half_size, goal_x + half_size + 1):
-                    for j in range(goal_y - half_size, goal_y + half_size + 1):
-                        i = min(i, size-1)
-                        j = min(j, size-1)
+                    j = goal_y
+                    if not inputs['sample_stage']:
                         sem_map_full[i, j] = 12
+                        sem_map_full[i, j-1] = 12
+                        sem_map_full[i, j+1] = 12
+                    else:
+                        sem_map_full[i, j] = 16
+                        sem_map_full[i, j-1] = 16
+                        sem_map_full[i, j+1] = 16
+                
+                for j in range(goal_y - half_size, goal_y + half_size + 1):
+                    i = goal_x
+                    if not inputs['sample_stage']:
+                        sem_map_full[i, j] = 12
+                        sem_map_full[i-1, j] = 12
+                        sem_map_full[i+1, j] = 12
+                    else:
+                        sem_map_full[i, j] = 16
+                        sem_map_full[i-1, j] = 16
+                        sem_map_full[i+1, j] = 16
+                # for i in range(goal_x - half_size, goal_x + half_size + 1):
+                #     for j in range(goal_y - half_size, goal_y + half_size + 1):
+                #         i = min(i, size-1)
+                #         j = min(j, size-1)
+                #         if not inputs['sample_stage']:
+                #             sem_map_full[i, j] = 12
+                #         else:
+                #             sem_map_full[i, j] = 16
+                            
+                if 'short_time_goal' in inputs:
+                    st_goal = inputs['short_time_goal']
+                    st_goal_r, st_goal_c = st_goal
+                    st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
+                    st_goal_x = st_goal_r
+                    st_goal_y = st_goal_c
+
+                
                         
-                square_size = 10
-                half_size = square_size // 2
-                for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
-                    for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
-                        i = min(i, size-1)
-                        j = min(j, size-1)
-                        sem_map_full[i, j] = 12
+                    square_size = 10
+                    half_size = square_size // 2
+                    for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
+                        for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
+                            i = min(i, size-1)
+                            j = min(j, size-1)
+                            if not inputs['sample_stage']:
+                                sem_map_full[i, j] = 12
+                            else:
+                                sem_map_full[i, j] = 16
+                            
                         
 
         # 绘制语义地图

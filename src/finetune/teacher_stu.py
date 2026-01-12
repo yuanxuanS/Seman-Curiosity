@@ -17,7 +17,8 @@ from typing import List
 import torch
 from torch import Tensor
 import wandb
-
+import numpy as np
+import pickle
 class TeacherStudent(pl.LightningModule):
     def __init__(
         self,
@@ -43,7 +44,7 @@ class TeacherStudent(pl.LightningModule):
         self.max_steps = None   # TODO
         # student training params
         self.batch_size = batch_size  #TODO
-        
+        self.compute_uncertainty = "compute_uncertainty" in kwargs and kwargs["compute_uncertainty"]
         # teacher model: pseudo labeler
         switch = {
             "logits": LogitsConsensusLabeler,
@@ -246,7 +247,8 @@ class TeacherStudent(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         self.student_model.eval()
-        _, predictions = self.student_model.validation_step(batch, batch_idx)
+        _, predictions = self.student_model.validation_step(batch, batch_idx,
+                                                            compute_uncertainty=self.compute_uncertainty)
 
         gt = [
             {
@@ -277,6 +279,17 @@ class TeacherStudent(pl.LightningModule):
                 sync_dist=True,
                 batch_size=self.batch_size,
             )
+        
+        if self.compute_uncertainty:
+            uncertainty = self.student_model.uncertainty
+            pth = self.kwargs['sample_path']
+            strs=pth.split("/")[:-1]
+            save_pth = "/"
+            for s in strs:
+                save_pth = save_pth + s + "/"
+            pth_ = save_pth + f"/uncertainty_{self.student_model.mode}_cam.pkl"
+            with open(pth_, "wb") as f:
+                pickle.dump(uncertainty, f)
     
     def configure_optimizers(self):
         optimizer = self.student_model.configure_optimizers(max_steps=self.max_steps)   # TODO

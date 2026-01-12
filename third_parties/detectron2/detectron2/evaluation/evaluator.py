@@ -103,7 +103,7 @@ class DatasetEvaluators(DatasetEvaluator):
 
 def inference_on_dataset(
     model, data_loader, evaluator: Union[DatasetEvaluator, List[DatasetEvaluator], None],
-    vis=False, save_pth="", dataset_name=""
+    vis=False, save_pth="", dataset_name="", metadata=None
 ):
     """
     Run model on the data_loader and evaluate the metrics with evaluator.
@@ -157,12 +157,12 @@ def inference_on_dataset(
                 assert len(inputs) == 1, "image must be 1 while inference in test"
                 im = cv2.imread(inputs[0]["file_name"])
 
-                v = Visualizer(im[:, :, ::-1])      # 使用RGB
+                v = Visualizer(im[:, :, ::-1], metadata=metadata)      # 使用RGB
                 out = v.draw_instance_predictions(outputs[0]["instances"].to("cpu"))
                 # cv2.imwrite(save_pth+inputs[0]["image_id"]+"_pred.png", out.img)
                 if not os.path.exists(save_pth):
                     os.mkdir(save_pth)
-                out.save(save_pth+inputs[0]["image_id"]+"_"+dataset_name+"_pred.png")
+                out.save(save_pth+str(inputs[0]["image_id"])+"_"+dataset_name+"_pred.png")
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time

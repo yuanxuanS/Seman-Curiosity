@@ -38,6 +38,14 @@ class HabitatDataModule(pl.LightningDataModule):
         
         self.gpus = kwargs['gpus']
         
+        # with uncertainty filter
+        self.test_mode = kwargs['test_mode']  # "all"
+        if self.test_mode == "uncertainty":
+            self.uncertain_pth = kwargs['uncertain_pth']
+            self.test_budget = kwargs['test_budget']
+            with open(self.uncertain_pth, "rb") as f:
+                self.uncertain = pickle.load(f)
+        
         
     
     def prepare_data(self):
@@ -175,25 +183,40 @@ class HabitatDataModule(pl.LightningDataModule):
 
         sampler = SampleLoader(self.testset_path)
         
-        inputs = sampler.get_env_episode_and_steps_dense_list()     
-        filter_empty_instances = []
-        
-        for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
-            instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
+        if self.test_mode == "all":
+            inputs = sampler.get_env_episode_and_steps_dense_list()     
+            filter_empty_instances = []
+            for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
+                instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
 
-            filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
-
-        dataset = BbsgtDataset(
-            data_path=None,
-            sampler=sampler,
-            index_mask=filter_empty_instances,      # 仅保留有mask的
-            transform=transform,
-        )
+                filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+                
+                
+            dataset = BbsgtDataset(
+                data_path=None,
+                sampler=sampler,
+                index_mask=filter_empty_instances,      # 仅保留有mask的
+                transform=transform,
+            )
+        elif self.test_mode == "uncertainty":
+            inputs = []            
+            sorted_uncertain = sorted(self.uncertain, key=lambda x: x[3])
+            for i in range(test_budget):
+                inputs.append(sorted_uncertain[i][:3])   # 从小到大排序，取前test_budget个
+                
+            dataset = BbsgtDataset(
+                data_path=None,
+                sampler=sampler,
+                inputs=inputs,
+                transform=transform,
+            )
         return dataset
         
 class GTDataModule(HabitatDataModule):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, specify_pkl="", specify_num=0, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.specify_pkl = specify_pkl
+        self.specify_num = specify_num
         
     def prepare_data(self):
         ''' no need to implement'''
@@ -222,11 +245,21 @@ class GTDataModule(HabitatDataModule):
         
         inputs = sampler.get_env_episode_and_steps_dense_list()     
         filter_empty_instances = []
-        
+        if self.specify_pkl:
+            with open(self.specify_pkl, "rb") as fp:
+                sorted_samples = pickle.load(fp)
+            sorted_samples_lst = [(sample[0], sample[1], sample[2]) for sample in sorted_samples]   # env, episode, step
+            sorted_samples_lst = sorted_samples_lst[:self.specify_num]
+            
         for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
             instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
-
-            filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+            if self.specify_pkl:
+                if (env, ep, step) in sorted_samples_lst:
+                    filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+                else:
+                    filter_empty_instances.append(False)
+            else:            
+                filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
 
 
         return BbsgtDataset(

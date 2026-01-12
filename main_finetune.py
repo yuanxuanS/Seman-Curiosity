@@ -16,6 +16,7 @@ import torch
 import os
 import random
 import numpy as np
+import pickle
 
 os.environ["WANDB_MODE"]="offline"
 @hydra.main(config_path='./configs_finetune/', config_name='train.yaml')
@@ -82,19 +83,48 @@ def main(cfg):
             label_fields=['class_labels', 'infos'],
         ),
     )
+    
+    test_mode = cfg.test_mode  # "all"
     sampler = SampleLoader(cfg.testset_path)
-    inputs = sampler.get_env_episode_and_steps_dense_list()     
-    filter_empty_instances = []
-    for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
-        instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
+    
+    if test_mode == "all":    
+        inputs = sampler.get_env_episode_and_steps_dense_list() 
+        filter_empty_instances = []
+        for env, ep, step in zip(inputs[0], inputs[1], inputs[2]):      # need long time
+            instances = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
 
-        filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
-    dataset = BbsgtDataset(
+            filter_empty_instances.append(len(instances) > 0)       # 仅保留有mask的
+        dataset = BbsgtDataset(
             data_path=None,
             sampler=sampler,
             index_mask=filter_empty_instances,      # 仅保留有mask的
             transform=transform,
         )
+    elif test_mode == "uncertainty": 
+        uncertain_pth = cfg.uncertain_pth
+        test_budget = cfg.test_budget
+        uncertain_func = cfg.test_uncertain_func # 0: margin 1: cls entropy 2: seg entropy
+        
+        inputs = []
+        with open(uncertain_pth, "rb") as f:
+            uncertain = pickle.load(f)
+        if uncertain_func == 1:
+            sorted_uncertain = sorted(uncertain, key=lambda x: x[uncertain_func + 3].sum())
+        else:
+            sorted_uncertain = sorted(uncertain, key=lambda x: x[uncertain_func + 3])
+        for i in range(test_budget):
+            # inputs[0].append(sorted_uncertain[-i][0])
+            # inputs[1].append(sorted_uncertain[-i][1])
+            # inputs[2].append(sorted_uncertain[-i][2])
+            inputs.append(sorted_uncertain[-i][:3])   # 从小到大排序，取前test_budget个
+        dataset = BbsgtDataset(
+            data_path=None,
+            sampler=sampler,
+            # index_mask=filter_empty_instances,      # 仅保留有mask的
+            inputs=inputs,
+            transform=transform,
+        )
+    
     test_loader = get_loader(
         dataset,
         batch_size=cfg.training.val_batch_size,

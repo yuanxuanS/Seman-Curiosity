@@ -63,10 +63,14 @@ def get_args():
                         help='Frame height (default:84)')
     parser.add_argument('-dfh', '--det_frame_height', type=int, default=256,
                         help='Frame height (default:84)')
-    parser.add_argument('-fw', '--frame_width', type=int, default=128,      # policy输入大小,map更新时obs大小, 在输入前将env_frame_width变为frame_width大小
+    parser.add_argument('-fw', '--frame_width', type=int, default=256,      # policy输入大小,map更新时obs大小, 在输入前将env_frame_width变为frame_width大小
                         help='Frame width (default:84)')
-    parser.add_argument('-fh', '--frame_height', type=int, default=128,
+    parser.add_argument('-fh', '--frame_height', type=int, default=256,
                         help='Frame height (default:84)')
+    parser.add_argument('-cfw', '--camera_frame_width', type=int, default=128,      # camera policy输入大小,map更新时obs大小, 在输入前将env_frame_width变为frame_width大小
+                        help='Frame width (default')
+    parser.add_argument('-cfh', '--camera_frame_height', type=int, default=128,
+                        help='Frame height (default)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length, steps in an episode""")
     parser.add_argument("--task_config", type=str,
@@ -143,10 +147,10 @@ def get_args():
                         help="Semantic prediction confidence threshold") 
     
     # Mapping
-    parser.add_argument('--global_downscaling', type=int, default=2)    # full map缩放为local map大小，可能不需要？
+    parser.add_argument('--global_downscaling', type=int, default=2)    # full_map缩放 downscaling倍数，得到local_map实际大小
     parser.add_argument('--vision_range', type=int, default=100)
     parser.add_argument('--map_resolution', type=int, default=5)        # 每一网格的实际大小
-    parser.add_argument('--du_scale', type=int, default=1,
+    parser.add_argument('--du_scale', type=int, default=2,
                         help="输入policy的RGB大小 frame_w 构建地图时是否缩小")
     parser.add_argument('--map_size_cm', type=int, default=2400)
     parser.add_argument('--cat_pred_threshold', type=float, default=5.0)
@@ -167,6 +171,70 @@ def get_args():
     parser.add_argument('--magnify_num', type=float, default=3.0)
     parser.add_argument('--vsqf_version', type=str, default="v2")
     
+    # explore algor for poni
+    parser.add_argument('--explore_algor', type=str, default="frontier",
+                        help="explore algorithm in heuristic, poni | frontier")
+    parser.add_argument(
+        "--pf_model_path",
+        type=str,
+        default="./data/poni_models/poni_seed123_gibson_pf_model",
+        help="path to PF model weights",
+    )
+    parser.add_argument(
+        "--pf_masking_opt",
+        type=str,
+        default="unexplored",
+        choices=["unexplored", "none"],
+    )
+    parser.add_argument("--add_agent2loc_distance", action="store_true", default=False)
+    parser.add_argument(
+        "--add_agent2loc_distance_v2", action="store_true", default=False
+    )
+    parser.add_argument("--mask_nearest_locations", action="store_true", default=False)
+    parser.add_argument(
+        "--mask_size",
+        type=float,
+        default=1.0,
+        help="mask size (meters) for mask_nearest_locations option",
+    )
+    parser.add_argument("--area_weight_coef", type=float, default=0.7)
+    parser.add_argument("--dist_weight_coef", type=float, default=0.3)
+    parser.add_argument('--poni_num_global_steps', type=int, default=1,    # = horizon size?
+                        help='number of forward steps in A2C (default: 5)')
+    parser.add_argument('--poni_num_sem_categories', type=float, default=16,
+                        help="number of semantic plus 1 in poni")
+    
+    # for diversity reward
+    parser.add_argument(
+        "--use_diversity_reward", action="store_true", default=False
+    )
+    parser.add_argument(
+        "--diversity_only", action="store_true", default=False
+    )
+    parser.add_argument("--diver_coeff", type=float, default=0.1)
+    parser.add_argument(
+        "--with_penalty", action="store_true", default=False
+    )
+    # reward curriculum
+    parser.add_argument("--r1_coeff", type=float, default=1)
+    parser.add_argument("--r2_coeff", type=float, default=0.01)
+    parser.add_argument(
+        "--curriculum", action="store_true", default=False
+    )
+    # for topo reward
+    parser.add_argument(
+        "--check_target", action="store_true", default=False
+    )
+    # sample locs
+    parser.add_argument(
+        "--sampled_dir",
+        type=str,
+        default="",
+        help="path for sampled data",
+    )
+    parser.add_argument(
+        "--sample_mode", action="store_true", default=False
+    )
     # parse arguments
     args = parser.parse_args()
 

@@ -101,7 +101,8 @@ def main():
     magnify, magnify_num = args.magnify, args.magnify_num
     vsqf_pred = Vsqf_pred(device, magnify, magnify_num)
     orient_pred = Orient_pred(device)
-    vsqf_heu = vsqf_heuristic(args, num_scenes)
+    vsqf_heu = vsqf_heuristic(args, num_scenes, device)
+    vsqf_heu.reset()
     
     # inference vsqf and azimuth
     rgb_objs = [infos[env_idx]['rgb_obj'] for env_idx in range(num_scenes)]
@@ -216,7 +217,8 @@ def main():
         # 转化为周围节点的坐标偏置 bias_r, bias_c
         
     elif args.agent == "random":
-        l_action = np.random.randint(0, 3, num_scenes)
+        # l_action = np.random.randint(0, 3, num_scenes)
+        l_action = np.random.randint(0, 8, num_scenes)
     elif args.agent == "frontier":
         l_policy = Frontier(args)
         l_policy.reset(num_scenes)
@@ -227,10 +229,13 @@ def main():
                 p_input["short_time_goal"] = short_time_goals[e]
     elif args.agent == "vsqf_heuristic":
         # select goal according to vsqf map
-        goals = vsqf_maps.get_best_region()
+        # goals = vsqf_maps.get_best_region()
+        goals = vsqf_heu.get_best_region(vsqf_maps.full_map)
         for e, p_input in enumerate(vis_inputs):
-            if args.visualize or args.print_images:
-                p_input["long_term_goal"] = goals[e]
+            # if args.visualize or args.print_images:
+            if infos[e]['sample_stage']:
+                p_input["frontier_goal"] = goals[e]
+            p_input['sample_stage'] = infos[e]['sample_stage']
                 # p_input["short_time_goal"] = short_time_goals[e]
         # return action with planner
         l_action = vsqf_heu.get_actions(find_goal, vis_inputs)
@@ -342,6 +347,7 @@ def main():
 
             if args.agent == "frontier":
                 l_policy.reset(num_scenes)
+                vsqf_heu.reset()
                 
         # Sample next action
         if args.agent == "rl":
@@ -355,8 +361,15 @@ def main():
                 )
             l_action = l_action.cpu().numpy()
         elif args.agent == "random":
-            l_action = np.random.randint(0, 3, num_scenes)
+            l_action = np.random.randint(0, 8, num_scenes)
 
+        if step%500 == 250:
+            maps.filter_obstacle_map()
+            for e, p_input in enumerate(vis_inputs):
+                p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()                
+                p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
+            envs.update_collision_map(vis_inputs)
+        
         full_map = maps.full_map
         vis_inputs = [{} for e in range(num_scenes)]
         for e, p_input in enumerate(vis_inputs):
@@ -388,11 +401,14 @@ def main():
                     p_input["short_time_goal"] = short_time_goals[e]
         if args.agent == "vsqf_heuristic":
             # select goal according to vsqf map
-            goals = vsqf_maps.get_best_region()
+            # goals = vsqf_maps.get_best_region()
+            goals = vsqf_heu.get_best_region(vsqf_maps.full_map)
             for e, p_input in enumerate(vis_inputs):
                 # if args.visualize or args.print_images:
-                p_input["long_term_goal"] = goals[e]
+                if infos[e]['sample_stage']:
+                    p_input["frontier_goal"] = goals[e]
                     # p_input["short_time_goal"] = short_time_goals[e]
+                p_input['sample_stage'] = infos[e]['sample_stage']
             # return action with planner
             l_action = vsqf_heu.get_actions(find_goal, vis_inputs)
             
@@ -435,21 +451,22 @@ def main():
         # Training
         torch.set_grad_enabled(True)
         if l_step == args.num_local_steps - 1:
-            if not args.eval:
-                l_next_value = l_policy.get_value(
-                    l_rollouts.obs[-1],
-                    l_rollouts.rec_states[-1],
-                    l_rollouts.masks[-1],
-                    extras=l_rollouts.extras[-1]
-                ).detach()
-                l_rollouts.compute_returns(l_next_value, args.use_gae,
-                                           args.gamma, args.tau)
-                l_value_loss, l_action_loss, l_dist_entropy = \
-                    l_agent.update(l_rollouts)
-                l_value_losses.append(l_value_loss)
-                l_action_losses.append(l_action_loss)
-                l_dist_entropies.append(l_dist_entropy)
+            
             if args.agent == "rl":
+                if not args.eval:
+                    l_next_value = l_policy.get_value(
+                        l_rollouts.obs[-1],
+                        l_rollouts.rec_states[-1],
+                        l_rollouts.masks[-1],
+                        extras=l_rollouts.extras[-1]
+                    ).detach()
+                    l_rollouts.compute_returns(l_next_value, args.use_gae,
+                                            args.gamma, args.tau)
+                    l_value_loss, l_action_loss, l_dist_entropy = \
+                        l_agent.update(l_rollouts)
+                    l_value_losses.append(l_value_loss)
+                    l_action_losses.append(l_action_loss)
+                    l_dist_entropies.append(l_dist_entropy)
                 l_rollouts.after_update()       # rollout的最后一个state是下一次initial state
             elif args.agent == "random":
                 pass

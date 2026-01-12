@@ -3,7 +3,7 @@ from src.policy_rl.model import Semantic_Mapping
 import numpy as np
 from .arguments import get_args
 from .envs import make_vec_envs
-
+import skimage
 class Maps_Env:
     def __init__(self, args):
         super(Maps_Env, self).__init__()
@@ -35,7 +35,7 @@ class Maps_Env:
         self.local_map = torch.zeros(num_scenes, nc, self.local_w,
                             self.local_h).float().to(device)
         self.full_map = torch.zeros(num_scenes, nc, self.full_w, self.full_h).float().to(device)
-    
+        self.curr_full_map = torch.zeros(num_scenes, nc, self.full_w, self.full_h).float().to(device)
         # Initial full and local pose
         self.full_pose = torch.zeros(num_scenes, 3).float().to(device)
         self.local_pose = torch.zeros(num_scenes, 3).float().to(device)
@@ -60,9 +60,11 @@ class Maps_Env:
         从fullmap初始化local map
         '''
         self.full_map.fill_(0.)
+        self.curr_full_map.fill_(0.)
         self.full_pose.fill_(0.)
-        self.full_pose[:, :2] = self.args.map_size_cm / 100.0 / 2.0
+        self.full_pose[:, :2] = self.args.map_size_cm / 100.0 / 2.0     # full pose和local pose单位都是m
 
+        
         locs = self.full_pose.cpu().numpy()
         self.pose_inputs[:, :3] = locs
         for e in range(self.num_scenes):
@@ -71,7 +73,8 @@ class Maps_Env:
                             int(c * 100.0 / self.args.map_resolution)]
 
             self.full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
-
+            self.curr_full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
+            
             self.lmb[e] = self.get_local_map_boundaries((loc_r, loc_c),
                                               (self.local_w, self.local_h),
                                               (self.full_w, self.full_h))
@@ -87,8 +90,23 @@ class Maps_Env:
             self.local_pose[e] = self.full_pose[e] - \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
     
+    def patch_agent_region(self, patch, radius=28):
+        for e in range(self.num_scenes):
+            if patch[e]:
+                locs = self.local_pose[e].cpu().numpy()
+                
+                r, c = locs[1], locs[0]
+                loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                                int(c * 100.0 / self.args.map_resolution)]
+
+                r_coords, c_coords = np.indices(self.local_map.shape[-2:])
+                dist_sq = (r_coords - loc_r)**2 + (c_coords - loc_c)**2
+                agent_region = dist_sq <= radius**2
+                self.local_map[e,1, ...][agent_region] = 1.0
+            
     def _init_map_and_pose_for_env(self, e):
         self.full_map[e].fill_(0.)
+        self.curr_full_map[e].fill_(0.)
         self.full_pose[e].fill_(0.)
         self.full_pose[e, :2] = self.args.map_size_cm / 100.0 / 2.0
 
@@ -99,6 +117,7 @@ class Maps_Env:
                         int(c * 100.0 / self.args.map_resolution)]
 
         self.full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
+        self.curr_full_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.0
 
         self.lmb[e] = self.get_local_map_boundaries((loc_r, loc_c),
                                           (self.local_w, self.local_h),
@@ -145,8 +164,8 @@ class Maps_Env:
 
         return [gx1, gx2, gy1, gy2]
 
-
-    def _update_next_view_local(self, local_map, local_pose):
+    
+    def _update_next_view_local(self, local_map, local_pose, curr_local_map=None):
         '''
         '''
         # update the full and local maps; 
@@ -155,6 +174,12 @@ class Maps_Env:
             # 用更新后的local map更新full map
             self.full_map[e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = \
                 local_map[e]
+            
+            if curr_local_map is not None:
+                self.curr_full_map[e].fill_(0.)
+                self.curr_full_map[e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = \
+                    curr_local_map[e]
+                
             self.full_pose[e] = local_pose[e] + \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
 
@@ -174,11 +199,18 @@ class Maps_Env:
             local_map[e] = self.full_map[e, :,
                                     self.lmb[e, 0]:self.lmb[e, 1],
                                     self.lmb[e, 2]:self.lmb[e, 3]]
+            if curr_local_map is not None:
+                curr_local_map[e] = self.curr_full_map[e, :,
+                                        self.lmb[e, 0]:self.lmb[e, 1],
+                                        self.lmb[e, 2]:self.lmb[e, 3]]
             local_pose[e] = self.full_pose[e] - \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
         
-        return local_map, local_pose
-
+        if curr_local_map is not None:
+            return local_map, local_pose, curr_local_map
+        else:
+            return local_map, local_pose
+        
     def update_local_map(self, local_map):
         self.local_map = local_map
 
@@ -191,26 +223,26 @@ class Maps_Env:
         
         # update 0: obstacle 1: explored 4...: semantic
         # agent当前观察到的自我中心的map
-        _, local_map, _, local_pose = \
-            self.semantic_map(obs, poses, self.local_map, self.local_pose)
+        _, local_map, _, local_pose, curr_local_map = \
+            self.semantic_map(obs, poses, self.local_map, self.local_pose, True)
         
         # check floor
-        locs = local_pose.cpu().numpy()
-        for e in range(self.num_scenes):
-            r, c = locs[e, 1], locs[e, 0]
-            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
-                            int(c * 100.0 / self.args.map_resolution)]
-            if 'on_floor' in infos[e] and infos[e]['on_floor']:
-                # set obstacle on map to avoid go to floor
-                square_size = 20
-                size = local_map[e].shape[-1]
-                r_start = loc_r
-                r_end = min(loc_r + square_size, size)
-                c_start = loc_c
-                c_end = min(loc_c + square_size, size)
-                local_map[e, 0, r_start:r_end, c_start:c_end] = 1.
+        # locs = local_pose.cpu().numpy()
+        # for e in range(self.num_scenes):
+        #     r, c = locs[e, 1], locs[e, 0]
+        #     loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+        #                     int(c * 100.0 / self.args.map_resolution)]
+        #     if 'on_floor' in infos[e] and infos[e]['on_floor']:
+        #         # set obstacle on map to avoid go to floor
+        #         square_size = 20
+        #         size = local_map[e].shape[-1]
+        #         r_start = loc_r
+        #         r_end = min(loc_r + square_size, size)
+        #         c_start = loc_c
+        #         c_end = min(loc_c + square_size, size)
+        #         local_map[e, 0, r_start:r_end, c_start:c_end] = 1.
                 
-                infos[e]['on_floor'] = False
+        #         infos[e]['on_floor'] = False
         # update 2-3: curr and past maps
         locs = local_pose.cpu().numpy()
         self.pose_inputs[:, :3] = locs + self.origins
@@ -221,8 +253,7 @@ class Maps_Env:
                             int(c * 100.0 / self.args.map_resolution)]
             local_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.
         
-        local_map, local_pose = self._update_next_view_local(local_map, local_pose)
-
+        local_map, local_pose, curr_local_map = self._update_next_view_local(local_map, local_pose, curr_local_map)
         # update 
         self.local_map = local_map
         self.local_pose = local_pose
@@ -277,7 +308,59 @@ class Maps_Env:
         self.local_pose = local_pose
 
         return local_map, local_pose
+
+    def filter_obstacle_map(self):
+        # local
+        device = self.local_map.device
+        obstacle_local = self.local_map[:, 0:1, :, :].cpu().numpy() > 0.5
+        for i in range(self.local_map.shape[0]):
+            obs_local = obstacle_local[i, 0:1, :, :]
+            connected_colli, num_coli = skimage.morphology.label(obs_local, connectivity=1, return_num=True)
+            for id in range(num_coli):
+                region_ = (connected_colli== id).astype(bool)
+                if region_.sum() < 50:
+                    # set small collision region to traversible
+                    obs_local[region_] = 0
+            self.local_map[i, 0:1, :, :] = torch.from_numpy(obs_local).to(device)
+        
+        # full
+        obstacle_full = self.full_map[:, 0:1, :, :].cpu().numpy() > 0.5
+        for i in range(self.full_map.shape[0]):
+            obs_full = obstacle_full[i, 0:1, :, :]
+            connected_colli, num_coli = skimage.morphology.label(obs_full, connectivity=1, return_num=True)
+            for id in range(num_coli):
+                region_ = (connected_colli== id).astype(bool)
+                if region_.sum() < 50:
+                    # set small collision region to traversible
+                    obs_full[region_] = 0
+            self.full_map[i, 0:1, :, :] = torch.from_numpy(obs_full).to(device)
     
+    def filter_obstacle_map(self):
+        # local
+        device = self.local_map.device
+        obstacle_local = self.local_map[:, 0:1, :, :].cpu().numpy() > 0.5
+        for i in range(self.local_map.shape[0]):
+            obs_local = obstacle_local[i, 0:1, :, :]
+            connected_colli, num_coli = skimage.morphology.label(obs_local, connectivity=1, return_num=True)
+            for id in range(num_coli):
+                region_ = (connected_colli== id).astype(bool)
+                if region_.sum() < 50:
+                    # set small collision region to traversible
+                    obs_local[region_] = 0
+            self.local_map[i, 0:1, :, :] = torch.from_numpy(obs_local).to(device)
+        
+        # full
+        obstacle_full = self.full_map[:, 0:1, :, :].cpu().numpy() > 0.5
+        for i in range(self.full_map.shape[0]):
+            obs_full = obstacle_full[i, 0:1, :, :]
+            connected_colli, num_coli = skimage.morphology.label(obs_full, connectivity=1, return_num=True)
+            for id in range(num_coli):
+                region_ = (connected_colli== id).astype(bool)
+                if region_.sum() < 50:
+                    # set small collision region to traversible
+                    obs_full[region_] = 0
+            self.full_map[i, 0:1, :, :] = torch.from_numpy(obs_full).to(device)
+            
     def sum_of_semantic_map(self):
         # get semantic channels: 4:
         semantic_maps = self.full_map[:, 4:9, ...]   # num_scenes, num_semantic, size_w, size_h

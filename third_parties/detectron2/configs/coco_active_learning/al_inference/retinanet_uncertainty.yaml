@@ -1,0 +1,32 @@
+
+_BASE_: "../../Base-RetinaNet.yaml"
+MODEL:
+  META_ARCHITECTURE: RetinaNetAL   # ""
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  RESNETS:
+    DEPTH: 50
+  RETINANET:
+    BASE_MOMENTUM: 0.99
+    QUALITY_XI: 0.6
+
+SOLVER:
+  IMS_PER_BATCH: 32
+  BASE_LR: 0.01  # Note that RetinaNet uses a different default learning rate
+  STEPS: (60000, 80000)
+  MAX_ITER: 50
+
+LABELED_DATA: ''
+UNLABELED_DATA: ''
+ROUND_IDX: 0
+DATA_JSON: './output_al/retinanet_coco_ppal_5rounds_2percent_to_10percent/round1/annotations/labeled.json'
+IMG_ROOT: ''
+
+INFER: True
+INFER_DIVERSITY: False  # diversity sample, 推理中计算diversity值
+
+
+# diverisity params, not used now
+MAX_DET: 100
+FEAT_DIM: 256
+TOTAL_IMAGES: 0  # placeholder
+OUTPUT_PATH: '' # placeholder

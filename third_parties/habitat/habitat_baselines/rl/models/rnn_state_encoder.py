@@ -4,7 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Tuple
+from typing import Tuple, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -346,8 +346,101 @@ class RNNStateEncoder(nn.Module):
 
         return x, hidden_states
 
+class RNNStateEncoder2(nn.Module):
+    r"""RNN encoder for use with RL and possibly IL.
 
-class LSTMStateEncoder(RNNStateEncoder):
+    The main functionality this provides over just using PyTorch's RNN interface directly
+    is that it takes an addition masks input that resets the hidden state between two adjacent
+    timesteps to handle episodes ending in the middle of a rollout.
+    """
+
+    def layer_init(self):
+        for name, param in self.rnn.named_parameters():
+            if "weight" in name:
+                nn.init.orthogonal_(param)
+            elif "bias" in name:
+                nn.init.constant_(param, 0)
+
+    def pack_hidden(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states
+
+    def unpack_hidden(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states.contiguous()
+
+    def single_forward(
+        self, x, hidden_states, masks
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        r"""Forward for a non-sequence input"""
+
+        hidden_states = torch.where(
+            masks.view(1, -1, 1), hidden_states, hidden_states.new_zeros(())
+        )
+
+        x, hidden_states = self.rnn(
+            x.unsqueeze(0), self.unpack_hidden(hidden_states)
+        )
+        hidden_states = self.pack_hidden(hidden_states)
+
+        x = x.squeeze(0)
+        return x, hidden_states
+
+    def seq_forward(
+        self,
+        x,
+        hidden_states,
+        masks,
+        rnn_build_seq_info: Dict[str, torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        r"""Forward for a sequence of length T
+
+        Args:
+            x: (T, N, -1) Tensor that has been flattened to (T * N, -1)
+            hidden_states: The starting hidden state.
+            masks: The masks to be applied to hidden state at every timestep.
+                A (T, N) tensor flatten to (T * N)
+        """
+
+        (
+            x_seq,
+            hidden_states,
+        ) = build_rnn_inputs(x, hidden_states, masks, rnn_build_seq_info)
+
+        rnn_ret = self.rnn(x_seq, self.unpack_hidden(hidden_states))
+        x_seq: PackedSequence = rnn_ret[0]
+        hidden_states: torch.Tensor = rnn_ret[1]
+        hidden_states = self.pack_hidden(hidden_states)
+
+        x, hidden_states = build_rnn_out_from_seq(
+            x_seq,
+            hidden_states,
+            rnn_build_seq_info,
+        )
+
+        return x, hidden_states
+
+    def forward(
+        self,
+        x,
+        hidden_states,
+        masks,
+        rnn_build_seq_info: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.permute(1, 0, 2)
+        if x.size(0) == hidden_states.size(1):
+            assert rnn_build_seq_info is None
+            x, hidden_states = self.single_forward(x, hidden_states, masks)
+        else:
+            assert rnn_build_seq_info is not None
+            x, hidden_states = self.seq_forward(
+                x, hidden_states, masks, rnn_build_seq_info
+            )
+
+        hidden_states = hidden_states.permute(1, 0, 2)
+
+        return x, hidden_states
+    
+
+class LSTMStateEncoder(RNNStateEncoder2):
     def __init__(
         self,
         input_size: int,
@@ -378,7 +471,7 @@ class LSTMStateEncoder(RNNStateEncoder):
         return (lstm_states[0], lstm_states[1])
 
 
-class GRUStateEncoder(RNNStateEncoder):
+class GRUStateEncoder(RNNStateEncoder2):
     def __init__(
         self,
         input_size: int,

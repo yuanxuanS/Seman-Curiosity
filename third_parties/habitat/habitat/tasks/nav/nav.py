@@ -12,6 +12,7 @@ import attr
 import numpy as np
 from gym import spaces
 
+from habitat.tasks.nav.camera_action import *
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
 from habitat.core.embodied_task import (
@@ -356,9 +357,9 @@ class HeadingSensor(Sensor):
     def _quat_to_xy_heading(self, quat):
         direction_vector = np.array([0, 0, -1])
 
-        heading_vector = quaternion_rotate_vector(quat, direction_vector)
+        heading_vector = quaternion_rotate_vector(quat, direction_vector)       # 使用自身旋转将前向向量转化为全局坐标系
 
-        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]      # z轴负向为极坐标系的y分量； x正为z正； 则逆时针为正
         return np.array([phi], dtype=np.float32)
 
     def get_observation(

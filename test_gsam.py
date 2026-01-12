@@ -269,30 +269,30 @@ def pred_segment(args, rgb, model, predictor, env_epi_step):
     
     masks = pred_mask(predictor, boxes_filt, image, device)
 
-    # print(masks.shape)
+    print(masks.shape)
     # draw output image
-    plt.figure(figsize=(10, 10))
-    plt.imshow(image)
-    for mask in masks:
-        show_mask(mask.cpu().numpy(), plt.gca(), random_color=True)
-    for box, label in zip(boxes_filt, pred_phrases):
-        show_box(box.numpy(), plt.gca(), label)
+    # plt.figure(figsize=(10, 10))
+    # plt.imshow(image)
+    # for mask in masks:
+    #     show_mask(mask.cpu().numpy(), plt.gca(), random_color=True)
+    # for box, label in zip(boxes_filt, pred_phrases):
+    #     show_box(box.numpy(), plt.gca(), label)
 
-    env, episode, step = env_epi_step
+    # env, episode, step = env_epi_step
 
-    plt.axis('off')
-    plt.savefig(
-        os.path.join(output_dir, "epi"+str(episode)+"_env"+str(env) + "_step"+str(step)+"_gsam_output.jpg"),
-        bbox_inches="tight", dpi=300, pad_inches=0.0
-    )
+    # plt.axis('off')
+    # plt.savefig(
+    #     os.path.join(output_dir, "epi"+str(episode)+"_env"+str(env) + "_step"+str(step)+"_gsam_output.jpg"),
+    #     bbox_inches="tight", dpi=300, pad_inches=0.0
+    # )
 
-    save_mask_data(output_dir, masks, boxes_filt, pred_phrases, env_epi_step)
-    plt.clf()
-    plt.close('all')
+    # save_mask_data(output_dir, masks, boxes_filt, pred_phrases, env_epi_step)
+    # plt.clf()
+    # plt.close('all')
     
-    gc.collect()
-    annotations = convert_to_ann(masks, boxes_filt, pred_phrases, env_epi_step)
-    return annotations
+    # gc.collect()
+    # annotations = convert_to_ann(masks, boxes_filt, pred_phrases, env_epi_step)
+    # return annotations
 def convert_to_ann(masks, boxes, pred_phrases, env_epi_step):
     from src.constants import coco_categories
     class_map = { 
@@ -383,7 +383,7 @@ def main():
     # dataset_path = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data"
     # sampler = SampleLoader(dataset_path)
 
-    seg_args['output_dir'] = "./outputs_v2_2/"
+    seg_args['output_dir'] = "./outputs_vsqf/"
     model, predictor = init_segment(seg_args)
 
     sample_lst = [[0, 1, 10]]   # env, epi, step
@@ -391,8 +391,7 @@ def main():
     #     env, episode, step = idx
         # rgb = sampler.get_sample(env, episode, step, "rgb").data
 
-    img_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data_vqf/bed/0a5652c16e1a4575903dfc1696382502/0.5m/render_000.png"
-    # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/exp_obns_v2_eval_best_sample/episodes_data_orig_imgs/epi1_env0_step0.png"
+    img_pth = ""
     rgb = cv2.imread(img_pth)
 
     env, episode, step = 0, 0, 0

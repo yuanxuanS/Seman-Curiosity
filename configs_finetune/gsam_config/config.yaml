@@ -1,21 +1,20 @@
-gsam_base_dir: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/third_parties/
+gsam_base_dir: /home/wpp/Seman-Curiosity/third_parties/
 # Grounded-Segment-Anything"
-config:  /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/third_parties//GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py
-grounded_checkpoint: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/third_parties/Grounded-Segment-Anything/groundingdino_swint_ogc.pth
+config:  /home/wpp/Seman-Curiosity/third_parties//GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py
+grounded_checkpoint: /home/wpp/Seman-Curiosity/third_parties/Grounded-Segment-Anything/groundingdino_swint_ogc.pth
 sam_version: "vit_b"
 sam_checkpoint: 
-sam_hq_checkpoint: /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/third_parties/Grounded-Segment-Anything/sam_vit_b_01ec64.pth
+sam_hq_checkpoint: /home/wpp/Seman-Curiosity/third_parties/Grounded-Segment-Anything/sam_vit_b_01ec64.pth
 
-# /home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/third_parties/Grounded-Segment-Anything/sam_hq_vit_h.pth
 
 use_sam_hq: True
 
 # text_prompt: "Bed. Soft couch. Plant. Chair. Toilet. Table. Cupboard. Cabinet"
-text_prompt: "Bed. Couch. Chair. Toilet. Refrigerator." #Cupboard. Cabinet"
+text_prompt: "equipment" #"Refrigerator." #"Bed. Couch. Chair. Toilet. Refrigerator." #Cupboard. Cabinet"
 # text_prompt: "Bed. Couch. Plant. Chair. Toilet. Table. Refrigerator. Painting. Cupboard" #Cupboard. Cabinet"
 output_dir: "outputs"
 
-box_threshold: 0.5
-text_threshold: 0.5
+box_threshold: 0.25
+text_threshold: 0.2
 device: "cuda"
 bert_base_uncased_path: 

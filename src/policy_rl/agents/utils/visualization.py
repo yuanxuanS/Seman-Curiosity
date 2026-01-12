@@ -23,13 +23,9 @@ def draw_line(start, end, mat, steps=25, w=1):
         mat[x - w:x + w, y - w:y + w] = 1
     return mat
 
+def init_vis_image_only(goal_name, legend):
+    vis_image = np.ones((655, 510, 3)).astype(np.uint8) * 255
 
-def init_vis_image(goal_name, legend, mode=2):
-    if mode == 2:
-       vis_image = np.ones((655, 1165, 3)).astype(np.uint8) * 255
-    elif mode == 3:
-      #  vis_image = np.ones((655, 1660, 3)).astype(np.uint8) * 255
-       vis_image = np.ones((655, 1500, 3)).astype(np.uint8) * 255
     font = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 1
     color = (20, 20, 20)  # BGR
@@ -44,51 +40,84 @@ def init_vis_image(goal_name, legend, mode=2):
                             font, fontScale, color, thickness,
                             cv2.LINE_AA)
 
+    
+    # draw outlines
+    color = [100, 100, 100]
+    vis_image[49, 15:495] = color
+    vis_image[49, 510:990] = color
+    vis_image[50:530, 14] = color
+    vis_image[50:530, 495] = color
+
+    return vis_image
+
+def init_vis_image(goal_name, legend, mode=2):
+    if mode == 2:
+       vis_image = np.ones((655, 1165, 3)).astype(np.uint8) * 255
+    elif mode == 3:
+       vis_image = np.ones((655, 1500, 3)).astype(np.uint8) * 255
+    elif mode == 4:
+        vis_image = np.ones((655, 1995, 3)).astype(np.uint8) * 255
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = 1
+    color = (20, 20, 20)  # BGR
+    thickness = 2
+
+    text = "Observations (Goal: {})".format(goal_name)
+    textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
+    textX = (480 - textsize[0]) // 2 + 15
+    textY = (50 + textsize[1]) // 2
+    vis_image = cv2.putText(vis_image, text, (textX, textY),
+                            font, fontScale, color, thickness,
+                            cv2.LINE_AA)
+
     text = "Predicted Semantic Map"
     textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
-   #  textX = 640 + (480 - textsize[0]) // 2 + 30
     textX = 480 + (480 - textsize[0]) // 2 + 30
     textY = (50 + textsize[1]) // 2
     vis_image = cv2.putText(vis_image, text, (textX, textY),
                             font, fontScale, color, thickness,
                             cv2.LINE_AA)
     
-    if mode == 3:
+    if mode == 3 or mode == 4:
        text = "VSQF Map"
        textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
-      #  textX = 1135 + (480 - textsize[0]) // 2 + 30
        textX = 975 + (480 - textsize[0]) // 2 + 30
+       textY = (50 + textsize[1]) // 2
+       vis_image = cv2.putText(vis_image, text, (textX, textY),
+                                   font, fontScale, color, thickness,
+                                   cv2.LINE_AA)
+    if mode == 4:
+       text = "potential Map"
+       textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
+       textX = 1470 + (480 - textsize[0]) // 2 + 30
        textY = (50 + textsize[1]) // 2
        vis_image = cv2.putText(vis_image, text, (textX, textY),
                                    font, fontScale, color, thickness,
                                    cv2.LINE_AA)
     # draw outlines
     color = [100, 100, 100]
-   #  vis_image[49, 15:655] = color
-   #  vis_image[49, 670:1150] = color
     vis_image[49, 15:495] = color
     vis_image[49, 510:990] = color
-    if mode == 3:
-       vis_image[49, 1005:1485] = color
     vis_image[50:530, 14] = color
-   #  vis_image[50:530, 655] = color
-   #  vis_image[50:530, 669] = color
-   #  vis_image[50:530, 1150] = color
     vis_image[50:530, 495] = color
     vis_image[50:530, 509] = color
     vis_image[50:530, 990] = color
-    if mode == 3:
-      #  vis_image[50:530, 1164] = color
-      #  vis_image[50:530, 1645] = color
-       vis_image[50:530, 1004] = color
-       vis_image[50:530, 1485] = color
-   #  vis_image[530, 15:655] = color
-   #  vis_image[530, 670:1150] = color
+    
+    if mode == 3 or mode == 4:
+        vis_image[49, 1005:1485] = color
+        vis_image[50:530, 1004] = color
+        vis_image[50:530, 1485] = color
+        vis_image[530, 1005:1485] = color
     vis_image[530, 15:495] = color
     vis_image[530, 510:990] = color
-    if mode == 3:
-      #  vis_image[530, 1165:1645] = color
-      vis_image[530, 1005:1485] = color
+    
+    if mode == 4:
+        vis_image[49, 1505:1985] = color
+        vis_image[50:530, 1504] = color
+        vis_image[50:530, 1985] = color
+        vis_image[530, 1505:1985] = color
+    # vis_image[530, 15:495] = color
+    # vis_image[530, 510:990] = color
     # draw legend
     lx, ly, _ = legend.shape
     vis_image[537:537 + lx, 155:155 + ly, :] = legend

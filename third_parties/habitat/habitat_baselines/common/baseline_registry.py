@@ -21,7 +21,7 @@ Various decorators for registry different kind of classes with unique keys
 -   Register a policy: ``@baseline_registry.register_policy``
 """
 
-from typing import Optional
+from typing import Optional, Union
 
 from habitat.core.registry import Registry
 
@@ -90,10 +90,13 @@ class BaselineRegistry(Registry):
                 pass
 
         """
-        from habitat_baselines.rl.ppo.policy import Policy
-
+        from habitat_baselines.rl.ppo.policy import PolicyV2, Policy
+        # from habitat_baselines.rl.ppo.policy import Policy
+        Required_Type = Union[Policy, PolicyV2]
+        runtime_check_types = Required_Type.__args__
         return cls._register_impl(
-            "policy", to_register, name, assert_type=Policy
+            "policy", to_register, name, assert_type=runtime_check_types
+            # "policy", to_register, name, assert_type=Policy
         )
 
     @classmethod

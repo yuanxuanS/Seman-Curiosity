@@ -83,7 +83,7 @@ class Sample_Obj_Env(habitat.RLEnv):
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
         # save dir
-        output_path = "/data1/wpp_data/data/vsqf_test_val5/"
+        output_path = "/data1/wpp_data/data/object_visibles/"
         os.makedirs(output_path, exist_ok=True)
         data_pth = output_path+"/data/"
         os.makedirs(data_pth, exist_ok=True)
@@ -145,8 +145,8 @@ class Sample_Obj_Env(habitat.RLEnv):
             self.scene_count += 1
             self.last_scene_path = self.scene_path
         scene_name = self.scene_path.split("/")[-1].split(".")[0]
-        if scene_name == "Collierville":
-            pass
+        # if scene_name == "Collierville":
+        #     pass
         
         scene_info = self.dataset_info[scene_name]
         print(f"scene_{scene_name} has floor: {scene_info.keys()}")
@@ -282,6 +282,7 @@ class Sample_Obj_Env(habitat.RLEnv):
                     dx = visible_pts_shift[:,0]
                     dy = visible_pts_shift[:,1]
                     
+                    # yaw为agent指向物体的向量和世界正向(0,0,1)的夹角；如果yaw=0，正好向量一致； 则物体朝向为(0,0,-1)
                     valid_yaw = np.degrees(np.arctan2(dz, dx))
                     nbins = 36
                     bins = np.linspace(-180, 180, nbins+1)

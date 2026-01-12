@@ -357,66 +357,6 @@ class COCOEvaluator(DatasetEvaluator):
         return results
 
 
-def instances_to_coco_json(instances, img_id):
-    """
-    Dump an "Instances" object to a COCO-format json that's used for evaluation.
-
-    Args:
-        instances (Instances):
-        img_id (int): the image id
-
-    Returns:
-        list[dict]: list of json annotations in COCO format.
-    """
-    num_instance = len(instances)
-    if num_instance == 0:
-        return []
-
-    boxes = instances.pred_boxes.tensor.numpy()
-    boxes = BoxMode.convert(boxes, BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
-    boxes = boxes.tolist()
-    scores = instances.scores.tolist()
-    classes = instances.pred_classes.tolist()
-
-    has_mask = instances.has("pred_masks")
-    if has_mask:
-        # use RLE to encode the masks, because they are too large and takes memory
-        # since this evaluator stores outputs of the entire dataset
-        rles = [
-            mask_util.encode(np.array(mask[:, :, None], order="F", dtype="uint8"))[0]
-            for mask in instances.pred_masks
-        ]
-        for rle in rles:
-            # "counts" is an array encoded by mask_util as a byte-stream. Python3's
-            # json writer which always produces strings cannot serialize a bytestream
-            # unless you decode it. Thankfully, utf-8 works out (which is also what
-            # the pycocotools/_mask.pyx does).
-            rle["counts"] = rle["counts"].decode("utf-8")
-
-    has_keypoints = instances.has("pred_keypoints")
-    if has_keypoints:
-        keypoints = instances.pred_keypoints
-
-    results = []
-    for k in range(num_instance):
-        result = {
-            "image_id": img_id,
-            "category_id": classes[k],
-            "bbox": boxes[k],
-            "score": scores[k],
-        }
-        if has_mask:
-            result["segmentation"] = rles[k]
-        if has_keypoints:
-            # In COCO annotations,
-            # keypoints coordinates are pixel indices.
-            # However our predictions are floating point coordinates.
-            # Therefore we subtract 0.5 to be consistent with the annotation format.
-            # This is the inverse of data loading logic in `datasets/coco.py`.
-            keypoints[k][:, :2] -= 0.5
-            result["keypoints"] = keypoints[k].flatten().tolist()
-        results.append(result)
-    return results
 
 
 # inspired from Detectron:
@@ -531,7 +471,119 @@ def _evaluate_box_proposals(dataset_predictions, coco_api, thresholds=None, area
         "num_pos": num_pos,
     }
 
+def instances_to_coco_json(instances, img_id):
+    """
+    Dump an "Instances" object to a COCO-format json that's used for evaluation.
 
+    Args:
+        instances (Instances):
+        img_id (int): the image id
+
+    Returns:
+        list[dict]: list of json annotations in COCO format.
+    """
+    num_instance = len(instances)
+    if num_instance == 0:
+        return []
+
+    boxes = instances.pred_boxes.tensor.numpy()
+    boxes = BoxMode.convert(boxes, BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
+    boxes = boxes.tolist()
+    scores = instances.scores.tolist()
+    classes = instances.pred_classes.tolist()
+
+    has_mask = instances.has("pred_masks")
+    if has_mask:
+        # use RLE to encode the masks, because they are too large and takes memory
+        # since this evaluator stores outputs of the entire dataset
+        rles = [
+            mask_util.encode(np.array(mask[:, :, None], order="F", dtype="uint8"))[0]
+            for mask in instances.pred_masks
+        ]
+        for rle in rles:
+            # "counts" is an array encoded by mask_util as a byte-stream. Python3's
+            # json writer which always produces strings cannot serialize a bytestream
+            # unless you decode it. Thankfully, utf-8 works out (which is also what
+            # the pycocotools/_mask.pyx does).
+            rle["counts"] = rle["counts"].decode("utf-8")
+
+    has_keypoints = instances.has("pred_keypoints")
+    if has_keypoints:
+        keypoints = instances.pred_keypoints
+
+    results = []
+    for k in range(num_instance):
+        result = {
+            "image_id": img_id,
+            "category_id": classes[k],
+            "bbox": boxes[k],
+            "score": scores[k],
+        }
+        if has_mask:
+            result["segmentation"] = rles[k]
+        if has_keypoints:
+            # In COCO annotations,
+            # keypoints coordinates are pixel indices.
+            # However our predictions are floating point coordinates.
+            # Therefore we subtract 0.5 to be consistent with the annotation format.
+            # This is the inverse of data loading logic in `datasets/coco.py`.
+            keypoints[k][:, :2] -= 0.5
+            result["keypoints"] = keypoints[k].flatten().tolist()
+        results.append(result)
+    return results
+
+def get_detailed_fp_fn_stats(coco_eval, iou_threshold=0.5):
+    """
+    基于 COCOeval 的 evalImgs 字段精确统计 FP 和 FN。
+    """
+    # 获取参数索引
+    # iouThrs 默认是 [.5, .55, ..., .95]，0.5 通常对应索引 0
+    try:
+        iou_idx = list(coco_eval.params.iouThrs).index(iou_threshold)
+    except ValueError:
+        iou_idx = 0
+        print(f"警告：未找到 IoU={iou_threshold}, 默认使用 {coco_eval.params.iouThrs[0]}")
+
+    total_fp = 0
+    total_fn = 0
+    total_tp = 0
+    
+    # evalImgs 是一个列表，存放了每个 image_id 和每个 cat_id 的评估结果
+    # [cite_start]每个元素是一个字典，包含 dtMatches, gtMatches, dtIgnore, gtIgnore [cite: 144]
+    for eval_img in coco_eval.evalImgs:
+        if eval_img is None:
+            continue
+            
+        # 1. 统计 False Positives (FP)
+        # dtMatches: [TxD] 矩阵，记录每个检测框匹配到的 GT ID [cite: 144]
+        # 如果 dtMatches 为 0 且 dtIgnore 为 0，则该检测是一个 FP [cite: 144]
+        dt_matches = eval_img['dtMatches'][iou_idx]     # >0代表和gt有匹配到，TP； 否则为FP
+        dt_ignore = eval_img['dtIgnore'][iou_idx]       # 无效区域比如iscrowd, eval small时忽略large的 
+        
+        for m, ig in zip(dt_matches, dt_ignore):
+            if m == 0 and not ig:
+                total_fp += 1
+            elif m > 0 and not ig:
+                total_tp += 1
+
+        # 2. 统计 False Negatives (FN)
+        # gtMatches: [TxG] 矩阵，记录每个真值框匹配到的 DT ID [cite: 144]
+        # 如果 gtMatches 为 0 且 gtIgnore 为 0，则该真值为一个被漏掉的目标 (FN) [cite: 144]
+        gt_matches = eval_img['gtMatches'][iou_idx]
+        gt_ignore = eval_img['gtIgnore'] # 注意：文档显示 gtIgnore 是 [1xG] [cite: 144]
+        
+        for m, ig in zip(gt_matches, gt_ignore):
+            if m == 0 and not ig:
+                total_fn += 1
+
+    return {
+        "TP": total_tp,
+        "FP": total_fp,
+        "FN": total_fn,
+        "Total_GT": total_tp + total_fn
+    }
+    
+    
 def _evaluate_predictions_on_coco(
     coco_gt, coco_results, iou_type, kpt_oks_sigmas=None, use_fast_impl=True, img_ids=None
 ):
@@ -575,5 +627,16 @@ def _evaluate_predictions_on_coco(
     coco_eval.evaluate()
     coco_eval.accumulate()
     coco_eval.summarize()
+
+    # 获取指定 IoU 下的统计
+    for iou_thres in coco_eval.eval['params'].iouThrs:
+        stats = get_detailed_fp_fn_stats(coco_eval, iou_threshold=iou_thres)
+
+        # 打印结果，方便分析域偏移下的漏检情况
+        print(f"--- 统计 (IoU={iou_thres}) ---")
+        print(f"漏检数 (FN): {stats['FN']} ")
+        print(f"错检数 (FP): {stats['FP']}")
+        print(f" 总GT数: {stats['Total_GT']}")
+        print(f"召回率: {stats['TP'] / (stats['Total_GT'] + 1e-6):.4f}")
 
     return coco_eval

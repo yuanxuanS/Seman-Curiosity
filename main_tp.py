@@ -1,0 +1,592 @@
+
+from src.policy_rl.arguments import get_args
+import torch
+import numpy as np
+import os
+import logging
+from collections import deque, defaultdict
+import gym
+import time
+from datetime import datetime
+from src.policy_rl.envs import make_vec_envs
+from src.policy_rl.maps import Maps_Env
+from src.policy_rl.utils.storage import GlobalRolloutStorage
+from src.policy_rl.model import RL_Policy
+from  src.policy_rl import algo 
+from src.policy_rl.baseline_frontier import Frontier
+import cv2
+import json
+from src.policy_rl.tp_topo_reward import VectorizedTopologyManager
+def main():
+    args = get_args()
+    
+    # seed 
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
+    if args.cuda:
+        torch.cuda.manual_seed(args.seed)
+
+    # Setup Logging
+    log_dir = "{}/models/{}/".format(args.dump_location, args.exp_name)
+    dump_dir = "{}/dump/{}/".format(args.dump_location, args.exp_name)
+
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    if not os.path.exists(dump_dir):
+        os.makedirs(dump_dir)
+    
+    log_name = 'eval.log' if args.eval else 'train.log' 
+    logging.basicConfig(
+        filename=log_dir + log_name,
+        level=logging.INFO)
+    print("Dumping at {}".format(log_dir))
+    print(args)
+    logging.info(args)
+
+    # Logging and loss variables
+    num_scenes = args.num_processes
+    num_episodes = int(args.num_eval_episodes)
+    
+    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
+
+    #  l_masks, not used. episode length不同时使用
+    l_masks = torch.ones(num_scenes).float().to(device)
+
+    best_l_reward = -np.inf
+
+    if args.eval:
+        # TODO: 增加一些online指标
+        episode_done = []
+        for _ in range(args.num_processes):
+            episode_done.append(deque(maxlen=num_episodes))
+    else:
+        pass # TODO: 
+    
+    finished = np.zeros((args.num_processes))
+
+    l_episode_rewards = []
+    per_step_l_rewards = deque(maxlen=1000)
+    per_step_rewards = deque(maxlen=1000)
+    
+    # tp action distribution
+    episode_tp_step = np.zeros((num_scenes, 5))
+    episode_tp_idx = [0] * num_scenes
+    
+    # tp penalty
+    step_since_last_tp = torch.zeros((num_scenes))
+    
+    l_value_losses = deque(maxlen=1000)
+    l_action_losses = deque(maxlen=1000)
+    l_dist_entropies = deque(maxlen=1000)
+
+    # Starting environments
+    torch.set_num_threads(1)
+    envs = make_vec_envs(args)      
+    obs, infos = envs.reset()   # obs: rgb +depth + categories 16 TODO: ?
+
+    
+    torch.set_grad_enabled(False)
+
+    # for topo reward
+    topo_manager = VectorizedTopologyManager(num_scenes,check_target=args.check_target)
+    
+    # Initializing Maps
+    # Full map consists of multiple channels containing the following:
+    # 1. Obstacle Map
+    # 2. Exploread Area
+    # 3. Current Agent Location
+    # 4. Past Agent Locations
+    # 5,6,7,.. : Semantic Categories
+    maps = Maps_Env(args)
+    local_map, local_pose = maps.update_semantic_map(obs, infos)
+    full_pose = maps.full_pose
+    
+    # fro transport action
+    tp_budget =np.array([info['tp_budget'] for info in infos])
+    category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
+    
+    # for topo reward
+    curr_pos = [info['position'] for info in infos]
+    has_targets = [info['has_target'] for info in infos]
+    topo_manager.update([i for i in range(num_scenes)],
+                        curr_pos,
+                        has_targets
+                        )
+    
+    # for visualize
+    full_map = maps.full_map
+    vis_inputs = [{} for e in range(num_scenes)]
+    for e, p_input in enumerate(vis_inputs):
+        p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
+        p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
+        p_input['pose_pred'] = maps.get_all_pose()[e]
+        
+        p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
+        p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
+        p_input['pose_pred'] = maps.get_all_pose()[e]
+        if args.visualize or args.print_images:
+            local_map[e, -1, :, :] = 1e-5       # 有物体时，为了argmax时不选最后通道
+            p_input['sem_map_pred'] = local_map[e, 4:, :, :
+                                                ].argmax(0).cpu().numpy()   # 如果无object，选最后一个通道
+            full_map[e, -1, :, :] = 1e-5
+            p_input['sem_map_pred_full'] = full_map[e, 4:, :, :].argmax(0).cpu().numpy()
+
+    l_action_space = envs.get_action_space()[0]
+    if args.agent == "rl":
+        # Local policy observation space
+        es = 5 + 1 + 1      # extra size: object count of categories, budget, sslj
+        l_observation_space = envs.get_obs_space()[0]  # TODO: VectorEnv's func
+        
+
+        # local policy recurrent layer size
+        l_hidden_size = args.local_hidden_size
+
+        # Local policy: TODO
+        l_policy = RL_Policy(l_observation_space.shape, 
+                             l_action_space,
+                            model_type=3,
+                            base_kwargs={'recurrent': args.use_recurrent_local,
+                                        'hidden_size': l_hidden_size,
+                                        'num_sem_categories': args.num_sem_categories - 1,
+                                        'max_budget': 5,
+                                        'input_category': True,
+                                        'input_budget': True,
+                                        'input_sslj': True
+                                        }).to(device)
+        
+        l_agent = algo.PPO(l_policy, args.clip_param, args.ppo_epoch,
+                        args.num_mini_batch, args.value_loss_coef,
+                        args.entropy_coef, lr=args.lr, eps=args.eps,
+                        max_grad_norm=args.max_grad_norm)
+
+        
+
+        # Storage: 
+        l_rollouts = GlobalRolloutStorage(args.num_local_steps,
+                                        num_scenes, l_observation_space.shape,
+                                        l_action_space, l_policy.rec_state_size,
+                                        es).to(device)
+        
+        # load weights
+        if args.load != "0":
+            print("Loading model {}".format(args.load))
+            logging.info("Loading model {}".format(args.load))
+            state_dict = torch.load(args.load,
+                                    map_location=lambda storage, loc: storage)
+            l_policy.load_state_dict(state_dict)
+
+        if args.eval:
+            l_policy.eval()
+    
+        # Get local policy input
+        # local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
+        local_input = obs[:, :3, ...]
+        # local_orientation = torch.zeros(num_scenes, 1).long()
+        # local_xy = torch.zeros(num_scenes, 2)
+        
+        # locs = local_pose.cpu().numpy()
+        # locs = full_pose.cpu().numpy()      # 使用全局pose
+        # for e in range(num_scenes):
+        #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
+        #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+            
+        extras = torch.zeros(num_scenes, es)
+        # extras[:, 0] = local_orientation[:, 0]
+        extras[:, :5] = torch.from_numpy(category_object)
+        extras[:, 5] = torch.from_numpy(tp_budget.T)
+        extras[:, 6] = step_since_last_tp.T
+
+        l_rollouts.obs[0].copy_(local_input)   # 
+        l_rollouts.extras[0].copy_(extras)
+
+        # Run Local policy
+        l_value, l_action, l_action_log_prob, l_rec_states = \
+            l_policy.act(
+                l_rollouts.obs[0],
+                l_rollouts.rec_states[0],
+                l_rollouts.masks[0],
+                extras=l_rollouts.extras[0],
+                deterministic=False
+            )
+        l_action = l_action.cpu().numpy()
+    
+    elif args.agent == "random":
+        l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
+        l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
+    elif args.agent == "heuristic":
+        l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+    elif args.agent == "frontier":
+        l_policy = Frontier(args)
+        l_policy.reset(num_scenes)
+        l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
+        for e, p_input in enumerate(vis_inputs):
+            if args.visualize or args.print_images:
+                p_input["frontier_goal"] = goals[e]
+                p_input["short_time_goal"] = short_time_goals[e]
+    
+    # transition:
+    # pred instance, get semantic masks and step env: 
+    actions = []
+    actions.append(l_action)
+    # print(f"action is {l_action}")
+    obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
+    l_action = torch.tensor(l_action)
+    
+    # tp action
+    for i in range(num_scenes):
+        if l_action[i] ==3:
+            episode_tp_step[i][episode_tp_idx[i]] = 0
+            episode_tp_idx[i] += 1
+            
+            step_since_last_tp[i] = 0       # 第一步tp，则惩罚大；（鼓励在原点先探索）
+    
+    # update map
+    local_map, local_pose = maps.update_semantic_map(obs, infos)
+    full_pose = maps.full_pose
+    
+    
+    start = time.time()
+    start_datetime = datetime.fromtimestamp(start)
+    logging.info("Start date and time: %s", start_datetime)
+    
+    l_reward = torch.zeros(num_scenes).to(device)
+    last_reward = torch.zeros(num_scenes).to(device)
+    diver_cumu_r = torch.zeros(num_scenes).to(device)
+    cumu_r = torch.zeros(num_scenes).to(device)
+
+    
+    torch.set_grad_enabled(False)
+
+    print("Starting running")
+    logging.info("Starting running")
+    if not args.eval:
+        print(f"training frames is {args.num_training_frames}")
+        logging.info(f"training frames is {args.num_training_frames}")
+        
+    total_step_num = args.num_training_frames // args.num_processes + 1
+    for step in range(args.num_training_frames // args.num_processes + 1):
+        l_step = step % args.num_local_steps
+        
+        if finished.sum() == args.num_processes:    # eval over
+            break
+        
+        # diversity reward
+        if args.use_diversity_reward:
+            # for topo reward
+            curr_pos = [info['position'] for info in infos]
+            has_targets = [info['has_target'] for info in infos]
+            diversity_reward = topo_manager.update([i for i in range(num_scenes)],
+                                curr_pos, 
+                                has_targets,)
+            diversity_reward = torch.from_numpy(diversity_reward).to(device)
+            # diversity_reward = torch.tensor([info['diver_reward'] for info in infos], device=device)
+                
+        penalty_r = torch.tensor([info['tp_penalty'] for info in infos], device=device)
+        # penalty_r *= (1 + 2 * torch.exp(- step_since_last_tp/ 25)).to(device) 
+        penalty_r *= (0.8 * torch.tanh((step_since_last_tp - 40) / 20) - 0.2).to(device)
+        # penalty_r *= args.diver_coeff
+        penalty_r = penalty_r.to(device)
+        
+        # update after use it
+        for i in range(num_scenes):
+            if l_action[i] ==3:
+                step_since_last_tp[i] = 0
+        # get reward: map change after state transition
+        if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
+            l_reward = last_reward
+        else:
+            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+        reward = l_reward - last_reward
+        
+
+        if args.diversity_only:
+            reward = torch.zeros_like(reward)
+        
+        if args.curriculum and step >= int(total_step_num / 2) :
+            # print(f"in step : {step}, r1, r2 from {args.r1_coeff}-{args.r2_coeff}")
+            args.r1_coeff = 1
+            args.r2_coeff = min((step - int(total_step_num / 2)) / 10000, 1)
+            if step % (args.log_interval * 5) == 0:
+                print(f" step {step}, to {args.r1_coeff}-{args.r2_coeff}")
+            
+        if args.with_penalty:
+            reward += penalty_r * args.r1_coeff
+        # divesity reward
+        if args.use_diversity_reward:
+            reward += diversity_reward * args.diver_coeff * args.r2_coeff
+        diver_cumu_r += diversity_reward * args.diver_coeff * args.r2_coeff
+
+        cumu_r += reward
+        # ------------------------------------------------------------------ 
+        # update local input, next state
+        locs = full_pose.cpu().numpy()
+        
+        # fro transport action
+        tp_budget =np.array([info['tp_budget'] for info in infos])
+        category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
+    
+        if args.agent == "rl":
+            # for e in range(num_scenes):
+            #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
+            #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+                
+            local_input = obs[:, :3, ...]       # rgb
+            # extras[:, 0] = local_orientation[:, 0]
+            # extras[:, :2] = local_xy[:]
+            extras = torch.zeros(num_scenes, es)
+            extras[:, :5] = torch.from_numpy(category_object)
+            extras[:, 5] = torch.from_numpy(tp_budget.T)
+            extras[:, 6] = step_since_last_tp.T
+            # print(f"input sxtras: {extras}")
+            
+        # Add samples to local policy storage
+        
+        if args.agent == "rl":
+            l_rollouts.insert(
+                    local_input, l_rec_states,      # state_t+1
+                    l_action, l_action_log_prob, l_value,   # action, reward_t
+                    reward, l_masks, extras
+                )
+        last_reward = l_reward
+
+        # 
+        reward_mean = np.mean(reward.cpu().numpy())
+        l_reward_mean = np.mean(l_reward.cpu().numpy())
+        diver_cumu_mean = np.mean(diver_cumu_r.cpu().numpy())
+        all_r_mean = np.mean(cumu_r.cpu().numpy())
+        per_step_rewards.append(reward_mean)
+        per_step_l_rewards.append(l_reward_mean)
+
+        # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
+        # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
+        
+        if done[0]:
+            r_ = np.mean(l_reward.cpu().numpy())
+            print(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean curios reward={r_}")
+            logging.info(f"episode over in {step} step, {l_step} local step, rollouts done;\n episode mean curios reward={r_}")
+            
+            print(f"episode mean diver reward={diver_cumu_mean}")
+            logging.info(f"episode mean diver reward={diver_cumu_mean}")
+            l_episode_rewards.append(r_)
+            
+            print(f"all episode mean reward={all_r_mean}")
+            logging.info(f"all episode mean reward={all_r_mean}")
+
+            l_reward = torch.zeros(num_scenes).to(device)
+            last_reward = l_reward
+            diver_cumu_r = torch.zeros(num_scenes).to(device)
+            cumu_r = torch.zeros(num_scenes).to(device)
+            
+            episode_tp_mean = np.mean(episode_tp_step, axis=1).mean()
+            episode_tp_var = np.var(episode_tp_step, axis=1).mean()
+            print(f"tp action mean={episode_tp_mean}")
+            print(f"tp action var={episode_tp_var}")
+            print(episode_tp_step)
+            episode_tp_step = np.zeros_like(episode_tp_step)
+            episode_tp_idx = [0] * num_scenes
+            
+            step_since_last_tp = torch.zeros_like(step_since_last_tp)
+            
+            # topo reward
+            
+            for i in range(num_scenes):
+                print(f"env {i}, node={len(topo_manager.env_nodes[i])}")
+                topo_manager.reset_env(i)
+            
+            if args.eval:
+                for e, x in enumerate(done):    # if done, maps from new obs
+                    if x:
+                        episode_done[e].append(True)
+                        if len(episode_done[e]) == num_episodes:
+                            finished[e] = 1
+
+            if args.agent == "frontier":
+                l_policy.reset(num_scenes)
+        
+        
+        # Sample next action
+        if args.agent == "rl":
+            l_value, l_action, l_action_log_prob, l_rec_states = \
+                l_policy.act(
+                    l_rollouts.obs[l_step + 1],
+                    l_rollouts.rec_states[l_step + 1],
+                    l_rollouts.masks[l_step + 1],
+                    extras=l_rollouts.extras[l_step + 1],
+                    deterministic=False
+                )
+            l_action = l_action.cpu().numpy()
+        elif args.agent == "random":
+            l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
+            l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
+            l_action = np.where(tp_budget > 0, l_action_tp, l_action_notp)
+        elif args.agent == "heuristic":
+            t = (step + 1) % 500
+            if t % 90  == 0:
+                l_action = np.random.randint(3, l_action_space.n, num_scenes)
+            else:
+                l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        
+        # tp action
+        for i in range(num_scenes):
+            if l_action[i] ==3:
+                episode_tp_step[i, episode_tp_idx[i]] = (step + 1) % 500 
+                episode_tp_idx[i] += 1
+                # step_since_last_tp[i] = 0
+            
+        full_map = maps.full_map
+        vis_inputs = [{} for e in range(num_scenes)]
+        for e, p_input in enumerate(vis_inputs):
+                
+            p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
+            p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
+            p_input['pose_pred'] = maps.get_all_pose()[e]
+
+            p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
+            p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
+            p_input['pose_pred'] = maps.get_all_pose()[e]
+            
+
+            if args.visualize or args.print_images:
+                local_map[e, -1, :, :] = 1e-5
+                p_input['sem_map_pred'] = local_map[e, 4:, :, :
+                                                    ].argmax(0).cpu().numpy()
+                full_map[e, -1, :, :] = 1e-5
+                p_input['sem_map_pred_full'] = full_map[e, 4:, :, :
+                                                        ].argmax(0).cpu().numpy()                    
+        
+        if args.agent == "frontier":  # must be after updating vis_inputs
+            l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
+            if args.visualize or args.print_images:
+                for e, p_input in enumerate(vis_inputs):
+                    p_input["frontier_goal"] = goals[e]
+                    p_input["short_time_goal"] = short_time_goals[e]
+        
+        # transition: next state
+        # pred instance, get semantic masks and step env
+        actions.append(l_action)
+        # print(f"action is {l_action}")
+        obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
+        l_action = torch.tensor(l_action)
+        step_since_last_tp += torch.ones_like(step_since_last_tp)
+        
+        # if episode over, reset maps
+        for e, x in enumerate(done):    # if done, maps from new obs
+            if x:
+                maps._init_map_and_pose_for_env(e)
+                print(f"Env {e}'s episode over in {step + 1} step, {l_step+ 1} local step, reset maps")
+                
+        # update map
+        local_map, local_pose = maps.update_semantic_map(obs, infos)
+        full_pose = maps.full_pose
+        # ------------------------------------------------------------------
+        # Training
+        torch.set_grad_enabled(True)
+        if l_step == args.num_local_steps - 1:
+            if not args.eval and args.agent == "rl":
+                l_next_value = l_policy.get_value(
+                    l_rollouts.obs[-1],
+                    l_rollouts.rec_states[-1],
+                    l_rollouts.masks[-1],
+                    extras=l_rollouts.extras[-1]
+                ).detach()
+                l_rollouts.compute_returns(l_next_value, args.use_gae,
+                                           args.gamma, args.tau)
+                l_value_loss, l_action_loss, l_dist_entropy = \
+                    l_agent.update(l_rollouts)
+                l_value_losses.append(l_value_loss)
+                l_action_losses.append(l_action_loss)
+                l_dist_entropies.append(l_dist_entropy)
+            if args.agent == "rl":
+                l_rollouts.after_update()       # rollout的最后一个state是下一次initial state
+            elif args.agent == "random":
+                pass
+        torch.set_grad_enabled(False)
+
+        # ------------------------------------------------------------------
+        # Logging: TODO
+        if step % args.log_interval == 0:
+            end = time.time()
+            time_elapsed = time.gmtime(end - start)
+            log = " ".join([
+                "Time: {0:0=2d}d".format(time_elapsed.tm_mday - 1),
+                "{},".format(time.strftime("%Hh %Mm %Ss", time_elapsed)),
+                "num timesteps {},".format(step * num_scenes),
+                "FPS {},".format(int(step * num_scenes / (end - start)))
+            ])
+
+            log += "\n\tRewards:"
+
+            if len(per_step_rewards) > 0:
+                log += " ".join([
+                    " per step mean/med/min/max, rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(per_step_rewards),
+                        np.median(per_step_rewards),
+                        np.min(per_step_rewards),
+                        np.max(per_step_rewards))
+                ])
+
+            log += "\n\tLosses:"
+            if len(l_value_losses) > 0 and not args.eval:
+                log += " ".join([
+                    " Policy Loss value/action/dist:",
+                    "{:.3f}/{:.3f}/{:.3f},".format(
+                        np.mean(l_value_losses),
+                        np.mean(l_action_losses),
+                        np.mean(l_dist_entropies))
+                ])
+                
+            if done[0]:
+                if len(l_episode_rewards) > 0:
+                    log += " ".join([
+                    " episode mean/med/min/max, rew:",
+                    "{:.4f}/{:.4f}/{:.4f}/{:.4f},".format(
+                        np.mean(l_episode_rewards),
+                        np.median(l_episode_rewards),
+                        np.min(l_episode_rewards),
+                        np.max(l_episode_rewards))
+                    ])
+                
+            print(log)
+            logging.info(log)
+
+
+        # ------------------------------------------------------------------
+        # Save best models
+        if (step * num_scenes) % args.save_interval < \
+                num_scenes:
+            if len(l_episode_rewards) >= 20 and \
+                    (np.mean(l_episode_rewards) >= best_l_reward) \
+                    and not args.eval:
+                torch.save(l_policy.state_dict(),
+                           os.path.join(log_dir, "model_best.pth"))
+                best_l_reward = np.mean(l_episode_rewards)
+        # Save periodic models
+        if (step * num_scenes) % args.save_periodic < \
+                num_scenes:
+            total_steps = step * num_scenes
+            if not args.eval and args.agent == "rl":
+                torch.save(l_policy.state_dict(),
+                           os.path.join(dump_dir,
+                                        "periodic_{}.pth".format(total_steps)))
+        # ------------------------------------------------------------------
+    # Print and save model performance numbers during evaluation: TODO
+    # with open('{}/{}_episode_rewards.json'.format(
+    #         dump_dir, args.split), 'w') as f:
+    #     json.dump(l_episode_rewards, f)
+    m = np.array(l_episode_rewards).mean()
+    print(f"all episode rewards: {l_episode_rewards}, mean is {m}")
+    logging.info(f"all episode rewards: {l_episode_rewards}, mean is {m}")
+    np.savez('{}/{}_episode_rewards.npz'.format(
+            dump_dir, args.split), episode_reward=l_episode_rewards)
+    
+    np.savez('actions.npz', actions=np.array(actions))
+    if args.eval:
+        print("Dumping eval details...")
+        
+    
+        
+if __name__ == "__main__":
+    main()

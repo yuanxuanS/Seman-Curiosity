@@ -13,6 +13,7 @@ import tarfile
 from collections import defaultdict
 from io import BytesIO
 from typing import (
+    TYPE_CHECKING,
     Any,
     DefaultDict,
     Dict,
@@ -27,9 +28,12 @@ import attr
 import numpy as np
 import torch
 from gym.spaces import Box
+from gym import spaces
+from habitat.core.spaces import EmptySpace
 from PIL import Image
 from torch import Size, Tensor
 from torch import nn as nn
+import math
 
 from habitat import logger
 from habitat.core.dataset import Episode
@@ -38,15 +42,17 @@ from habitat.utils import profiling_wrapper
 from habitat.utils.visualizations.utils import images_to_video
 from habitat_baselines.common.tensor_dict import DictTree, TensorDict
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
-
+if TYPE_CHECKING:
+    from omegaconf import DictConfig
+    
 cv2 = try_cv2_import()
 
 
 class CustomFixedCategorical(torch.distributions.Categorical):  # type: ignore
-    def sample(
+    def sample_(
         self, sample_shape: Size = torch.Size()  # noqa: B008
     ) -> Tensor:
-        return super().sample(sample_shape).unsqueeze(-1)
+        return self.sample().unsqueeze(0)
 
     def log_probs(self, actions: Tensor) -> Tensor:
         return (
@@ -73,6 +79,83 @@ class CategoricalNet(nn.Module):
     def forward(self, x: Tensor) -> CustomFixedCategorical:
         x = self.linear(x)
         return CustomFixedCategorical(logits=x)
+
+class CustomNormal(torch.distributions.normal.Normal):
+    def sample(
+        self, sample_shape: Size = torch.Size()  # noqa: B008
+    ) -> Tensor:
+        return self.rsample(sample_shape)
+
+    def log_probs(self, actions) -> Tensor:
+        return super().log_prob(actions).sum(-1, keepdim=True)
+
+    def entropy(self) -> Tensor:
+        return super().entropy().sum(-1, keepdim=True)
+    
+class GaussianNet(nn.Module):
+    def __init__(
+        self,
+        num_inputs: int,
+        num_outputs: int,
+        config: "DictConfig",
+    ) -> None:
+        super().__init__()
+
+        self.action_activation = config.action_activation
+        self.use_softplus = config.use_softplus
+        self.use_log_std = config.use_log_std
+        use_std_param = config.use_std_param
+        self.clamp_std = config.clamp_std
+
+        if self.use_log_std:
+            self.min_std = config.min_log_std
+            self.max_std = config.max_log_std
+            std_init = config.log_std_init
+        elif self.use_softplus:
+            inv_softplus = lambda x: math.log(math.exp(x) - 1)
+            self.min_std = inv_softplus(config.min_std)
+            self.max_std = inv_softplus(config.max_std)
+            std_init = inv_softplus(1.0)
+        else:
+            self.min_std = config.min_std
+            self.max_std = config.max_std
+            std_init = 1.0  # initialize std value so that std ~ 1
+
+        if use_std_param:
+            self.std = torch.nn.parameter.Parameter(
+                torch.randn(num_outputs) * 0.01 + std_init
+            )
+            num_linear_outputs = num_outputs
+        else:
+            self.std = None
+            num_linear_outputs = 2 * num_outputs
+
+        self.mu_maybe_std = nn.Linear(num_inputs, num_linear_outputs)
+        nn.init.orthogonal_(self.mu_maybe_std.weight, gain=0.01)
+        nn.init.constant_(self.mu_maybe_std.bias, 0)
+
+        if not use_std_param:
+            nn.init.constant_(self.mu_maybe_std.bias[num_outputs:], std_init)
+
+    def forward(self, x: Tensor) -> CustomNormal:
+        mu_maybe_std = self.mu_maybe_std(x).float()
+        if self.std is not None:
+            mu = mu_maybe_std
+            std = self.std
+        else:
+            mu, std = torch.chunk(mu_maybe_std, 2, -1)
+
+        if self.action_activation == "tanh":
+            mu = torch.tanh(mu)
+
+        if self.clamp_std:
+            std = torch.clamp(std, self.min_std, self.max_std)
+        if self.use_log_std:
+            std = torch.exp(std)
+        if self.use_softplus:
+            std = torch.nn.functional.softplus(std)
+
+        return CustomNormal(mu, std, validate_args=False)
 
 
 def linear_decay(epoch: int, total_num_updates: int) -> float:
@@ -495,3 +578,98 @@ def create_tar_archive(archive_path: str, dataset_path: str) -> None:
 
 def delete_folder(path: str) -> None:
     shutil.rmtree(path)
+
+
+# from vlfm
+def iterate_action_space_recursively(action_space):
+    if isinstance(action_space, spaces.Dict):
+        for v in action_space.values():
+            yield from iterate_action_space_recursively(v)
+    else:
+        yield action_space
+        
+def get_num_actions(action_space) -> int:
+    num_actions = 0
+    for v in iterate_action_space_recursively(action_space):
+        if isinstance(v, spaces.Box):
+            assert (
+                len(v.shape) == 1
+            ), f"shape was {v.shape} but was expecting a 1D action"
+            num_actions += v.shape[0]
+        elif isinstance(v, EmptySpace):
+            num_actions += 1
+        elif isinstance(v, spaces.Discrete):
+            num_actions += v.n
+        else:
+            raise NotImplementedError(
+                f"Trying to count the number of actions with an unknown action space {v}"
+            )
+
+    return num_actions
+
+
+    
+class GaussianNet(nn.Module):
+    def __init__(
+        self,
+        num_inputs: int,
+        num_outputs: int,
+        config: "DictConfig",
+    ) -> None:
+        super().__init__()
+
+        self.action_activation = config.action_activation
+        self.use_softplus = config.use_softplus
+        self.use_log_std = config.use_log_std
+        use_std_param = config.use_std_param
+        self.clamp_std = config.clamp_std
+
+        if self.use_log_std:
+            self.min_std = config.min_log_std
+            self.max_std = config.max_log_std
+            std_init = config.log_std_init
+        elif self.use_softplus:
+            inv_softplus = lambda x: math.log(math.exp(x) - 1)
+            self.min_std = inv_softplus(config.min_std)
+            self.max_std = inv_softplus(config.max_std)
+            std_init = inv_softplus(1.0)
+        else:
+            self.min_std = config.min_std
+            self.max_std = config.max_std
+            std_init = 1.0  # initialize std value so that std ~ 1
+
+        if use_std_param:
+            self.std = torch.nn.parameter.Parameter(
+                torch.randn(num_outputs) * 0.01 + std_init
+            )
+            num_linear_outputs = num_outputs
+        else:
+            self.std = None
+            num_linear_outputs = 2 * num_outputs
+
+        self.mu_maybe_std = nn.Linear(num_inputs, num_linear_outputs)
+        nn.init.orthogonal_(self.mu_maybe_std.weight, gain=0.01)
+        nn.init.constant_(self.mu_maybe_std.bias, 0)
+
+        if not use_std_param:
+            nn.init.constant_(self.mu_maybe_std.bias[num_outputs:], std_init)
+
+    def forward(self, x: Tensor) -> CustomNormal:
+        mu_maybe_std = self.mu_maybe_std(x).float()
+        if self.std is not None:
+            mu = mu_maybe_std
+            std = self.std
+        else:
+            mu, std = torch.chunk(mu_maybe_std, 2, -1)
+
+        if self.action_activation == "tanh":
+            mu = torch.tanh(mu)
+
+        if self.clamp_std:
+            std = torch.clamp(std, self.min_std, self.max_std)
+        if self.use_log_std:
+            std = torch.exp(std)
+        if self.use_softplus:
+            std = torch.nn.functional.softplus(std)
+
+        return CustomNormal(mu, std, validate_args=False)

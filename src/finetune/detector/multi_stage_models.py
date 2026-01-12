@@ -11,6 +11,7 @@ from copy import deepcopy
 from torch import Tensor
 import cv2
 import os
+import torch.nn.functional as F
 
 class MultiStageModel(Predictor):
     def __init__(
@@ -59,6 +60,10 @@ class MultiStageModel(Predictor):
         if "visualize" in kwargs and kwargs['visualize']:
             self.visualize = True
             self.save_path = kwargs['sample_path']
+        
+        # compute uncertainty
+        self.uncertainty = []
+        self.mode = "sum" #"mean"   # "sum"
     def configure_optimizers(self, *args, **kwargs):
         optimizer = getattr(torch.optim, self.optimizer)(
             params=self.parameters(),
@@ -72,12 +77,12 @@ class MultiStageModel(Predictor):
         losses, predictions = self._common_step(batch, stage="train")
         return losses, predictions
     
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, compute_uncertainty=False):
         # always use gt for validation
-        losses, predictions = self._common_step(batch)  
+        losses, predictions = self._common_step(batch, compute_uncertainty=compute_uncertainty)  
         return losses, predictions
     
-    def _common_step(self, batch, stage=None):
+    def _common_step(self, batch, stage=None, compute_uncertainty=False):
         (
             predictions,
             pred_loss,
@@ -108,6 +113,43 @@ class MultiStageModel(Predictor):
         # visualize imgs
         if self.visualize and stage == "train":
             self.visualize_and_save(batch, predictions)
+            
+        if compute_uncertainty:
+            for idx, x in enumerate(batch):
+                if len(predictions[idx]['instances']) == 0:
+                    margin = torch.tensor(0.0)
+                    cls_entropy = torch.tensor(0.0)
+                    seg_entropy =  torch.tensor(0.0)
+                else:
+                    # classfication margin
+                    logits = predictions[idx]['instances'].gt_logits
+                    top2_values, _ = torch.topk(logits, k=2, dim=1)
+                    margin = (top2_values[:, 0] - top2_values[:, 1]) 
+                    if self.mode == "mean":       # 每个instance的平均margin
+                        margin = margin.sum() / len(predictions[idx]['instances'])
+                    elif self.mode == "sum":
+                        margin = margin.sum()
+                    elif self.mode == "max":
+                        margin = torch.max(margin)
+                    # classfication entropy
+                    if self.mode == "mean":
+                        cls_entropy = torch.mean(-torch.log(logits + 1e-8) * logits, dim=1)
+                    elif self.mode == "sum":
+                        cls_entropy = torch.sum(-torch.log(logits + 1e-8) * logits, dim=1)
+                    elif self.mode == "max":
+                        cls_entropy = torch.max(-torch.log(logits + 1e-8) * logits, dim=1)[0][0]
+                    # segmentation entropy: 预测的mask*概率值的交叉熵；包含了mask大小
+                    logits_mask = predictions[idx]['instances'].pred_masks[...]*top2_values[:, 0][..., None, None]
+                    seg_entropy = F.binary_cross_entropy_with_logits(logits_mask, 
+                                        predictions[idx]['instances'].pred_masks.type(torch.float))
+                    if self.mode == "mean":
+                        seg_entropy /= len(predictions[idx]['instances'])
+                
+                
+                self.uncertainty.append([x['env'], x['episode'], x['step'], 
+                                         margin.cpu().numpy(), 
+                                         cls_entropy.cpu().numpy(),
+                                         seg_entropy.cpu().numpy()])
         return result, predictions
     
     def visualize_and_save(self, batch, predictions):

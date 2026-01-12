@@ -51,7 +51,9 @@ _C.TASK.SUCCESS_DISTANCE = 0.2
 _C.TASK.SENSORS = []
 _C.TASK.MEASUREMENTS = []
 _C.TASK.GOAL_SENSOR_UUID = "pointgoal"
-_C.TASK.POSSIBLE_ACTIONS = ["STOP", "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT"]
+_C.TASK.POSSIBLE_ACTIONS = ["STOP", "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT", 
+                            "CAMERA_CAPTURE", "CAMERA_LEFT", "CAMERA_RIGHT", "CAMERA_UP", "CAMERA_DOWN", 
+                            "LOOK_UP", "LOOK_DOWN"]
 # -----------------------------------------------------------------------------
 # # ACTIONS
 # -----------------------------------------------------------------------------
@@ -71,6 +73,21 @@ ACTIONS.LOOK_UP = CN()
 ACTIONS.LOOK_UP.TYPE = "LookUpAction"
 ACTIONS.LOOK_DOWN = CN()
 ACTIONS.LOOK_DOWN.TYPE = "LookDownAction"
+
+ACTIONS.CAMERA_CAPTURE = CN()
+ACTIONS.CAMERA_CAPTURE.TYPE = "CameraCaptureAction"
+ACTIONS.CAMERA_LEFT = CN()
+ACTIONS.CAMERA_LEFT.TYPE = "CameraLeftAction"
+ACTIONS.CAMERA_RIGHT = CN()
+ACTIONS.CAMERA_RIGHT.TYPE = "CameraRightAction"
+ACTIONS.CAMERA_UP = CN()
+ACTIONS.CAMERA_UP.TYPE = "CameraUpAction"
+ACTIONS.CAMERA_DOWN = CN()
+ACTIONS.CAMERA_DOWN.TYPE = "CameraDownAction"
+
+ACTIONS.TRANSPORT = CN()
+ACTIONS.TRANSPORT.TYPE = "TransportAction"
+
 ACTIONS.TELEPORT = CN()
 ACTIONS.TELEPORT.TYPE = "TeleportAction"
 
