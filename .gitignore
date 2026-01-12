@@ -3,7 +3,7 @@ data_vqf
 data
 exps/
 exps_finetune/
-third_parties/
+# third_parties/
 third_parties/detectron2/build/
 outputs/
 images/

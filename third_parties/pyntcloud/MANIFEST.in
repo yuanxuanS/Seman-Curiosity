@@ -1,0 +1,5 @@
+include *.rst
+recursive-include docs *
+recursive-include pyntcloud *.html *.js *.png
+include README.rst
+include LICENSE.md
