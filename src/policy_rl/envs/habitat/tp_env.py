@@ -83,7 +83,7 @@ class Transport_Env(habitat.RLEnv):
         
         # for transport action
         if not args.sample_mode:
-            tp_loc_f = "./data/visibles/"+scene_name+"_tploc.json"
+            tp_loc_f = "./data_scene/visibles/"+scene_name+"_tploc.json"
             with open(tp_loc_f, "r") as f:
                 self.tp_loc = json.load(f)       # dict: objid, loc
             

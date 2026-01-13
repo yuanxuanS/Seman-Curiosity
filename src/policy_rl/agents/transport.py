@@ -62,6 +62,8 @@ class Transport_Env_Agent(Transport_Env):
             self.found_class = []
             self.found_id = []
         
+        
+        
         # for category object
         self.curr_category_obj_id = {name:[] for name in sorted(list(target_coco_categories.keys()))}
         self.cumu_detected_category = {name:0 for name in sorted(list(target_coco_categories.keys()))}
@@ -234,12 +236,18 @@ class Transport_Env_Agent(Transport_Env):
         del rgb_
         del depth_
 
-        return_score, return_instance = False, True     # return_score: use pred score as reward; 
+        return_score, return_instance, return_features = False, True, True     # return_score: use pred score as reward; 
         assert not (return_score and return_instance), \
             "Cannot return both score and instance at the same time."
-        sem_seg_pred, obj = self._get_sem_pred(
-            rgb.astype(np.uint8), use_seg=use_seg, return_score=return_score, return_instance=return_instance)
-
+        sem_seg_pred, obj, features = self._get_sem_pred(
+            rgb.astype(np.uint8), 
+            use_seg=use_seg, 
+            return_score=return_score, 
+            return_instance=return_instance,
+            return_features=return_features,
+            )
+        info['res_feat'] = features['p6']
+        
         depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
         ds = args.det_frame_width // args.frame_width  # Downscaling factor
@@ -382,18 +390,31 @@ class Transport_Env_Agent(Transport_Env):
         depth = min_d * 100.0 + depth * max_d * 100.0
         return depth
     
-    def _get_sem_pred(self, rgb, use_seg=True, return_score=False, return_instance=False):
+    def _get_sem_pred(self, rgb, use_seg=True, return_score=False, return_instance=False, return_features=False):
         if use_seg:
-            semantic_pred, self.rgb_vis, obj = self.sem_pred.get_prediction(rgb, 
-                                                                            return_instance=return_instance)
+            if return_features:
+                semantic_pred, self.rgb_vis, obj, features = self.sem_pred.get_prediction(rgb, 
+                                                                                return_instance=return_instance,
+                                                                                return_features = return_features)
+            else:
+                semantic_pred, self.rgb_vis, obj = self.sem_pred.get_prediction(rgb, 
+                                                                                return_instance=return_instance,
+                                                                                )
             semantic_pred = semantic_pred.astype(np.float32)
         else:
             semantic_pred = np.zeros((rgb.shape[0], rgb.shape[1], 6))
             self.rgb_vis = rgb[:, :, ::-1]
+            
         if not (return_instance or return_score):
-            return semantic_pred
+            if return_features:
+                return semantic_pred, features
+            else:
+                return semantic_pred
         else:
-            return semantic_pred, obj
+            if return_features:
+                return semantic_pred, obj, features
+            else:
+                return semantic_pred, obj
     
     
     def _visualize(self, inputs, mode="full"):

@@ -16,7 +16,10 @@ from  src.policy_rl import algo
 from src.policy_rl.baseline_frontier import Frontier
 import cv2
 import json
-from src.policy_rl.tp_topo_reward import VectorizedTopologyManager
+import torch.nn as nn
+from src.policy_rl.tp_topo_reward import VectorizedTopologyManager, \
+                       VectorizedTopologyManagerFeature
+import torch
 def main():
     args = get_args()
     
@@ -89,7 +92,9 @@ def main():
     torch.set_grad_enabled(False)
 
     # for topo reward
-    topo_manager = VectorizedTopologyManager(num_scenes,check_target=args.check_target)
+    # topo_manager = VectorizedTopologyManager(num_scenes,check_target=args.check_target)
+    topo_manager = VectorizedTopologyManagerFeature(num_scenes,check_target=args.check_target)
+    gap = nn.AdaptiveAvgPool2d((1, 1))
     
     # Initializing Maps
     # Full map consists of multiple channels containing the following:
@@ -107,9 +112,11 @@ def main():
     category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
     
     # for topo reward
+    curr_feature = [torch.flatten(gap(info['res_feat']), 1).cpu().numpy() for info in infos]
     curr_pos = [info['position'] for info in infos]
     has_targets = [info['has_target'] for info in infos]
     topo_manager.update([i for i in range(num_scenes)],
+                        curr_feature,
                         curr_pos,
                         has_targets
                         )
@@ -127,7 +134,7 @@ def main():
         p_input['pose_pred'] = maps.get_all_pose()[e]
         
         # for topo map
-        p_input['topo_nodes'] = topo_manager.env_nodes[e]
+        p_input['topo_nodes'] = [node[0] for node in topo_manager.env_nodes[e]]
         if args.visualize or args.print_images:
             local_map[e, -1, :, :] = 1e-5       # 有物体时，为了argmax时不选最后通道
             p_input['sem_map_pred'] = local_map[e, 4:, :, :
@@ -278,9 +285,11 @@ def main():
         # diversity reward
         if args.use_diversity_reward:
             # for topo reward
+            curr_feature = [torch.flatten(gap(info['res_feat']), 1).cpu().numpy() for info in infos]
             curr_pos = [info['position'] for info in infos]
             has_targets = [info['has_target'] for info in infos]
             diversity_reward = topo_manager.update([i for i in range(num_scenes)],
+                                curr_feature,
                                 curr_pos, 
                                 has_targets,)
             diversity_reward = torch.from_numpy(diversity_reward).to(device)
@@ -450,7 +459,7 @@ def main():
             p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
             p_input['pose_pred'] = maps.get_all_pose()[e]
             # for topo map
-            p_input['topo_nodes'] = topo_manager.env_nodes[e]
+            p_input['topo_nodes'] = [node[0] for node in topo_manager.env_nodes[e]]
             if args.visualize or args.print_images:
                 local_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred'] = local_map[e, 4:, :, :
