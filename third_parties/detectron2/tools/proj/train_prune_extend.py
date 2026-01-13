@@ -116,7 +116,6 @@ def do_test(cfg, model):
                                          vis=cfg.VIS,
                                          save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs/", ),
                                          metadata=get_custom_metadata(cfg.DATASET_NAME),
-                                         embodied_type=True
                                          )
         results[dataset_name] = results_i
         if comm.is_main_process():
