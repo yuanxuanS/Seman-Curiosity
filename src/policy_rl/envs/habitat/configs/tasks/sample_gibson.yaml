@@ -50,9 +50,9 @@ DATASET:
   # DATA_PATH: "data2/datasets/objectnav/gibson/v3/{split}/{split}.json.gz"
   # EPISODES_DIR: "data2/datasets/objectnav/gibson/v3/{split}/"
   # SCENES_DIR: "data2/scene_datasets/"
-  DATA_PATH: "data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
-  EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
-  SCENES_DIR: "data/scene_datasets/"
+  DATA_PATH: "data_scene/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
+  EPISODES_DIR: "data_scene/datasets/objectnav/gibson/v1/{split}/"
+  SCENES_DIR: "data_scene/scene_datasets/"
   CONTENT_SCENES: [
     # "Allensville.glb", 
     # "Beechwood.glb", 
@@ -83,7 +83,7 @@ DATASET:
     # "Corozal.glb",
     # "Darden.glb",
     # "Markleeville.glb",
-    # "Wiconisco.glb"
+    # # "Wiconisco.glb"
   # ]
 
   # dataset1 train
