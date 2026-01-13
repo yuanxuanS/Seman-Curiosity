@@ -214,6 +214,8 @@ def main(args):
     
     2: "car",       # key为COCO原数据类别中的id, 顺序对应类别的顺序
     1: "bicylcle",
+    15: "bench",
+    
     
     # 56: "chair",
     # 57: "couch",
@@ -226,7 +228,6 @@ def main(args):
     2: "grass",
     3: "fence",
     4: "billboard",
-    5: "bench",
     }
     
         
@@ -247,7 +248,7 @@ def main(args):
             model.extend_head_list(len(extend_class))
         else:
             model.extend_head(len(extend_class))
-            
+    
     if args.eval_only:
         return do_test(cfg, model)
 

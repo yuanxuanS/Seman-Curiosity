@@ -11,10 +11,10 @@ DATASETS:
   PROPOSAL_FILES_TEST: []
   PROPOSAL_FILES_TRAIN: []
   TEST:
-  - embodied_val
+  - proj_train
   TRAIN:
-  - embodied_val
-DATASET_NAME: embodied
+  - proj_train
+DATASET_NAME: proj
 GLOBAL:
   HACK: 1.0
 INPUT:
@@ -194,7 +194,7 @@ MODEL:
     NUM_CLASSES: 80
     POSITIVE_FRACTION: 0.25
     PROPOSAL_APPEND_GT: true
-    SCORE_THRESH_TEST: 0.5
+    SCORE_THRESH_TEST: 0.05
   ROI_KEYPOINT_HEAD:
     CONV_DIMS:
     - 512
@@ -281,9 +281,9 @@ SOLVER:
     ENABLED: false
     NORM_TYPE: 2.0
   GAMMA: 0.1
-  IMS_PER_BATCH: 16
+  IMS_PER_BATCH: 8
   LR_SCHEDULER_NAME: WarmupMultiStepLR
-  MAX_ITER: 50
+  MAX_ITER: 510
   MOMENTUM: 0.9
   NESTEROV: false
   REFERENCE_WORLD_SIZE: 0
@@ -319,5 +319,5 @@ TEST:
     ENABLED: false
     NUM_ITER: 200
 VERSION: 2
-VIS: false
+VIS: true
 VIS_PERIOD: 0

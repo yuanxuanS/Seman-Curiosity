@@ -14,7 +14,8 @@ outputs/
 images/
 env_orients/
 hssd_data/
-
+anno
+ann2
 # type
 *.pyc
 *.png

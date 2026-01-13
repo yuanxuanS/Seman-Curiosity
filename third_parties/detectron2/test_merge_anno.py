@@ -52,6 +52,6 @@ def merge_coco_and_reset_ann_ids(file_list, output_path):
     print(f"最终标注总数 (Max ID): {global_ann_id}")
     print(f"结果已保存至: {output_path}")
 # 获取目录下所有 json 文件并排序
-json_dir = "/home/wpp/Seman-Curiosity/third_parties/detectron2/anno"
+json_dir = "/home/wpp/Seman-Curiosity/third_parties/detectron2/anno2"
 json_files = sorted([os.path.join(json_dir, f) for f in os.listdir(json_dir) if f.endswith('.json')])
-merge_coco_and_reset_ann_ids(json_files, 'final_merged_dataset.json')
+merge_coco_and_reset_ann_ids(json_files, 'final_merged_dataset3.json')
