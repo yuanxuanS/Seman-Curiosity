@@ -212,16 +212,16 @@ def main(args):
     
     keep_class = { 
     
-    2: "car",       # key为COCO原数据类别中的id, 顺序对应类别的顺序
-    1: "bicylcle",
-    15: "bench",
+    # 2: "car",       # key为COCO原数据类别中的id, 顺序对应类别的顺序
+    # 1: "bicylcle",
+    # 15: "bench",
     
     
-    # 56: "chair",
-    # 57: "couch",
-    # 59: "bed",
-    # 61: "toilet",
-    # 72: "refrigerator",
+    56: "chair",
+    57: "couch",
+    59: "bed",
+    61: "toilet",
+    72: "refrigerator",
 }   
     extend_class = {    #把旧的n个类放在最前面，中间插入m 个新类，最后把旧的背景权重挪到第 n+m的位置。
     1: "building",
