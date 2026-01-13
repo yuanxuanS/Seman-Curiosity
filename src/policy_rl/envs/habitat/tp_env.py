@@ -116,6 +116,8 @@ class Transport_Env(habitat.RLEnv):
             else:
                 self.sample_obj_visible_loc()
 
+        self.init_agent_loc = self.get_sim_location()
+
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
@@ -210,7 +212,10 @@ class Transport_Env(habitat.RLEnv):
         args = self.args
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         scene_name = self.scene_path.split("/")[-1].split(".")[0]
-
+        scene_info = self.dataset_info[scene_name]
+        floor_idx = np.random.randint(len(scene_info.keys()))   # 楼层
+        self.map_obj_origin = scene_info[floor_idx]['origin']
+        
         if self.scene_path != self.last_scene_path: # 如果reset时加载新的环境
             episodes_file = self.episodes_dir + \
                 "content/{}_episodes.json.gz".format(scene_name)
@@ -378,32 +383,10 @@ class Transport_Env(habitat.RLEnv):
         else:
             obs, _, done, _ = super().step(action)
 
-        # reset location if on floor
-        last_sim_location_z = self.this_sim_location_z
-        this_sim_location_z, this_sim_rot = self.get_sim_location_z()
-        # self.info['on_floor'] = (abs(this_sim_location_z - last_sim_location_z) > 0.1)
-        # if self.info['on_floor']:
-        #     x, y, o = self.this_sim_location    # not update, thus 'this_sim_'
-        #     z = self.this_sim_location_z
-        #     pos = np.array([-y, z, -x])
-        #     self._env.sim.set_agent_state(pos, self.this_sim_rot)
-        #     obs = self._env.sim.get_observations_at(pos, self.this_sim_rot)
-        #     obs.update(
-        #         self._env.task.sensor_suite.get_observations(
-        #             observations=obs,
-        #             episode=self._env.current_episode,
-        #             action={'action': 0, 'action_args':{}},
-        #             task=self._env.task,
-        #     ))
-        # get newest pose( especially after checking if on floor)
-        # self.last_sim_location = self.this_sim_location
-        self.this_sim_location = self.get_sim_location()
-        self.last_sim_location_z = self.this_sim_location_z
-        self.last_sim_rot = self.this_sim_rot
-        self.this_sim_location_z, self.this_sim_rot = self.get_sim_location_z()
         
         dx, dy, do = self.get_pose_change()     # update last_sim_location and this_sim_location
         self.info['sensor_pose'] = [dx, dy, do]
+        self.this_sim_location = self.get_sim_location()
         
         # save samples(before resize)
         if self.args.save_samples:
@@ -466,6 +449,16 @@ class Transport_Env(habitat.RLEnv):
     
     def get_info(self, observations):
         return self.info
+    
+    def sim_continuous_to_sim_map(self, sim_loc):
+        """Converts absolute Habitat simulator pose to ground-truth 2D Map
+        coordinates.
+        """
+        x, y= sim_loc
+        min_x, min_y = self.map_obj_origin / 100.0
+        x, y = int((-x - min_x) * 20.), int((-y - min_y) * 20.)
+        # o = np.rad2deg(o) + 180.0
+        return y, x
     
     def get_pose_change(self):
         """Returns dx, dy, do pose change of the agent relative to the last

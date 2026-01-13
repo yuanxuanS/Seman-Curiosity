@@ -19,7 +19,6 @@ from torch.nn import functional as F
 from ..sensors_data import AgentPoseSense, BBSense, DepthSense
 import src.finetune.utils.inconsistencies as inc
 from .consistency_utils import resolve_consistency3
-from line_profiler import profile
 
 log = logging.getLogger(__name__)
 O3D_AVAILABLE = importlib.util.find_spec("open3d") is not None

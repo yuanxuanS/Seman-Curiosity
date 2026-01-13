@@ -83,7 +83,7 @@ DATASET:
     # "Corozal.glb",
     # "Darden.glb",
     # "Markleeville.glb",
-    # "Wiconisco.glb"
+    "Wiconisco.glb"
   # ]
 
   # dataset1 train

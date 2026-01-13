@@ -12,7 +12,7 @@ MODEL:
   
 DATASETS:
   TRAIN: ("proj_train",)
-  TEST: ("proj_test",)
+  TEST: ("proj_train",)
 DATASET_NAME: "proj"    # 
 
 SOLVER:
