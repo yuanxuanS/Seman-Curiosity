@@ -27,13 +27,17 @@ class SemanticPredMaskRCNN():
         self.segmentation_model = ImageSegmentation(args)
         self.args = args
 
-    def get_prediction(self, img, return_instance=False):
+    def get_prediction(self, img, return_instance=False, return_features=False):
         args = self.args
         image_list = []
         img = img[:, :, ::-1]
         image_list.append(img)
-        seg_predictions, vis_output = self.segmentation_model.get_predictions(
-            image_list, visualize=args.visualize == 2)
+        if return_features:
+            seg_predictions, vis_output, features = self.segmentation_model.get_predictions(
+                image_list, visualize=args.visualize == 2, return_features=True)
+        else:
+            seg_predictions, vis_output = self.segmentation_model.get_predictions(
+                image_list, visualize=args.visualize == 2, )
 
         if args.visualize == 2:
             img = vis_output.get_image()
@@ -46,10 +50,17 @@ class SemanticPredMaskRCNN():
                 idx = target_coco_categories_mapping[class_idx]
                 obj_mask = seg_predictions[0]['instances'].pred_masks[j] * 1.
                 semantic_input[:, :, idx] += obj_mask.cpu().numpy()
+                
         if not return_instance:
-            return semantic_input, img
+            if not return_features:
+                return semantic_input, img
+            else:
+                return semantic_input, img, features
         elif return_instance:
-            return semantic_input, img, seg_predictions[0]['instances']
+            if not return_features:
+                return semantic_input, img, seg_predictions[0]['instances']
+            else:
+                return semantic_input, img, seg_predictions[0]['instances'], features
 def compress_sem_map(sem_map):
     """
     Compresses a semantic map into a single channel map by assigning each class to a unique integer.
@@ -90,8 +101,8 @@ class ImageSegmentation():
         cfg = setup_cfg(args)
         self.demo = VisualizationDemo(cfg)
 
-    def get_predictions(self, img, visualize=0):
-        return self.demo.run_on_image(img, visualize=visualize)
+    def get_predictions(self, img, visualize=0, return_features=False):
+        return self.demo.run_on_image(img, visualize=visualize, return_features=return_features)
 
 
 def setup_cfg(args):
@@ -162,7 +173,7 @@ class VisualizationDemo(object):
 
         self.predictor = BatchPredictor(cfg)
 
-    def run_on_image(self, image_list, visualize=0):
+    def run_on_image(self, image_list, visualize=0, return_features=False):
         """
         Args:
             image (np.ndarray): an image of shape (H, W, C) (in BGR order).
@@ -173,7 +184,10 @@ class VisualizationDemo(object):
             vis_output (VisImage): the visualized image output.
         """
         vis_output = None
-        all_predictions = self.predictor(image_list)
+        if return_features:
+            all_predictions, all_features = self.predictor(image_list, True)
+        else:
+            all_predictions = self.predictor(image_list)
         # Convert image from OpenCV BGR format to Matplotlib RGB format.
 
         if visualize:
@@ -198,7 +212,10 @@ class VisualizationDemo(object):
                     vis_output = visualizer.draw_instance_predictions(
                         predictions=instances)
 
-        return all_predictions, vis_output
+        if return_features:
+            return all_predictions, vis_output, all_features
+        else:
+            return all_predictions, vis_output
 
     def get_specific_instance(self, instances):
         if len(instances) == 0:
@@ -245,7 +262,7 @@ class BatchPredictor:
         self.input_format = cfg.INPUT.FORMAT
         assert self.input_format in ["RGB", "BGR"], self.input_format
 
-    def __call__(self, image_list):
+    def __call__(self, image_list, return_features=False):
         """
         Args:
             image_list (list of np.ndarray): a list of images of
@@ -272,5 +289,9 @@ class BatchPredictor:
             inputs.append(instance)
 
         with torch.no_grad():
+            
+            if return_features:
+                predictions, features = self.model(inputs, return_features)
+                return predictions, features
             predictions = self.model(inputs)
             return predictions
