@@ -266,6 +266,7 @@ _MY_PROJ_SPLIT['proj'] = {
     'proj_train': ('proj/train', 'proj/annotations/instances_train.json'),
     'proj_val': ('proj/val', 'proj/annotations/instances_val.json'),
     'proj_test': ('proj/test', 'proj/annotations/instances_test.json'),
+    "proj_al": ('proj/train', 'proj/annotations/labeled.json')
 }
 def register_proj(root):
     for dataset_name, splits_per_dataset in _MY_PROJ_SPLIT.items():
