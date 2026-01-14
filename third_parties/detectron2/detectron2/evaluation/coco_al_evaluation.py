@@ -97,7 +97,8 @@ def instances_to_coco_json_al(instances, img_id):
             "bbox": boxes[k],
             "score": scores[k],
             "cls_uncertainty": cls_uncertainty[k],
-            "box_uncertainty": box_uncertainty[k]
+            "box_uncertainty": box_uncertainty[k],
+            
         }
         if has_mask:
             result["segmentation"] = rles[k]

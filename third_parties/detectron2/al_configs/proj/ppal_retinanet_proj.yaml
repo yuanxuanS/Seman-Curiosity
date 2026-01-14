@@ -1,0 +1,48 @@
+
+# Paths
+CONFIG_DIR: 'configs/proj_active_learning/'
+WORK_DIR: 'output_al_proj/'
+IMG_ROOT: 'datasets/proj/train'    # 'datasets/coco/train2017/'
+
+SEED: 1234
+
+# Environment setting
+PYTHON_PATH: 'python'
+PORT: 29500
+GPUS: 1
+
+# Config setting
+TRAIN_CONFIG: ''    # defined in script
+UNCERTAINTY_INFER_CONFIG: '' # defined in script
+DIVERSITY_INFER_CONFIG: "" # defined in script
+
+# Active learning setting
+ROUND_NUM : 2  # 5
+BUDGET: 180    # 2365
+BUDGET_EXPAND_RATIO: 1.38   # 4
+
+OUTPUT_DIR: '' # ${WORK_DIR}/retinanet_coco_ppal_5rounds_2percent_to_10percent
+
+# Data setting
+ORACLE_PATH: 'datasets/proj/annotations/instances_train.json'   # 'datasets/coco/annotations/instances_train2017.json'
+INIT_LABELED_JSON: 'datasets/active_learning/proj/proj_20_labeled_1.json' # 'datasets/active_learning/coco/coco_2365_labeled_1.json'
+INIT_UNLABELED_JSON: 'datasets/active_learning/proj/proj_20_unlabeled_1.json' #'datasets/active_learning/coco/coco_2365_unlabeled_1.json'
+INIT_MODEL : None
+
+
+# Sampler config
+UNCERTAINTY_SAMPLER_CONFIG:
+  
+  n_sample_images: None   # defined in script
+  oracle_annotation_path: None  #${ORACLE_PATH}
+  score_thr: 0.05
+  class_weight_ub: 0.2
+  class_weight_alpha: 0.3
+  dataset_type: 'proj'  # 'coco'
+  NAME: DCUSSampler
+
+DIVERSITY_SAMPLER_CONFIG:
+  n_sample_images: None
+  oracle_annotation_path: None    #${ORACLE_PATH}
+  dataset_type: 'proj'  # 'coco'
+  NAME: DiversitySampler

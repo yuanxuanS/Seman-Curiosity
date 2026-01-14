@@ -120,15 +120,15 @@ class DCUSSampler(BaseALSampler):
         merged_img_uncertainties = np.array(merged_img_uncertainties)
 
         inds_sort = np.argsort(-1. * merged_img_uncertainties)
-        sampled_inds = inds_sort[:self.n_images]
-        unsampled_img_ids = inds_sort[self.n_images:]
+        sampled_inds = inds_sort[:int(self.n_images)]
+        unsampled_img_ids = inds_sort[int(self.n_images):]
         sampled_img_ids = img_ids[sampled_inds].tolist()
         unsampled_img_ids = img_ids[unsampled_img_ids].tolist()
 
         return sampled_img_ids, unsampled_img_ids
 
     def al_round(self, work_dir, result_path, last_label_path, out_label_path, out_unlabeled_path):
-        sys_echo('\n\n>> Starting Active Learning Acquisition!!!')
+        sys_echo('\n\n>> Starting Active Learning Acquisition!!! in diffi')
 
         self.round += 1
         self.log_info(result_path, out_label_path, out_unlabeled_path)
@@ -155,8 +155,8 @@ class DCUSSampler(BaseALSampler):
         sys_echo('--->>> New uncertainty pool set size: %d (%.2f%%)'%(len(sampled_img_ids),100.*float(len(sampled_img_ids))/self.image_pool_size))
         sys_echo('---------------------------------------------')
 
-        labeled_data = dict(images=[], annotations=[], categories=self.categories)
-        unlabeled_data = dict(images=[], categories=self.categories)
+        labeled_data = dict(images=[], annotations=[], categories=self.categories, info=[])
+        unlabeled_data = dict(images=[], categories=self.categories, info=[])
 
         for img_id in sampled_img_ids:
             # no annotation here because the annotating happens in the diversity step

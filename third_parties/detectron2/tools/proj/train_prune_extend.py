@@ -195,7 +195,7 @@ def setup(args):
     cfg.VIS = False     
     cfg.SAVE_PTH = ''
     cfg.DATASET_NAME = ''
-    
+
     cfg.merge_from_file(args.config_file)       # 只能覆盖已有变量
     cfg.merge_from_list(args.opts)
     cfg.freeze()
@@ -214,7 +214,8 @@ def main(args):
     
     2: "car",       # key为COCO原数据类别中的id, 顺序对应类别的顺序
     1: "bicylcle",
-    15: "bench",
+    13: "bench",
+    10: "fire hydrant",
     
     
     # 56: "chair",
@@ -228,6 +229,11 @@ def main(args):
     2: "grass",
     3: "fence",
     4: "billboard",
+    5: "street light",
+    6: "tree",
+    7: "basketball stands",
+    8: "dustbin",
+    9: "statue"
     }
     
         

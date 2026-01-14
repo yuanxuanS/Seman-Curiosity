@@ -9,7 +9,7 @@ MODEL:
     SCORE_THRESH_TEST: 0.5
   DEVICE: "cuda:1"
 DATASETS:
-  TRAIN: ("proj_train",)
+  TRAIN: ("proj_al", ) # ("proj_train",)
   TEST: ("proj_test",)
 DATASET_NAME: "proj"    # 
 

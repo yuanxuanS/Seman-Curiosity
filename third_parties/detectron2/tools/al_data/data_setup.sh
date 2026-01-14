@@ -7,15 +7,23 @@ VOCPATH=$1
 # cp /data/VOCdevkit/VOC2012/JPEGImages/*.jpg data/VOC0712/images
 # cp $VOCPATH data/VOC0712/annotations
 
-mkdir -p datasets/active_learning/coco/
+mkdir -p datasets/active_learning/proj/
+# mkdir -p datasets/active_learning/coco/
 # mkdir -p datasets/active_learning/voc/
 
 python tools/al_data/create_al_dataset.py \
-       --oracle-path datasets/coco/annotations/instances_train2017.json \
-       --out-root datasets/active_learning/coco \
+       --oracle-path datasets/proj/annotations/instances_train.json \
+       --out-root datasets/active_learning/proj \
        --n-diff 3 \
-       --n-labeled 2365 \
-       --dataset coco
+       --n-labeled 20 \
+       --dataset proj
+
+# python tools/al_data/create_al_dataset.py \
+#        --oracle-path datasets/coco/annotations/instances_train2017.json \
+#        --out-root datasets/active_learning/coco \
+#        --n-diff 3 \
+#        --n-labeled 2365 \
+#        --dataset coco
 
 # python tools/al_data/create_al_dataset.py \
 #        --oracle-path datasets/VOC0712/annotations/trainval_0712.json \
