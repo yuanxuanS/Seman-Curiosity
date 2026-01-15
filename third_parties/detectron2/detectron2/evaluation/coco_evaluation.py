@@ -115,7 +115,7 @@ class COCOEvaluator(DatasetEvaluator):
             self._coco_api = COCO(json_file)
         # Test set json files do not contain annotations (evaluation must be
         # performed using the COCO evaluation server).
-        print("coco dataset", self._coco_api.dataset)
+        # print("coco dataset", self._coco_api.dataset)
         self._do_evaluation = "annotations" in self._coco_api.dataset
         if self._do_evaluation:
             self._kpt_oks_sigmas = kpt_oks_sigmas

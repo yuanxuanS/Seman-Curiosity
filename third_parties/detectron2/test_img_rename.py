@@ -26,7 +26,7 @@ def rename_images_and_update_coco(json_path, image_dir, output_json_path):
 
         # 4. 修改内存中的 JSON 数据
         img_node['file_name'] = new_name
-
+# 
     # 5. 保存修改后的标注文件
     with open(output_json_path, 'w', encoding='utf-8') as f:
         json.dump(coco_data, f, indent=4, ensure_ascii=False)
@@ -34,9 +34,9 @@ def rename_images_and_update_coco(json_path, image_dir, output_json_path):
     print(f"\n全部完成！新的标注文件已保存至: {output_json_path}")
 
 # --- 配置参数 ---
-json_file = "./datasets/proj/annotations/instances_test.json"  # 你的原始 JSON 文件路径
+json_file = "./datasets/proj/annotations/instances_test3.json"  # 你的原始 JSON 文件路径
 img_folder = "./datasets/proj/test"           # 存放图像的文件夹路径
-output_json = "./datasets/proj/annotations/instances_test_rn.json" # 修改后的 JSON 保存路径
+output_json = "./datasets/proj/annotations/instances_test.json" # 修改后的 JSON 保存路径
 
 # 执行
 rename_images_and_update_coco(json_file, img_folder, output_json)

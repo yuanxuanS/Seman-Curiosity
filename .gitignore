@@ -9,6 +9,7 @@ third_parties/segment_anything
 third_parties/detectron2/output
 # third_parties/detectron2/说明.txt
 third_parties/detectron2/output_al
+third_parties/detectron2/logs
 third_parties/detectron2/output_al_proj
 
 third_parties/pyntcloud/

@@ -2,20 +2,20 @@ import json
 
 offset = 200 # 432      # 134
 file = "./anno3/wpp1.json"     # "./instance.json"
-file_new = "./anno3/wpp2.json"
-with open(file, "r") as f:
-    data = json.load(f)
+file_new = "./anno3/lyy.json"
+# with open(file, "r") as f:
+#     data = json.load(f)
 
-# ## id 偏置
-for img in data['images']:
-    img['id'] += offset
+# # ## id 偏置
+# for img in data['images']:
+#     img['id'] += offset
 
-for ann in data['annotations']:
-    ann['image_id'] += offset
+# for ann in data['annotations']:
+#     ann['image_id'] += offset
     
 
-with open(file_new, "w") as f:
-    json.dump(data, f)
+# with open(file_new, "w") as f:
+#     json.dump(data, f)
 
 with open(file_new, "r") as f:
     data = json.load(f)

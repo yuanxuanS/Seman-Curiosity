@@ -266,7 +266,15 @@ _MY_PROJ_SPLIT['proj'] = {
     'proj_train': ('proj/train', 'proj/annotations/instances_train.json'),
     'proj_val': ('proj/val', 'proj/annotations/instances_val.json'),
     'proj_test': ('proj/test', 'proj/annotations/instances_test.json'),
+    'proj_test2': ('proj/test2', 'proj/annotations/instances_test2.json'),
     "proj_al": ('proj/train', 'proj/annotations/labeled.json')
+}
+
+_MY_PROJ_SPLIT['proj_clsag'] = {
+    'proj_clsag_test': ('proj/test', 'proj/annotations_clsag/instances_test_clsag.json'),
+    # 'proj_val': ('proj/val', 'proj/annotations/instances_val.json'),
+    # 'proj_test': ('proj/test', 'proj/annotations/instances_test.json'),
+    # "proj_al": ('proj/train', 'proj/annotations/labeled.json')
 }
 def register_proj(root):
     for dataset_name, splits_per_dataset in _MY_PROJ_SPLIT.items():
@@ -274,7 +282,7 @@ def register_proj(root):
             # Assume pre-defined datasets live in `./datasets`.
             register_coco_instances(
                 key,
-                get_custom_metadata('proj'),      # 数据集原数据格式
+                get_custom_metadata(dataset_name),      # 数据集原数据格式
                 os.path.join(root, json_file) if "://" not in json_file else json_file,     # json文件路径
                 os.path.join(root, image_root),     # img文件路径
             )
