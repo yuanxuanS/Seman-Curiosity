@@ -80,9 +80,9 @@ DATASET:
     # "Woodbine.glb" 
   # ]
     "Collierville.glb",
-    # "Corozal.glb",
-    # "Darden.glb",
-    # "Markleeville.glb",
+    "Corozal.glb",
+    "Darden.glb",
+    "Markleeville.glb",
     # # "Wiconisco.glb"
   # ]
 
