@@ -1,7 +1,7 @@
 import json
 import numpy as np
 
-from detectron2.ppal.utils.dataset_info import COCO_CLASSES, VOC_CLASSES
+from detectron2.ppal.utils.dataset_info import COCO_CLASSES, VOC_CLASSES, PROJ_CLASSES
 from detectron2.ppal.utils.running_checks import sys_echo
 
 
@@ -22,6 +22,8 @@ class BaseALSampler(object):
             self.CLASSES = COCO_CLASSES
         elif dataset_type == 'voc':
             self.CLASSES = VOC_CLASSES
+        elif dataset_type == 'proj':
+            self.CLASSES = PROJ_CLASSES
         else:
             raise NotImplementedError
         self.dataset_type = dataset_type

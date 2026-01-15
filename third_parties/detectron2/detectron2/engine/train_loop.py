@@ -488,14 +488,14 @@ class AdverTrainer(TrainerBase):
         
 
         # update adversarial discrimintor 5 times
-        for i in range(5):
-            loss_dict = self.model(data, train_adver=True)
-            self._write_metrics(loss_dict, data_time, prefix="Train adver_"+str(i)+" ")
-            loss_dict = {k:-v for k,v in loss_dict.items() if k == 'loss_adv_real_cls'}
-            losses = sum(loss_dict.values())
-            self.optimizer.zero_grad()
-            losses.backward()
-            self.optimizer.step()
+        # for i in range(0):
+        #     loss_dict = self.model(data, train_adver=True)
+        #     self._write_metrics(loss_dict, data_time, prefix="Train adver_"+str(i)+" ")
+        #     loss_dict = {k:-v for k,v in loss_dict.items() if k == 'loss_adv_real_cls'}
+        #     losses = sum(loss_dict.values())
+        #     self.optimizer.zero_grad()
+        #     losses.backward()
+        #     self.optimizer.step()
             
             
         

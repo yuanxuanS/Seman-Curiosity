@@ -24,7 +24,7 @@ from ..box_regression import Box2BoxTransform, _dense_box_regression_loss
 from ..matcher import Matcher
 from ..postprocessing import detector_postprocess
 from .build import META_ARCH_REGISTRY
-from .retinanet import RetinaNet, RetinaNetHead
+from .retinanet import RetinaNet, RetinaNetHead, get_sliced_indices
 from detectron2.utils.registry import Registry
 
 ROI_HEADS_REGISTRY = Registry("ROI_HEADS")
@@ -74,6 +74,7 @@ class RetinaNetAL(RetinaNet):
         feat_dim=256,
         total_images=0,
         output_path="",
+        data_type="",
     ):
         """
         NOTE: this interface is experimental.
@@ -195,6 +196,8 @@ class RetinaNetAL(RetinaNet):
         self.max_det = max_det
         self.feat_dim = feat_dim
         
+        self.data_type = data_type
+        
         world_size = comm.get_world_size()
         assert total_images % world_size == 0  # 8 GPUs
         self.total_images = total_images
@@ -276,6 +279,7 @@ class RetinaNetAL(RetinaNet):
             "feat_dim": cfg.FEAT_DIM if hasattr(cfg, "FEAT_DIM") else 256,
             "total_images": cfg.TOTAL_IMAGES if hasattr(cfg, "TOTAL_IMAGES") else 0,
             "output_path": cfg.OUTPUT_PATH if hasattr(cfg, "OUTPUT_PATH") else "",
+            "data_type": cfg.DATA_TYPE
         }
 
     def losses(self, anchors, pred_logits, gt_labels, pred_anchor_deltas, gt_boxes):
@@ -657,7 +661,7 @@ class RetinaNetAL(RetinaNet):
 
         return ret_feats
 
-    def collect_al_info_d2(self, img_meta, instances):
+    def collect_al_info_d2(self, img_meta, instances, ):
         """
         Args:
             img_meta (dict): 从 batched_inputs 提取的单图信息，包含 'file_name'。
@@ -677,7 +681,10 @@ class RetinaNetAL(RetinaNet):
         # 2. 提取并准备图片 ID (与 MMDet 逻辑一致)
         # D2 中通常是 'file_name' 对应 MMDet 的 'filename'
         file_path = img_meta["file_name"]
-        img_id_val = int(file_path.split('/')[-1].split('.')[0])
+        if self.data_type == "coco":
+            img_id_val = int(file_path.split('/')[-1].split('.')[0])
+        elif self.data_type == "proj":
+            img_id_val = int(file_path.split('/')[-1].split('.')[0].split('_', 1)[0])
         img_id_tensor = torch.tensor([[img_id_val]], dtype=torch.int, device=self.device)
 
         # 3. 准备数据进行收集
@@ -867,6 +874,107 @@ class RetinaNetAL(RetinaNet):
             np.save(fwb, img_dis_mat)
             np.save(fwb, img_ids)
         return
+
+    def reinit_head(self, keep_class_indices):
+        """
+        model: 你的 RetinaNet 实例
+        keep_class_indices: 你想要的类别索引列表
+        """
+        num_anchors = 9
+        new_num_classes = len(keep_class_indices)
+        
+        # 1. 获取索引
+        indices = get_sliced_indices(keep_class_indices, num_anchors)
+        
+        # 2. 剪切分类头的权重 (Weight)
+        # Shape: [num_anchors * 80, C, 3, 3] -> [num_anchors * 3, C, 3, 3]
+        old_weight = self.head.cls_score.weight.data
+        self.head.cls_score.weight.data = old_weight[indices]
+        
+        # 3. 剪切分类头的偏置 (Bias)
+        # Shape: [num_anchors * 80] -> [num_anchors * 3]
+        old_bias = self.head.cls_score.bias.data
+        self.head.cls_score.bias.data = old_bias[indices]
+        
+        # 4. 更新模型内部的 num_classes 属性，防止后续逻辑报错
+        self.head.num_classes = new_num_classes
+        self.num_classes = new_num_classes # 如果外层也有该属性
+        
+        print(f"成功将类别从 80 剪切为 {new_num_classes}")
+    
+    def extend_head(self, num_new_classes, init_prob=0.01):
+        """
+        在 RetinaNet 现有类别基础上增加 m 个新类别
+        num_new_classes: 增加的数量 m
+        init_prob: 用于初始化新类别的偏置（参考 RetinaNet 论文的 pi 值）
+        """
+        def get_extended_indices(old_num_classes, num_new_classes, num_anchors):
+            """
+            计算旧权重在新扩展权重矩阵中的位置索引
+            """
+            new_num_classes = old_num_classes + num_new_classes
+            old_indices = []
+            for a in range(num_anchors):
+                # 计算第 a 个 anchor 对应的旧类别起始位置
+                start = a * old_num_classes
+                end = (a + 1) * old_num_classes
+                old_indices.extend(range(start, end))
+            return torch.tensor(old_indices)
+
+        def get_new_positions(old_num_classes, num_new_classes, num_anchors):
+            """
+            计算旧权重在“新权重矩阵”中应该放到的位置
+            """
+            new_num_classes = old_num_classes + num_new_classes
+            new_indices = []
+            for a in range(num_anchors):
+                start = a * new_num_classes
+                end = start + old_num_classes
+                new_indices.extend(range(start, end))
+            return torch.tensor(new_indices)
+            
+        
+        num_anchors = 9 # 通常 RetinaNet 默认每层 9 个 anchor
+        old_num_classes = self.head.num_classes
+        new_num_classes = old_num_classes + num_new_classes
+        
+        device = self.head.cls_score.weight.device
+        
+        # 1. 获取旧权重数据
+        old_weight = self.head.cls_score.weight.data # [A*n, C, 3, 3]
+        old_bias = self.head.cls_score.bias.data     # [A*n]
+        in_channels = old_weight.shape[1]
+        
+        # 2. 创建全新的卷积层
+        # 输出维度从 A*n 变为 A*(n+m)
+        new_out_channels = num_anchors * new_num_classes
+        new_cls_score = nn.Conv2d(
+            in_channels, new_out_channels, 
+            kernel_size=3, stride=1, padding=1
+        ).to(device)
+        
+        # 3. 初始化新层
+        # 参照 RetinaNet 论文：偏置初始化为 -log((1-pi)/pi) 使初始 score 接近 0
+        bias_value = -math.log((1 - init_prob) / init_prob)
+        nn.init.constant_(new_cls_score.bias, bias_value)
+        nn.init.normal_(new_cls_score.weight, std=0.01)
+
+        # 4. 将旧权重填入新层
+        # 获取旧权重在新矩阵中的目标位置映射
+        new_positions = get_new_positions(old_num_classes, num_new_classes, num_anchors)
+        
+        with torch.no_grad():
+            new_cls_score.weight.data[new_positions] = old_weight
+            new_cls_score.bias.data[new_positions] = old_bias
+            
+        # 5. 替换模型中的层
+        self.head.cls_score = new_cls_score
+        
+        # 6. 更新类别属性
+        self.head.num_classes = new_num_classes
+        self.num_classes = new_num_classes
+        
+        print(f"成功将 RetinaNet 类别从 {old_num_classes} 扩展为 {new_num_classes}")
 
 
 

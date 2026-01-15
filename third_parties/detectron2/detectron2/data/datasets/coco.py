@@ -147,7 +147,10 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
     dataset_dicts = []
 
     ann_keys = ["iscrowd", "bbox", "keypoints", "category_id"] + (extra_annotation_keys or [])
-
+    # for clsag dataset
+    if 'clsag' in  dataset_name:
+        ann_keys = ann_keys + ["category", "category_real_id"]
+    
     num_instances_without_valid_segmentation = 0
 
     for (img_dict, anno_dict_list) in imgs_anns:

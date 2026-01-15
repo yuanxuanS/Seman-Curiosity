@@ -113,9 +113,9 @@ class COCOEvaluator(DatasetEvaluator):
         json_file = PathManager.get_local_path(self._metadata.json_file)
         with contextlib.redirect_stdout(io.StringIO()):
             self._coco_api = COCO(json_file)
-
         # Test set json files do not contain annotations (evaluation must be
         # performed using the COCO evaluation server).
+        # print("coco dataset", self._coco_api.dataset)
         self._do_evaluation = "annotations" in self._coco_api.dataset
         if self._do_evaluation:
             self._kpt_oks_sigmas = kpt_oks_sigmas
@@ -600,7 +600,6 @@ def _evaluate_predictions_on_coco(
         # We remove the bbox field to let mask AP use mask area.
         for c in coco_results:
             c.pop("bbox", None)
-
     coco_dt = coco_gt.loadRes(coco_results)
     coco_eval = (COCOeval_opt if use_fast_impl else COCOeval)(coco_gt, coco_dt, iou_type)
     if img_ids is not None:

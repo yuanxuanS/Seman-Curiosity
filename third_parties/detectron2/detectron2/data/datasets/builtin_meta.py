@@ -370,6 +370,11 @@ PROJ_CATEGORIES = [
 
 ]
 
+PROJ_CLSAG_CATEGORIES = [
+    # {"color": [0, 0, 142], "isthing": 1, "id": 0, "name": "car"}, # proj_prune
+    
+    {"color": [220, 20, 60], "isthing": 1, "id": 0, "name": "object"},
+]
 def get_custom_metadata(dataset_name):
     if dataset_name == "proj":
         thing_ids = [k["id"] for k in PROJ_CATEGORIES]
@@ -377,6 +382,15 @@ def get_custom_metadata(dataset_name):
 
         thing_colors = [k["color"] for k in PROJ_CATEGORIES]
         thing_classes = [k["name"] for k in PROJ_CATEGORIES]
+        ret = {
+            # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
+            "thing_classes": thing_classes,
+            "thing_colors": thing_colors,
+        }
+    elif dataset_name == "proj_clsag":
+        thing_ids = [k["id"] for k in PROJ_CLSAG_CATEGORIES]
+        thing_colors = [k["color"] for k in PROJ_CLSAG_CATEGORIES]
+        thing_classes = [k["name"] for k in PROJ_CLSAG_CATEGORIES]
         ret = {
             # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
             "thing_classes": thing_classes,

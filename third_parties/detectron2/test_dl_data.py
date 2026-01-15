@@ -14,7 +14,7 @@ import json
 
 import json
 
-file = "./anno/ywj2.json"
+file = "./anno3/wpp.json"
 
 with open(file, "r") as f:
     data = json.load(f)
@@ -23,5 +23,5 @@ with open(file, "r") as f:
 for ann in data["annotations"]:
     ann["iscrowd"] = 0
 
-with open("./anno2/ywj3.json", "w") as f:
+with open("./anno3/wpp1.json", "w") as f:
     json.dump(data, f)

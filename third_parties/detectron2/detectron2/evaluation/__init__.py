@@ -2,6 +2,7 @@
 from .cityscapes_evaluation import CityscapesInstanceEvaluator, CityscapesSemSegEvaluator
 from .coco_evaluation import COCOEvaluator
 from .coco_al_evaluation import COCOALEvaluator
+from .coco_clsag_evaluation import COCOCLSAGEvaluator
 from .rotated_coco_evaluation import RotatedCOCOEvaluator
 from .evaluator import DatasetEvaluator, DatasetEvaluators, inference_context, inference_on_dataset
 from .lvis_evaluation import LVISEvaluator

@@ -16,3 +16,6 @@ COCO_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
 VOC_CLASSES  = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
            'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike',
            'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
+
+PROJ_CLASSES =('car', 'bicycle', 'bench', 'fire hydrant', 'building', 'grass', 'fence', 
+                'billboard', 'street light', 'tree', 'basketball stands', 'dustbin', 'statue' )
