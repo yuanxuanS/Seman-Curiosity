@@ -2,7 +2,7 @@
 # Paths
 CONFIG_DIR: 'configs/coco_active_learning/'
 WORK_DIR: 'output_al/'
-IMG_ROOT: 'datasets/coco/train2017/'
+IMG_ROOT: ''  # 'datasets/coco/train2017/'
 
 SEED: 1234
 

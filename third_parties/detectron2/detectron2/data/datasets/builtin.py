@@ -267,6 +267,7 @@ _MY_PROJ_SPLIT['proj'] = {
     'proj_val': ('proj/val', 'proj/annotations/instances_val.json'),
     'proj_test': ('proj/test', 'proj/annotations/instances_test.json'),
 }
+
 def register_proj(root):
     for dataset_name, splits_per_dataset in _MY_PROJ_SPLIT.items():
         for key, (image_root, json_file) in splits_per_dataset.items():
