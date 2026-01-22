@@ -3,7 +3,7 @@ import re
 import matplotlib.pyplot as plt
 
 # 日志文件路径（替换为实际路径）
-note = "rl_tp_diver2_m4_w8_thr2_woema"
+note = "rl_tp_diver2_m5_woema"
 reward ="tp action mean" #"dis reward"  
 cumu = False 
 log_file_path = f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/{note}.log"
