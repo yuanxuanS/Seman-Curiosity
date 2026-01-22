@@ -53,11 +53,11 @@ def visualize_coco_result(rgb_img, coco_result, metadata_name="my_dataset"):
     
     return vis_output.get_image()
 
-scene_name = "Wiconisco"
-envid = 1
+scene_name = "Woodbine"
+envid = 0
 best_loc_file = f"./{scene_name}_best_loc.json"
-img_dir = f"./data/visibles/{scene_name}_imgs/"
-save_dir = f"./data/visibles/{scene_name}_best/"
+img_dir = f"./data_scene/visibles/{scene_name}_imgs/"
+save_dir = f"./data_scene/visibles/{scene_name}_best/"
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
     

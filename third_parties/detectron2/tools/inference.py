@@ -45,11 +45,11 @@ if __name__ == "__main__":
     cfg.AdverTrain = False
     cfg.VIS = False
     cfg.OUTPUT_VISDIR = ""
-    cfg.merge_from_file("/home/users/wpp/Look_Around_And_Learn/third_parties/detectron2/configs/PascalVOC-Detection/faster_rcnn_R_50_FPN_clsag.yaml")
+    cfg.merge_from_file("/home/wpp/Seman-Curiosity/third_parties/detectron2/configs/PascalVOC-Detection/faster_rcnn_R_50_FPN_clsag.yaml")
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.05  # set threshold for this model
 
     # img_pth = "/data1/wpp_data/ai2thor_all/JPEGImages/bathroom_FloorPlan401_physics_image_5.png"
-    save_dir = "/data1/wpp_data/gibson_samples/vis_imgs_pred/"
+    save_dir = "/data/wpp/gibson_samples/vis_imgs_pred/"
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     img_dir = "/data1/wpp_data/gibson_samples/vis_imgs/"

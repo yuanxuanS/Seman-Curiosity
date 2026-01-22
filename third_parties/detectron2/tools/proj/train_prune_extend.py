@@ -195,7 +195,7 @@ def setup(args):
     cfg.VIS = False     
     cfg.SAVE_PTH = ''
     cfg.DATASET_NAME = ''
-    
+
     cfg.merge_from_file(args.config_file)       # 只能覆盖已有变量
     cfg.merge_from_list(args.opts)
     cfg.freeze()
@@ -212,21 +212,28 @@ def main(args):
     
     keep_class = { 
     
-    2: "car",       # key为COCO原数据类别中的id, 顺序对应类别的顺序
-    1: "bicylcle",
+    # 2: "car",       # key为COCO原数据类别中的id, 顺序对应类别的顺序
+    # 1: "bicylcle",
+    # 13: "bench",
+    # 10: "fire hydrant",
     
-    # 56: "chair",
-    # 57: "couch",
-    # 59: "bed",
-    # 61: "toilet",
-    # 72: "refrigerator",
+    
+    56: "chair",
+    57: "couch",
+    59: "bed",
+    61: "toilet",
+    72: "refrigerator",
 }   
     extend_class = {    #把旧的n个类放在最前面，中间插入m 个新类，最后把旧的背景权重挪到第 n+m的位置。
     1: "building",
     2: "grass",
     3: "fence",
     4: "billboard",
-    5: "bench",
+    5: "street light",
+    6: "tree",
+    7: "basketball stands",
+    8: "dustbin",
+    9: "statue"
     }
     
         
@@ -247,7 +254,7 @@ def main(args):
             model.extend_head_list(len(extend_class))
         else:
             model.extend_head(len(extend_class))
-            
+    
     if args.eval_only:
         return do_test(cfg, model)
 

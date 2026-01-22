@@ -384,9 +384,10 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_classes = classes
 
-    # for clsag dataset
+    # for clsag dataset, category, category_real_id 是特有key，区别与一般
     if "category" in annos[0].keys():
         categories = [obj["category"] for obj in annos]
+        categories = torch.tensor(categories, dtype=torch.int64)
         target.set("category", categories)
         categories_real = [obj["category_real_id"] for obj in annos]
         categories_real = torch.tensor(categories_real, dtype=torch.int64)

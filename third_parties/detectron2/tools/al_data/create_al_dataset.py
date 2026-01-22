@@ -9,7 +9,7 @@ parser.add_argument('--oracle-path', type=str, help='dataset root')
 parser.add_argument('--out-root', type=str, help='output json path')
 parser.add_argument('--n-diff', type=int, help='number of different initial set')
 parser.add_argument('--n-labeled', type=int,  help='n labeled images')
-parser.add_argument('--dataset', choices=['coco', 'voc'],  help='dataset type')
+parser.add_argument('--dataset', choices=['coco', 'voc', 'proj'],  help='dataset type')
 args = parser.parse_args()
 
 CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
@@ -32,7 +32,8 @@ voc_classes = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
        'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike',
        'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
 
-
+proj_classes = ('car', 'bicycle', 'bench', 'fire hydrant', 'building', 'grass', 'fence', 
+                'billboard', 'street light', 'tree', 'basketball stands', 'dustbin', 'statue' )
 
 def generate_active_learning_dataset(oracle_json, n_labeled_img, out_labeled_json, out_unlabeled_json, valid_classes):
     with open(oracle_json) as f:
@@ -99,6 +100,8 @@ if __name__ == '__main__':
         valid_classes = CLASSES
     elif args.dataset == 'voc':
         valid_classes = voc_classes
+    elif args.dataset == "proj":
+        valid_classes = proj_classes
     else:
         raise NotImplementedError
 

@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 import argparse
 parser = argparse.ArgumentParser(description='Active learning arguments')
 parser.add_argument('--config', required=True, type=str,
-                    default='./al_configs/coco/ppal_retinanet_coco.yaml',
+                    default='./al_configs/proj/ppal_retinanet_proj.yaml',
                     help='active learning config')
 parser.add_argument('--resume', required=False, type=bool, default=False, help='whether to resume training')
 parser.add_argument('--model', required=True, type=str, help='running model')
@@ -55,7 +55,7 @@ cfg.ORACLE_PATH = ""
 cfg.INIT_LABELED_JSON = ""
 cfg.INIT_UNLABELED_JSON = ""
 cfg.INIT_MODEL = None
-
+cfg.DATA_TYPE = ""
 #sampler config
 
 cfg.UNCERTAINTY_SAMPLER_CONFIG = CN()
@@ -80,14 +80,14 @@ cfg.TRAIN_CONFIG = os.path.join(cfg.CONFIG_DIR, 'al_train/retinanet_26e.yaml')
 cfg.UNCERTAINTY_INFER_CONFIG = os.path.join(cfg.CONFIG_DIR, 'al_inference/retinanet_uncertainty.yaml')
 cfg.DIVERSITY_INFER_CONFIG = os.path.join(cfg.CONFIG_DIR, 'al_inference/retinanet_diversity.yaml')
 
-cfg.OUTPUT_DIR = os.path.join(cfg.WORK_DIR, 'retinanet_coco_ppal_5rounds_2percent_to_10percent')
+cfg.OUTPUT_DIR = os.path.join(cfg.WORK_DIR, 'retinanet_proj_ppal')
 
 cfg.UNCERTAINTY_SAMPLER_CONFIG.oracle_annotation_path = cfg.ORACLE_PATH
 cfg.DIVERSITY_SAMPLER_CONFIG.n_sample_images = cfg.BUDGET
 cfg.DIVERSITY_SAMPLER_CONFIG.oracle_annotation_path = cfg.ORACLE_PATH
 cfg.freeze()
 
-sys_echo('>> Start COCO active learning')
+sys_echo('>> Start PROJ active learning')
 sys_echo('>> Working path: %s' % cfg.OUTPUT_DIR)
 sys_echo('>> Config: %s' % args.config)
 sys_echo('\n')
@@ -131,7 +131,7 @@ def run(round, run_al):
     round_eval_log                          = os.path.join(round_work_dir, 'eval.txt')
 
     round_uncertainty_inference_json_prefix = os.path.join(round_work_dir, 'unlabeled_inference_result')
-    round_uncertainty_inference_dir        = os.path.join(round_work_dir, f'uncertainty_coco_active_round_{round}/')      # 推理后结果保存; evaluator内部保存名
+    round_uncertainty_inference_dir        = os.path.join(round_work_dir, f'uncertainty_proj_active_round_{round}/')      # 推理后结果保存; evaluator内部保存名
     round_uncertainty_new_labeled_json      = os.path.join(round_work_dir, 'annotations', 'uncertainty_new_labeled.json')
     round_uncertainty_new_unlabeled_json    = os.path.join(round_work_dir, 'annotations', 'uncertainty_new_unlabeled.json')
 
@@ -145,8 +145,10 @@ def run(round, run_al):
                     '%s -m torch.distributed.launch '%PYTHON + \
                     ' --nproc_per_node=%d ' % int(cfg.GPUS) + \
                     ' --master_port=%d ' % int(cfg.PORT) + \
-                    ' tools/al/train_prune_extend.py ' + \
+                    ' tools/al/train_pe.py ' + \
                     ' --config-file %s ' % cfg.TRAIN_CONFIG + \
+                    ' --prune ' + \
+                    ' --extend-cls ' + \
                     ' LABELED_DATA %s ' % round_labeled_json + \
                     ' UNLABELED_DATA %s ' % round_unlabeled_json + \
                     ' ROUND_IDX %d ' % round + \
@@ -162,7 +164,7 @@ def run(round, run_al):
                    '%s -m torch.distributed.launch '%PYTHON + \
                    ' --nproc_per_node=%d ' % int(cfg.GPUS) + \
                    ' --master_port=%d ' % int(cfg.PORT) + \
-                   ' tools/al/test_prune_extend.py ' + \
+                   ' tools/al/test_pe.py ' + \
                    ' --config-file %s ' % cfg.TRAIN_CONFIG + \
                    ' LABELED_DATA %s ' % round_labeled_json + \
                    ' UNLABELED_DATA %s ' % round_unlabeled_json + \
@@ -178,7 +180,7 @@ def run(round, run_al):
                               '%s -m torch.distributed.launch '%PYTHON + \
                               ' --nproc_per_node=%d ' % int(cfg.GPUS) + \
                               ' --master_port=%d ' % int(cfg.PORT) + \
-                              ' tools/al/test.py ' + \
+                              ' tools/al/test_pe.py ' + \
                               ' --config-file %s ' % cfg.UNCERTAINTY_INFER_CONFIG + \
                               ' MODEL.WEIGHTS %s ' % os.path.join(round_work_dir, 'model_final.pth') + \
                               ' OUTPUT_DIR %s ' % round_work_dir + \
@@ -222,7 +224,12 @@ def run(round, run_al):
         if not (os.path.isfile(round_uncertainty_inference_dir+'/coco_instances_results.json') and args.resume):
             command_with_time(unlabeled_infer_command, 'Inference on unlabeled data')
         if not (os.path.isfile(round_uncertainty_new_labeled_json) and os.path.isfile(round_uncertainty_new_unlabeled_json) and args.resume):
-            uncertainty_sampler.al_round(round_work_dir, round_uncertainty_inference_dir, round_labeled_json, round_uncertainty_new_labeled_json, round_uncertainty_new_unlabeled_json)
+            uncertainty_sampler.al_round(round_work_dir, 
+                                         round_uncertainty_inference_dir, 
+                                         round_labeled_json, 
+                                         round_uncertainty_new_labeled_json, 
+                                         round_uncertainty_new_unlabeled_json,
+                                        )
 
         if hasattr(uncertainty_sampler, 'get_pool_size'):
             pool_size_round = uncertainty_sampler.get_pool_size(round + 1)
@@ -233,7 +240,7 @@ def run(round, run_al):
                                   '%s -m torch.distributed.launch ' % PYTHON + \
                                   ' --nproc_per_node=%d ' % int(cfg.GPUS) + \
                                   ' --master_port=%d ' % int(cfg.PORT) + \
-                                  ' tools/al/test.py ' + \
+                                  ' tools/al/test_pe.py ' + \
                                   ' --config-file %s ' % cfg.DIVERSITY_INFER_CONFIG + \
                                   ' MODEL.WEIGHTS %s ' % os.path.join(round_work_dir, 'model_final.pth') + \
                                   ' OUTPUT_DIR %s ' % round_work_dir + \

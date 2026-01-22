@@ -20,16 +20,35 @@ import logging
 import os
 from collections import OrderedDict
 import torch
+from detectron2.data.datasets.builtin_meta import get_custom_metadata
 
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog
+from detectron2.data import (
+    MetadataCatalog,
+    build_detection_test_loader,
+    build_detection_train_loader,
+)
+from detectron2.config import LazyConfig, instantiate
+from detectron2.engine import (
+    AMPTrainer,
+    SimpleTrainer,
+    default_argument_parser,
+    default_setup,
+    default_writers,
+    hooks,
+    launch,
+)
+from detectron2.solver import build_lr_scheduler, build_optimizer
+from detectron2.modeling import build_model
+
 from detectron2.engine import AdverTrainer, DefaultTrainer, default_argument_parser, default_setup, hooks, launch
 from detectron2.evaluation import (
     CityscapesInstanceEvaluator,
     CityscapesSemSegEvaluator,
     COCOEvaluator,
+    COCOCLSAGEvaluator,
     COCOPanopticEvaluator,
     DatasetEvaluators,
     LVISEvaluator,
@@ -37,8 +56,57 @@ from detectron2.evaluation import (
     PascalVOCCLSAGDetectionEvaluator,
     SemSegEvaluator,
     verify_results,
+    inference_on_dataset,
+    print_csv_format
 )
 from detectron2.modeling import GeneralizedRCNNWithTTA
+
+logger = logging.getLogger("detectron2")
+
+def get_evaluator(cfg, dataset_name, output_folder=None):
+    """
+    Create evaluator(s) for a given dataset.
+    This uses the special metadata "evaluator_type" associated with each builtin dataset.
+    For your own dataset, you can simply create an evaluator manually in your
+    script and do not have to worry about the hacky if-else logic here.
+    """
+    if output_folder is None:
+        output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
+    evaluator_list = []
+    evaluator_type = MetadataCatalog.get(dataset_name).evaluator_type
+    if evaluator_type in ["sem_seg", "coco_panoptic_seg"]:
+        evaluator_list.append(
+            SemSegEvaluator(
+                dataset_name,
+                distributed=True,
+                output_dir=output_folder,
+            )
+        )
+    if evaluator_type in ["coco", "coco_panoptic_seg"]:
+        evaluator_list.append(COCOCLSAGEvaluator(dataset_name, output_dir=output_folder, use_fast_impl=False))
+    if evaluator_type == "coco_panoptic_seg":
+        evaluator_list.append(COCOPanopticEvaluator(dataset_name, output_folder))
+    if evaluator_type == "cityscapes_instance":
+        assert (
+            torch.cuda.device_count() >= comm.get_rank()
+        ), "CityscapesEvaluator currently do not work with multiple machines."
+        return CityscapesInstanceEvaluator(dataset_name)
+    if evaluator_type == "cityscapes_sem_seg":
+        assert (
+            torch.cuda.device_count() >= comm.get_rank()
+        ), "CityscapesEvaluator currently do not work with multiple machines."
+        return CityscapesSemSegEvaluator(dataset_name)
+    if evaluator_type == "pascal_voc":
+        return PascalVOCDetectionEvaluator(dataset_name)
+    if evaluator_type == "lvis":
+        return LVISEvaluator(dataset_name, cfg, True, output_folder)
+    if len(evaluator_list) == 0:
+        raise NotImplementedError(
+            "no Evaluator for the dataset {} with the type {}".format(dataset_name, evaluator_type)
+        )
+    if len(evaluator_list) == 1:
+        return evaluator_list[0]
+    return DatasetEvaluators(evaluator_list)
 
 
 class Trainer(AdverTrainer):
@@ -122,6 +190,10 @@ def setup(args):
     Create configs and perform basic setups.
     """
     cfg = get_cfg()
+    cfg.AdverTrain = False
+    cfg.VIS = False
+    cfg.DATASET_NAME = ''
+    cfg.OUTPUT_VISDIR = ""
     cfg.MODEL.ROI_HEADS.NUM_REAL_CLASSES = cfg.MODEL.ROI_HEADS.NUM_CLASSES
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
@@ -129,36 +201,80 @@ def setup(args):
     default_setup(cfg, args)
     return cfg
 
+def do_test(cfg, model):
+    results = OrderedDict()
+    for dataset_name in cfg.DATASETS.TEST:
+        data_loader = build_detection_test_loader(cfg, dataset_name)
+        evaluator = get_evaluator(
+            cfg, dataset_name, os.path.join(cfg.OUTPUT_DIR, "inference", dataset_name)
+        )
+        results_i = inference_on_dataset(model, data_loader, evaluator, 
+                                         vis=cfg.VIS,
+                                         save_pth=os.path.join(cfg.OUTPUT_DIR, "imgs/", ),
+                                         metadata=get_custom_metadata(cfg.DATASET_NAME),
+                                         )
+        results[dataset_name] = results_i
+        if comm.is_main_process():
+            logger.info("Evaluation results for {} in csv format:".format(dataset_name))
+            print_csv_format(results_i)
+    if len(results) == 1:
+        results = list(results.values())[0]
+    return results
 
 def main(args):
     cfg = setup(args)
 
     torch.cuda.set_device(args.gpu_id)
-    if args.eval_only:
-        model = Trainer.build_model(cfg)
-        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
+    model = build_model(cfg)
+    optimizer = build_optimizer(cfg, model)
+    scheduler = build_lr_scheduler(cfg, optimizer)
+    
+    checkpointer = DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR,
+                                         optimizer=optimizer, scheduler=scheduler)
+    checkpointer.resume_or_load(
             cfg.MODEL.WEIGHTS, resume=args.resume
         )
-        pth = "/home/users/wpp/Look_Around_And_Learn/third_parties/detectron2/output/3/pred_res/"
-        res = Trainer.test(cfg, model, vis=True, save_pth=pth)
-        if cfg.TEST.AUG.ENABLED:
-            res.update(Trainer.test_with_TTA(cfg, model))
-        if comm.is_main_process():
-            verify_results(cfg, res)
-        return res
+    if args.eval_only:
+        
+        return do_test(cfg, model)
 
     """
     If you'd like to do anything fancier than the standard training logic,
     consider writing your own training loop (see plain_train_net.py) or
     subclassing the trainer.
     """
-    trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=args.resume)
+    
+    
+    data_loader = build_detection_train_loader(cfg)
+    
+    trainer = Trainer(model, data_loader, optimizer)
+    trainer.register_hooks(
+        [
+            hooks.IterationTimer(),
+            hooks.PeriodicCheckpointer(checkpointer,  
+                                       period=cfg.SOLVER.CHECKPOINT_PERIOD, 
+                                       ),
+            # if comm.is_main_process()
+            # else None,
+            # hooks.EvalHook(cfg.train.eval_period, lambda: do_test(cfg, model)),
+            hooks.PeriodicWriter(
+                default_writers(cfg.OUTPUT_DIR, cfg.SOLVER.MAX_ITER),
+                period=50,
+            )
+            if comm.is_main_process()
+            else None,
+        ]
+    )
+    # trainer.resume_or_load(resume=args.resume)
     if cfg.TEST.AUG.ENABLED:
         trainer.register_hooks(
             [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
         )
-    return trainer.train()
+    trainer.train(0, cfg.SOLVER.MAX_ITER)
+    
+    return do_test(cfg, model)
+    
+    
 
 
 if __name__ == "__main__":

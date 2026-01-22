@@ -7,6 +7,7 @@ MODEL:
     DEPTH: 50
   ROI_HEADS:
     NAME: CascadeROIHeads
+    SCORE_THRESH_TEST: 0.5
   ROI_BOX_HEAD:
     CLS_AGNOSTIC_BBOX_REG: True
   RPN:
@@ -15,16 +16,16 @@ MODEL:
 
 DATASETS:
   TRAIN: ("proj_train",)
-  TEST: ("proj_train",)
+  TEST: ("proj_test",)
 DATASET_NAME: "proj"    # 
 
 SOLVER:
   IMS_PER_BATCH: 16
   BASE_LR: 0.01  # Note that RetinaNet uses a different default learning rate
   STEPS: (60000, 80000)     
-  MAX_ITER: 50     #90000   # 
+  MAX_ITER: 158     #90000   # 
 
-VIS: True
+VIS: False
 
 # for train
 INPUT:

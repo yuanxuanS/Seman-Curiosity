@@ -356,14 +356,25 @@ PROJ_CATEGORIES = [
     
     {"color": [220, 20, 60], "isthing": 1, "id": 0, "name": "car"},
     {"color": [0, 0, 230], "isthing": 1, "id": 1, "name": "bicycle"},
-    {"color": [119, 11, 32], "isthing": 1, "id": 2, "name": "building"},
-    {"color": [0, 0, 142], "isthing": 1, "id": 3, "name": "grass"},
-    {"color": [106, 0, 228], "isthing": 1, "id": 4, "name": "fence"},
-    {"color": [0, 60, 100], "isthing": 1, "id": 5, "name": "billboard"},
-    {"color": [142, 108, 45], "isthing": 1, "id": 6, "name": "bench"},
+    {"color": [142, 108, 45], "isthing": 1, "id": 2, "name": "bench"},
+    {"color": [100, 170, 30], "isthing": 1, "id": 3, "name": "fire hydrant"},
+    {"color": [119, 11, 32], "isthing": 1, "id": 4, "name": "building"},
+    {"color": [0, 0, 142], "isthing": 1, "id": 5, "name": "grass"},
+    {"color": [106, 0, 228], "isthing": 1, "id": 6, "name": "fence"},
+    {"color": [0, 60, 100], "isthing": 1, "id": 7, "name": "billboard"},
+    {"color": [120, 166, 157], "isthing": 1, "id": 8, "name": "street light"},
+    {"color": [110, 76, 0], "isthing": 1, "id": 9, "name": "tree"},
+    {"color": [174, 57, 255], "isthing": 1, "id": 10, "name": "basketball stands"},
+    {"color": [199, 100, 0], "isthing": 1, "id": 11, "name": "dustbin"},
+    {"color": [72, 0, 118], "isthing": 1, "id": 12, "name": "statue"},
 
 ]
 
+PROJ_CLSAG_CATEGORIES = [
+    # {"color": [0, 0, 142], "isthing": 1, "id": 0, "name": "car"}, # proj_prune
+    
+    {"color": [220, 20, 60], "isthing": 1, "id": 0, "name": "object"},
+]
 def get_custom_metadata(dataset_name):
     if dataset_name == "proj":
         thing_ids = [k["id"] for k in PROJ_CATEGORIES]
@@ -372,7 +383,16 @@ def get_custom_metadata(dataset_name):
         thing_colors = [k["color"] for k in PROJ_CATEGORIES]
         thing_classes = [k["name"] for k in PROJ_CATEGORIES]
         ret = {
-            "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
+            # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
+            "thing_classes": thing_classes,
+            "thing_colors": thing_colors,
+        }
+    elif dataset_name == "proj_clsag":
+        thing_ids = [k["id"] for k in PROJ_CLSAG_CATEGORIES]
+        thing_colors = [k["color"] for k in PROJ_CLSAG_CATEGORIES]
+        thing_classes = [k["name"] for k in PROJ_CLSAG_CATEGORIES]
+        ret = {
+            # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
             "thing_classes": thing_classes,
             "thing_colors": thing_colors,
         }

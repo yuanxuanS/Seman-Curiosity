@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def box_iou_calc(boxes1, boxes2):
     """
     Return intersection-over-union (Jaccard index) of boxes.

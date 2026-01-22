@@ -100,7 +100,7 @@ class DiversitySampler(BaseALSampler):
         return sampled_img_ids, unsampled_img_ids
 
     def al_round(self, result_path, image_dis_path, last_label_path, out_label_path, out_unlabeled_path):
-        sys_echo('\n\n>> Starting Active Learning Acquisition!!!')
+        sys_echo('\n\n>> Starting Active Learning Acquisition!!! in diversity')
         self.round += 1
         self.log_info(result_path, image_dis_path, out_label_path, out_unlabeled_path)
         self.latest_labeled = last_label_path
