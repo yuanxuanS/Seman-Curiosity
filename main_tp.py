@@ -18,7 +18,8 @@ import cv2
 import json
 import torch.nn as nn
 from src.policy_rl.tp_topo_reward import VectorizedTopologyManager, \
-                       VectorizedTopologyManagerFeature
+                       VectorizedTopologyManagerFeature, \
+                           VectorizedTopologyManagerFeatureDistance
 import torch
 def main():
     args = get_args()
@@ -93,7 +94,8 @@ def main():
 
     # for topo reward
     # topo_manager = VectorizedTopologyManager(num_scenes,check_target=args.check_target)
-    topo_manager = VectorizedTopologyManagerFeature(num_scenes,check_target=args.check_target)
+    # topo_manager = VectorizedTopologyManagerFeature(num_scenes,check_target=args.check_target)
+    topo_manager = VectorizedTopologyManagerFeatureDistance(num_scenes,check_target=False)
     gap = nn.AdaptiveAvgPool2d((1, 1))
     
     # Initializing Maps
@@ -310,7 +312,7 @@ def main():
             l_reward = last_reward
         else:
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
-        reward = l_reward - last_reward
+        reward = (l_reward - last_reward) * args.r2_coeff
         
 
         if args.diversity_only:

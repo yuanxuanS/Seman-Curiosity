@@ -237,8 +237,8 @@ def main():
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
 
         # divesity reward
-        if args.use_diversity_reward:
-            l_reward += diversity_reward
+        # if args.use_diversity_reward:
+        #     l_reward += diversity_reward
 
         # ------------------------------------------------------------------ 
         # update local input, next state
