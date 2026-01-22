@@ -19,7 +19,7 @@ def mask_to_rle(binary_mask):
     
     return rle
 
-json_dir = "./third_parties/detectron2/datasets/embodied_m4_w8_thr2_woema/"
+json_dir = "./third_parties/detectron2/datasets/embodied_scene/"
 if not os.path.exists(json_dir):
     os.mkdir(json_dir)
 
@@ -28,15 +28,15 @@ if not os.path.exists(json_dir):
     os.mkdir(json_dir)
 
 coco_json = json_dir+"/instances_train.json"     # save path
-# base_dir = "./data/visibles"
-# scene_name = "Wiconisco"
+base_dir = "./data_scene/visibles"
+scene_name = "Woodbine"
+data_pth = base_dir + "/" + scene_name
 
-# data_pth = base_dir + "/" + scene_name
 # data_pth = "data/vsqf_test_val5/data"
-data_pth = "./exps/dump/tp_diver2_m4_w8_thr2_woema_eval/episodes_data"
+# data_pth = "./exps/dump/tp_diver2_m5_woema_thr6_eval/episodes_data"
 save_rgb = True     # 转化为rgb进行保存
 save_rgb_dir = data_pth + "_imgs/"
-save_pos = False     # 是否保存采集位置
+save_pos = True     # 是否保存采集位置; 获取best loc时需要
 if not os.path.exists(save_rgb_dir):
     os.mkdir(save_rgb_dir,)
     

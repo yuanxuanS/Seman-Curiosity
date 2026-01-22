@@ -3,7 +3,7 @@ import pickle
 import re
 
  
-rgb_info = "./third_parties/detectron2/datasets/embodied/annotations/instances_val.json"
+rgb_info = "./third_parties/detectron2/datasets/embodied_scene/annotations/instances_train.json"
 with open(rgb_info, 'r') as f:
     rgb_infos = json.load(f)
 
@@ -17,24 +17,28 @@ for img_info in rgb_infos['images']:
         # print(step_num)  # 输出: 125
         rgb_input_info[step_num] = img_info
 
-scene_name = "Wiconisco"
+scene_name = "Woodbine"
+
 output_dir = f"embodied_{scene_name}"
-result_info = f"/home/wpp/Seman-Curiosity/third_parties/detectron2/output/{output_dir}/inference/embodied_val/coco_instances_results.json"
+result_info = f"/home/wpp/Seman-Curiosity/third_parties/detectron2/output/{output_dir}/inference/embodied_scene/coco_instances_results.json"
 with open(result_info, "r") as f:
     result_infos = json.load(f)     
 result_dict = {}
 for ri in result_infos:
     result_dict[ri['image_id']] = ri
 
-obj_rgbs_info=f"./data/visibles/info/{scene_name}.json"
+# 每个obj id 对应的rgb的step
+obj_rgbs_info=f"./data_scene/visibles/info/{scene_name}.json"
 with open(obj_rgbs_info, 'r') as f:
     obj_rgb_ids = json.load(f)
 
-
-cate_obj = f"./data/visibles/info/cate_objs_{scene_name}.pkl"
+print(obj_rgb_ids)
+cate_obj = f"./data_scene/visibles/info/cate_objs_{scene_name}.pkl"
 with open(cate_obj, "rb") as f:
     cate_obj_info = pickle.load(f)
-    
+
+
+
 cate_mapping = {
     "chair": 0,
     "couch" : 1,
@@ -76,4 +80,6 @@ for obj_id, rgb_ids in obj_rgb_ids.items():
 print(best_locs)
 with open(best_loc_file, "w") as f:
     json.dump(best_locs, f)
+
+
 
