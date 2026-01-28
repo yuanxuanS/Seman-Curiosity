@@ -52,7 +52,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -222,7 +222,7 @@ def main():
                 deterministic=False
             )
         l_action = l_action.cpu().numpy()
-    
+        
     elif args.agent == "random":
         l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
         l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
@@ -243,10 +243,16 @@ def main():
     actions = []
     actions.append(l_action)
     # print(f"action is {l_action}")
+    # split tp for test
+    l_action_tp = l_action
+    rand_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+    l_action = np.where(l_action_tp == 1, np.ones_like(l_action)*3, rand_action)
+    
     obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)
     l_action = torch.tensor(l_action)
-    
+    l_action_tp = torch.tensor(l_action_tp, device=device)
     # tp action
+    
     for i in range(num_scenes):
         if l_action[i] ==3:
             episode_tp_step[i][episode_tp_idx[i]] = 0
@@ -321,7 +327,7 @@ def main():
         if args.curriculum and step >= int(total_step_num / 2) :
             # print(f"in step : {step}, r1, r2 from {args.r1_coeff}-{args.r2_coeff}")
             args.r1_coeff = 1
-            args.r2_coeff = min((step - int(total_step_num / 2)) / 10000, 1)
+            args.r2_coeff = min((step - int(total_step_num / 2)) / 10000, 1)        # 10000步之内增加到1； 24w frame
             if step % (args.log_interval * 5) == 0:
                 print(f" step {step}, to {args.r1_coeff}-{args.r2_coeff}")
             
@@ -330,7 +336,7 @@ def main():
         # divesity reward
         if args.use_diversity_reward:
             reward += diversity_reward * args.diver_coeff * args.r2_coeff
-        diver_cumu_r += diversity_reward * args.diver_coeff * args.r2_coeff
+            diver_cumu_r += diversity_reward * args.diver_coeff * args.r2_coeff
 
         cumu_r += reward
         # ------------------------------------------------------------------ 
@@ -360,7 +366,7 @@ def main():
         if args.agent == "rl":
             l_rollouts.insert(
                     local_input, l_rec_states,      # state_t+1
-                    l_action, l_action_log_prob, l_value,   # action, reward_t
+                    l_action_tp, l_action_log_prob, l_value,   # action, reward_t
                     reward, l_masks, extras
                 )
         last_reward = l_reward
@@ -431,6 +437,7 @@ def main():
                     deterministic=False
                 )
             l_action = l_action.cpu().numpy()
+            
         elif args.agent == "random":
             l_action_tp = np.random.randint(0, l_action_space.n, num_scenes)
             l_action_notp = np.random.randint(0, l_action_space.n - 1, num_scenes)
@@ -441,6 +448,12 @@ def main():
                 l_action = np.random.randint(3, l_action_space.n, num_scenes)
             else:
                 l_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        
+        # split tp for test
+        l_action_tp = l_action
+        rand_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        l_action = np.where(l_action_tp == 1, np.ones_like(l_action)*3, rand_action)
+        
         
         # tp action
         for i in range(num_scenes):
@@ -483,8 +496,14 @@ def main():
         # print(f"action is {l_action}")
         obs, _, done, infos = envs.step_and_preprocess(l_action, vis_inputs)    # if done ,envs.reset, obs are ones after reset
         l_action = torch.tensor(l_action)
+        l_action_tp = torch.tensor(l_action_tp, device=device)
         step_since_last_tp += torch.ones_like(step_since_last_tp)
         
+        # split tp for test
+        l_action_all = l_action
+        rand_action = np.random.randint(0, l_action_space.n - 1, num_scenes)
+        l_action = np.where(l_action == 1, np.ones_like(l_action)*3, rand_action)
+    
         # if episode over, reset maps
         for e, x in enumerate(done):    # if done, maps from new obs
             if x:

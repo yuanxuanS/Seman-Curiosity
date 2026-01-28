@@ -258,6 +258,7 @@ class Transport_Env_Agent(Transport_Env):
 
         depth = np.expand_dims(depth, axis=2)
 
+        info['has_target'] = False
         if return_score:
             reward = min(obj) if len(obj) > 0 else -0.01
             info['reward'] = torch.exp(2*torch.tensor(1 - reward)) - 1 if reward > 0. else reward

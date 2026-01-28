@@ -247,7 +247,8 @@ class Uncertainty_Diversity_Policy(NNBase):
             self.extra_dim += 32
         if self.input_sslj:
             self.extra_dim += 32
-        self.linear1 = nn.Linear(self.conv_output_size + self.extra_dim, hidden_size)
+        # self.linear1 = nn.Linear(self.conv_output_size + self.extra_dim, hidden_size)
+        self.linear1 = nn.Linear(self.extra_dim, hidden_size)
         if self.dropout > 0:
             self.dropout1 = nn.Dropout(self.dropout)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
@@ -306,11 +307,16 @@ class Uncertainty_Diversity_Policy(NNBase):
             sslj = self.sslj_encoder(sslj)
         
         if self.input_category and self.input_budget and self.input_sslj:
-            combined = torch.concat([conv_output.view(  # fnn 1
-                    -1, self.conv_output_size), 
+            # combined = torch.concat([conv_output.view(  # fnn 1
+            #         -1, self.conv_output_size), 
+            #                          category_info, 
+            #                          budget_info,
+            #                          sslj], dim=1)
+            combined = torch.concat([ 
                                      category_info, 
                                      budget_info,
-                                     sslj], dim=1)
+                                     sslj
+                                     ], dim=1)
         else:
             # TODO
             if self.input_category:
@@ -361,7 +367,8 @@ class RL_Policy(nn.Module):
             base_kwargs = {}
         
         if action_space.__class__.__name__ == "Discrete":
-            num_outputs = action_space.n
+            # num_outputs = action_space.n
+            num_outputs = 2
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
 

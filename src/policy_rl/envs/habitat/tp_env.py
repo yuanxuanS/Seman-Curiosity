@@ -77,9 +77,10 @@ class Transport_Env(habitat.RLEnv):
         sem_map = scene_info[floor_idx]['sem_map']
         self.sample_pts_num = int(sem_map[0].sum() / 5)
         
-        # saved_file = "./data/visibles/info/cate_objs_"+scene_name
-        # with open(saved_file+".pkl", "wb") as f:
-        #     pickle.dump(category_objects, f)
+        if args.sample_mode:
+            saved_file = "./data/visibles/info/cate_objs_"+scene_name
+            with open(saved_file+".pkl", "wb") as f:
+                pickle.dump(category_objects, f)
         
         # for transport action
         if not args.sample_mode:
@@ -116,6 +117,12 @@ class Transport_Env(habitat.RLEnv):
             else:
                 self.sample_obj_visible_loc()
 
+        tp_loc = self.tp_loc
+        self.q = queue.Queue(maxsize=len(tp_loc))
+        for i in range(len(tp_loc)):
+            # 2. 存入数据
+            self.q.put(list(tp_loc.values())[i])
+            
         self.init_agent_loc = self.get_sim_location()
 
         rgb = obs['rgb'].astype(np.uint8)
@@ -144,6 +151,7 @@ class Transport_Env(habitat.RLEnv):
             self.found_id = []
         # for topo reward
         self.info['position'] = self.this_sim_location[:2]
+        
         return state, self.info
     
     def get_navigable_points(self):
@@ -246,11 +254,7 @@ class Transport_Env(habitat.RLEnv):
             ))
         
         # for transport action
-        tp_loc = self.tp_loc
-        self.q = queue.Queue(maxsize=len(tp_loc))
-        for i in range(len(tp_loc)):
-            # 2. 存入数据
-            self.q.put(list(tp_loc.values())[i])
+        
         return obs
     
     def initial_possible_loc(self):
