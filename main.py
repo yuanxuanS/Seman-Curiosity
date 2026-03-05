@@ -135,7 +135,8 @@ def main():
         
 
         # Storage: 
-        l_rollouts = GlobalRolloutStorage(args.num_local_steps,
+        # l_rollouts = GlobalRolloutStorage(args.num_local_steps,
+        l_rollouts = GlobalRolloutStorage(100,
                                         num_scenes, l_observation_space.shape,
                                         l_action_space, l_policy.rec_state_size,
                                         es).to(device)
@@ -220,7 +221,8 @@ def main():
         print(f"training frames is {args.num_training_frames}")
         logging.info(f"training frames is {args.num_training_frames}")
     for step in range(args.num_training_frames // args.num_processes + 1):
-        l_step = step % args.num_local_steps
+        # l_step = step % args.num_local_steps
+        l_step = step % 100
         
         if finished.sum() == args.num_processes:    # eval over
             break
@@ -352,7 +354,8 @@ def main():
         # ------------------------------------------------------------------
         # Training
         torch.set_grad_enabled(True)
-        if l_step == args.num_local_steps - 1:
+        # if l_step == args.num_local_steps - 1:
+        if l_step == 100 - 1:
             if not args.eval:
                 l_next_value = l_policy.get_value(
                     l_rollouts.obs[-1],

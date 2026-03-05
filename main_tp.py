@@ -111,6 +111,7 @@ def main():
     
     # fro transport action
     tp_budget =np.array([info['tp_budget'] for info in infos])
+    last_tp_budget = tp_budget
     category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
     
     # for topo reward
@@ -306,7 +307,13 @@ def main():
         penalty_r = torch.tensor([info['tp_penalty'] for info in infos], device=device)
         # penalty_r *= (1 + 2 * torch.exp(- step_since_last_tp/ 25)).to(device) 
         penalty_r *= (0.8 * torch.tanh((step_since_last_tp - 40) / 20) - 0.2).to(device)
-        # penalty_r *= args.diver_coeff
+        
+        
+        # penalty if use no tp
+        
+        if done[0]:
+            no_use_p = torch.ones_like(penalty_r.cpu()) * torch.from_numpy(last_tp_budget)*1.5
+            penalty_r -= no_use_p.to(device)
         penalty_r = penalty_r.to(device)
         
         # update after use it
@@ -345,6 +352,7 @@ def main():
         
         # fro transport action
         tp_budget =np.array([info['tp_budget'] for info in infos])
+        last_tp_budget = tp_budget
         category_object = np.concatenate([[info['category_object']] for info in infos], axis=0)
     
         if args.agent == "rl":

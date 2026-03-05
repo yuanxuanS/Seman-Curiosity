@@ -200,5 +200,6 @@ class VectorizedTopologyManagerFeatureDistance:
         return rewards
 
     def reset_env(self, env_idx):
+        del self.env_nodes
         """当某个环境结束(Done)并重启时，清空该环境的地图"""
         self.env_nodes[env_idx] = []
