@@ -277,6 +277,11 @@ _MY_PROJ_SPLIT['proj_clsag'] = {
     # "proj_al": ('proj/train', 'proj/annotations/labeled.json')
 }
 
+_MY_PROJ_SPLIT['embodied'] = {
+    'embodied_test': ('embodied_test/test', 'embodied_test/annotations/instances_test.json'),
+    'asample': ('asample_test/train', 'asample_test/annotations/instances_train.json'),
+    'asample_seq': ('asample_test_seq/train', 'asample_test_seq/annotations/instances_train.json')
+}
 def register_proj(root):
     for dataset_name, splits_per_dataset in _MY_PROJ_SPLIT.items():
         for key, (image_root, json_file) in splits_per_dataset.items():
