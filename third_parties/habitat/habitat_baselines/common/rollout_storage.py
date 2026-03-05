@@ -36,7 +36,7 @@ class RolloutStorage:
                         num_envs,
                         *observation_space.spaces[sensor].shape,
                     ),
-                    dtype=observation_space.spaces[sensor].dtype,
+                    dtype=np.int32,
                 )
             )
 

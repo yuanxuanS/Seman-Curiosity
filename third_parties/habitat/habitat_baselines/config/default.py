@@ -34,13 +34,13 @@ _C.EVAL_CKPT_PATH_DIR = "data/checkpoints"  # path to ckpt or path to ckpts dir
 _C.NUM_ENVIRONMENTS = 16
 _C.NUM_PROCESSES = -1  # depricated
 _C.SENSORS = ["RGB_SENSOR", "DEPTH_SENSOR"]
-_C.CHECKPOINT_FOLDER = "data/checkpoints"
+# _C.CHECKPOINT_FOLDER = "data/checkpoints"
 _C.NUM_UPDATES = 10000
 _C.NUM_CHECKPOINTS = 10
 # Number of model updates between checkpoints
 _C.CHECKPOINT_INTERVAL = -1
 _C.TOTAL_NUM_STEPS = -1.0
-_C.LOG_INTERVAL = 10
+_C.LOG_INTERVAL = 1
 _C.LOG_FILE = "train.log"
 _C.FORCE_BLIND_POLICY = False
 _C.VERBOSE = True

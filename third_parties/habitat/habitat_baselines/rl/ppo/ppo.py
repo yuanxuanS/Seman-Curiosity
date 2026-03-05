@@ -83,17 +83,38 @@ class PPO(nn.Module):
             )
 
             for batch in data_generator:
+                # (
+                #     values,
+                #     action_log_probs,
+                #     dist_entropy,
+                #     _,
+                # ) = self._evaluate_actions(
+                #     batch["observations"],
+                #     batch["recurrent_hidden_states"],
+                #     batch["prev_actions"],
+                #     batch["masks"],
+                #     batch["actions"],
+                # )
+                
+                # for active sample
+                gmap_vp_ids = batch.pop("gmap_vp_ids")
+                batch = batch.map(lambda v: v.flatten(0, 1))
+                
+                gmap_masks_ = batch['gmap_masks']
+                gmap_img_fts_ = batch['gmap_img_fts']
+                gmap_pos_fts_ = batch['gmap_pos_fts']
+                valid_ghost_size = int(gmap_masks_.sum(-1).max().cpu())
+                gmap_masks = gmap_masks_[:, :valid_ghost_size]
+                gmap_img_fts = gmap_img_fts_[:, :valid_ghost_size]
+                gmap_pos_fts = gmap_pos_fts_[:, :valid_ghost_size]
+                masks = batch['masks']
+                action = batch['actions']
                 (
                     values,
                     action_log_probs,
                     dist_entropy,
-                    _,
-                ) = self._evaluate_actions(
-                    batch["observations"],
-                    batch["recurrent_hidden_states"],
-                    batch["prev_actions"],
-                    batch["masks"],
-                    batch["actions"],
+                    ) = self.actor_critic.evaluate_actions(
+                    gmap_vp_ids, gmap_img_fts, gmap_pos_fts,gmap_masks,  masks, action
                 )
 
                 ratio = torch.exp(action_log_probs - batch["action_log_probs"])
