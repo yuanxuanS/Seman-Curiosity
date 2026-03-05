@@ -1,0 +1,85 @@
+BASE_TASK_CONFIG_PATH: habitat_extensions/config/sample_gibson.yaml
+SIMULATOR_GPU_IDS: 1,2,
+TORCH_GPU_ID: 0
+TORCH_GPU_IDS: [0, 1,2,]
+TRAINER_NAME: asample
+GPU_NUMBERS: 2
+NUM_ENVIRONMENTS: 2
+TENSORBOARD_DIR: outputs_asample/logs/tensorboard_dirs/
+CHECKPOINT_FOLDER: outputs_asample/logs/checkpoints/
+EVAL_CKPT_PATH_DIR: outputs_asample/logs/checkpoints/
+RESULTS_DIR: outputs_asample/logs/eval_results/
+VIDEO_DIR: outputs_asample/logs/video/
+VIDEO_OPTION: ['disk']
+SAVE_DATA: True
+
+INFERENCE:
+  SPLIT:  test
+  USE_CKPT_CONFIG: False
+  SAMPLE: False
+  CKPT_PATH: '' # REPLACE THIS
+  PREDICTIONS_FILE: ''
+  FORMAT: r2r
+  EPISODE_COUNT: -1
+
+EVAL:
+  USE_CKPT_CONFIG: False
+  SPLIT: val_unseen
+  EPISODE_COUNT: -1
+  CKPT_PATH_DIR: ''
+  fast_eval: False
+
+RL:
+  episode_length: 50   # graph node数量
+  ghost_aug: 0.0
+  loc_noise: 0.5
+  POLICY:
+    name: PolicyViewSelection
+# IL:
+  iters: 5   # 
+  log_every: 5
+#   lr: 1e-5
+#   batch_size: 1 # equal to NUM_ENVIRONMENTS
+#   ml_weight: 1.0
+#   expert_policy: spl
+
+#   sample_ratio: 0.75
+#   decay_interval: 3000
+  
+#   max_traj_len: 15
+#   max_text_len: 80
+  loc_noise: 0.5
+  waypoint_aug: False
+  ghost_aug: 0.0
+  back_algo: teleport
+#   # back_algo: control
+  tryout: True
+
+MODEL:
+  task_type: r2r
+
+  policy_name: PolicyViewSelectionETP
+  NUM_ANGLES: 12
+  pretrained_path: None  #pretrained/ETP/mlm.sap_r2r/ckpts/model_step_82500.pt
+  fix_lang_embedding: False
+  fix_pano_embedding: False
+  use_depth_embedding: True
+  use_sprels: True
+  merge_ghost: True
+  consume_ghost: True
+  
+  spatial_output: False
+  RGB_ENCODER:
+    output_size: 512
+  DEPTH_ENCODER:
+    output_size: 256    
+  VISUAL_DIM:
+    vis_hidden: 768
+    directional: 128
+  INSTRUCTION_ENCODER:
+    bidirectional: True
+
+detector:
+  sem_pred_prob_thr: 0.6
+  sem_gpu_id: -1
+  visualize: 2    # 2： rgb 返回绘制检测结果

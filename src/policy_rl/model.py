@@ -436,7 +436,10 @@ class RL_Policy(nn.Module):
         return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks, extras=None):
-        value, _, _, _ = self(inputs, rnn_hxs, masks, extras)
+        if self.model_type == 1:
+            value, _, _ = self(inputs, rnn_hxs, masks, extras)
+        else:
+            value, _, _, _ = self(inputs, rnn_hxs, masks, extras)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action, extras=None):
