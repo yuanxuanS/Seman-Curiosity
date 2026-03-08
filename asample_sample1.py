@@ -271,13 +271,13 @@ def get_specify_samples(all_tracks):
 iou_threshold=0.4
 
 # 加载数据
-data_pth = "outputs_asample/imgs/test_sample/data"
+data_pth = "outputs_asample/imgs/test5_env1/rgb_all_data"
 sampler = SampleLoader(data_pth, glbstep=True)
 inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
 
 # 遍历每一glbstep的数据
-glb_frames = {}
-glb_frame = []
+# glb_frames = {}
+# glb_frame = []
 
 # for env, episode, glbstep, step in zip(inputs[0], inputs[1], inputs[2], inputs[3]):
     
@@ -290,7 +290,7 @@ glb_frame = []
 #     else:
 #         glb_frames[env][episode][glbstep].append(step)
 # # print(glb_frames)
-# with open("./asample_straight_indices.pkl", "wb") as f:
+# with open("./asample_straight_indices_2.pkl", "wb") as f:
 #     pickle.dump(glb_frames, f)
 
 
@@ -298,7 +298,7 @@ glb_frames_tracks = {}
 glb_frames_sampled = []
 mod = ["bbsgt" , "bbspred", "rgb",]     #  "depth", "position", "semantic", ]
 
-with open("./asample_straight_indices.pkl", "rb") as f:
+with open("./asample_straight_indices_2.pkl", "rb") as f:
     glb_frames_indices = pickle.load(f)
     
 device = "cuda:3" if torch.cuda.is_available() else "cpu"
@@ -363,9 +363,10 @@ for env, env_data in glb_frames_indices.items():
 
     
     
-with open("./asample_straight_tracks.pkl", "wb") as f:
+with open("./asample_straight_tracks_2.pkl", "wb") as f:
     pickle.dump(glb_frames_tracks, f)
     
-with open("./asample_straight_sampled.pkl", "wb") as f:
+with open("./asample_straight_sampled_2.pkl", "wb") as f:
     pickle.dump(glb_frames_sampled, f)
 print(glb_frames_sampled)
+

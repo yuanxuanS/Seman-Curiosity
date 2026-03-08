@@ -391,12 +391,12 @@ class ActiveSampleTrainer(PPOTrainer):
                 # self.optimizer.zero_grad()
                 # self.loss = 0.
 
-                losses = self.rollout('train',)
+                losses = self.rollout('eval',)
                 # 更新的改在这里？ TODO
                 # self.scaler.scale(self.loss).backward() # self.loss.backward()
                 # # self.scaler.step(self.optimizer)        # self.optimizer.step()
                 # self.scaler.update()
-                self._training_log(writer, losses)
+                # self._training_log(writer, losses)
                 
                 if self.local_rank < 1:
                     pbar.set_postfix({'iter': f'{idx+1}/{interval}'})
@@ -722,7 +722,17 @@ class ActiveSampleTrainer(PPOTrainer):
             prev_vp[i] = front_vp
             if self.config.MODEL.consume_ghost:     # 原文提到，为了避免重复选到不了的节点，选择ghost后先删除，再走去
                 gmap.delete_ghost(ghost_vp)
-        return env_actions, prev_vp
+        
+        batch_no_vp_left = []
+
+        for i, gmap in enumerate(self.gmaps):
+            ghost_vp_ids = list(gmap.ghost_pos.keys())
+            if len(ghost_vp_ids) == 0:
+                batch_no_vp_left.append(True)
+            else:
+                batch_no_vp_left.append(False)
+        no_vp_left = batch_no_vp_left
+        return env_actions, prev_vp, no_vp_left
         
         
     def _update_agent(self,):
@@ -852,22 +862,22 @@ class ActiveSampleTrainer(PPOTrainer):
         batch = batch_obs(observations, self.device)
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
         
-        if mode == 'eval':
-            env_to_pause = [i for i, ep in enumerate(self.envs.current_episodes()) 
-                            if ep.episode_id in self.stat_eps]    
-            self.envs, batch = self._pause_envs(self.envs, batch, env_to_pause)
-            if self.envs.num_envs == 0: return
-        if mode == 'infer':
-            env_to_pause = [i for i, ep in enumerate(self.envs.current_episodes()) 
-                            if ep.episode_id in self.path_eps]    
-            self.envs, batch = self._pause_envs(self.envs, batch, env_to_pause)
-            if self.envs.num_envs == 0: return
-            curr_eps = self.envs.current_episodes()
-            for i in range(self.envs.num_envs):
-                if self.config.MODEL.task_type == 'rxr':
-                    ep_id = curr_eps[i].episode_id
-                    k = curr_eps[i].instruction.instruction_id
-                    self.inst_ids[ep_id] = int(k)
+        # if mode == 'eval':
+        #     env_to_pause = [i for i, ep in enumerate(self.envs.current_episodes()) 
+        #                     if ep.episode_id in self.stat_eps]    
+        #     self.envs, batch = self._pause_envs(self.envs, batch, env_to_pause)
+        #     if self.envs.num_envs == 0: return
+        # if mode == 'infer':
+        #     env_to_pause = [i for i, ep in enumerate(self.envs.current_episodes()) 
+        #                     if ep.episode_id in self.path_eps]    
+        #     self.envs, batch = self._pause_envs(self.envs, batch, env_to_pause)
+        #     if self.envs.num_envs == 0: return
+        #     curr_eps = self.envs.current_episodes()
+        #     for i in range(self.envs.num_envs):
+        #         if self.config.MODEL.task_type == 'rxr':
+        #             ep_id = curr_eps[i].episode_id
+        #             k = curr_eps[i].instruction.instruction_id
+        #             self.inst_ids[ep_id] = int(k)
 
 
         loss = 0.
@@ -926,7 +936,7 @@ class ActiveSampleTrainer(PPOTrainer):
 
             cpu_a_t = actions.cpu().numpy()
 
-            env_actions, prev_vp = self._build_actions(cpu_a_t, stepk, no_vp_left,
+            env_actions, prev_vp, no_vp_left = self._build_actions(cpu_a_t, stepk, no_vp_left,
                                               cur_vp, nav_inputs, prev_vp)
             self.pth_time += time.time() - t_sample_action
             
@@ -954,62 +964,62 @@ class ActiveSampleTrainer(PPOTrainer):
             self.current_episode_reward[env_slice].masked_fill_(done_masks, 0.0)
 
             # calculate metric
-            if mode == 'eval':
-                curr_eps = self.envs.current_episodes()
-                for i in range(self.envs.num_envs):
-                    if not dones[i]:
-                        continue
-                    info = infos[i]
-                    ep_id = curr_eps[i].episode_id
-                    # gt_path = np.array(self.gt_data[str(ep_id)]['locations']).astype(np.float)
-                    pred_path = np.array(info['position']['position'])
-                    distances = np.array(info['position']['distance'])
-                    metric = {}
-                    # metric['steps_taken'] = info['steps_taken']
-                    # metric['distance_to_goal'] = distances[-1]
-                    # metric['success'] = 1. if distances[-1] <= 3. else 0.
-                    # metric['oracle_success'] = 1. if (distances <= 3.).any() else 0.
-                    # metric['path_length'] = float(np.linalg.norm(pred_path[1:] - pred_path[:-1],axis=1).sum())
-                    metric['collisions'] = info['collisions']['count'] / len(pred_path)
-                    gt_length = distances[0]
-                    # metric['spl'] = metric['success'] * gt_length / max(gt_length, metric['path_length'])
-                    # dtw_distance = fastdtw(pred_path, gt_path, dist=NDTW.euclidean_distance)[0]
-                    # metric['ndtw'] = np.exp(-dtw_distance / (len(gt_path) * 3.))
-                    # metric['sdtw'] = metric['ndtw'] * metric['success']
-                    metric['ghost_cnt'] = self.gmaps[i].ghost_cnt
-                    self.stat_eps[ep_id] = metric
-                    self.pbar.update()
+            # if mode == 'eval':
+            #     curr_eps = self.envs.current_episodes()
+            #     for i in range(self.envs.num_envs):
+            #         if not dones[i]:
+            #             continue
+            #         info = infos[i]
+            #         ep_id = curr_eps[i].episode_id
+            #         # gt_path = np.array(self.gt_data[str(ep_id)]['locations']).astype(np.float)
+            #         pred_path = np.array(info['position']['position'])
+            #         distances = np.array(info['position']['distance'])
+            #         metric = {}
+            #         # metric['steps_taken'] = info['steps_taken']
+            #         # metric['distance_to_goal'] = distances[-1]
+            #         # metric['success'] = 1. if distances[-1] <= 3. else 0.
+            #         # metric['oracle_success'] = 1. if (distances <= 3.).any() else 0.
+            #         # metric['path_length'] = float(np.linalg.norm(pred_path[1:] - pred_path[:-1],axis=1).sum())
+            #         metric['collisions'] = info['collisions']['count'] / len(pred_path)
+            #         gt_length = distances[0]
+            #         # metric['spl'] = metric['success'] * gt_length / max(gt_length, metric['path_length'])
+            #         # dtw_distance = fastdtw(pred_path, gt_path, dist=NDTW.euclidean_distance)[0]
+            #         # metric['ndtw'] = np.exp(-dtw_distance / (len(gt_path) * 3.))
+            #         # metric['sdtw'] = metric['ndtw'] * metric['success']
+            #         metric['ghost_cnt'] = self.gmaps[i].ghost_cnt
+            #         self.stat_eps[ep_id] = metric
+            #         self.pbar.update()
 
-            # record path
-            if mode == 'infer':
-                curr_eps = self.envs.current_episodes()
-                for i in range(self.envs.num_envs):
-                    if not dones[i]:
-                        continue
-                    info = infos[i]
-                    ep_id = curr_eps[i].episode_id
-                    self.path_eps[ep_id] = [
-                        {
-                            'position': info['position_infer']['position'][0],
-                            'heading': info['position_infer']['heading'][0],
-                            'stop': False
-                        }
-                    ]
-                    for p, h in zip(info['position_infer']['position'][1:], info['position_infer']['heading'][1:]):
-                        if p != self.path_eps[ep_id][-1]['position']:
-                            self.path_eps[ep_id].append({
-                                'position': p,
-                                'heading': h,
-                                'stop': False
-                            })
-                    self.path_eps[ep_id] = self.path_eps[ep_id][:500]
-                    self.path_eps[ep_id][-1]['stop'] = True
-                    self.pbar.update()
+            # # record path
+            # if mode == 'infer':
+            #     curr_eps = self.envs.current_episodes()
+            #     for i in range(self.envs.num_envs):
+            #         if not dones[i]:
+            #             continue
+            #         info = infos[i]
+            #         ep_id = curr_eps[i].episode_id
+            #         self.path_eps[ep_id] = [
+            #             {
+            #                 'position': info['position_infer']['position'][0],
+            #                 'heading': info['position_infer']['heading'][0],
+            #                 'stop': False
+            #             }
+            #         ]
+            #         for p, h in zip(info['position_infer']['position'][1:], info['position_infer']['heading'][1:]):
+            #             if p != self.path_eps[ep_id][-1]['position']:
+            #                 self.path_eps[ep_id].append({
+            #                     'position': p,
+            #                     'heading': h,
+            #                     'stop': False
+            #                 })
+            #         self.path_eps[ep_id] = self.path_eps[ep_id][:500]
+            #         self.path_eps[ep_id][-1]['stop'] = True
+            #         self.pbar.update()
 
             # pause env TODO
-            if sum(dones) > 0:
+            if sum(dones_) > 0:
                 for i in reversed(list(range(self.envs.num_envs))):
-                    if dones[i]:
+                    if dones_[i]:
                         not_done_masks = torch.concat((not_done_masks[:i], not_done_masks[i+1:]))
                         self.envs.pause_at(i)
                         observations.pop(i)
@@ -1105,5 +1115,7 @@ class ActiveSampleTrainer(PPOTrainer):
                 dict(value_loss=value_loss, action_loss=action_loss, dist_entropy=dist_entropy),
                 count_steps_delta,      # 每个环境的每步为1 step
             )
-        return losses
+        else:
+            self.rollouts.after_update()
+        return 0.
             

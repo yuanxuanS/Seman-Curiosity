@@ -1,23 +1,23 @@
 import pickle
 from src.finetune.dataset_utils import get_loader, SampleLoader
 
-data_pth = "outputs_asample/imgs/test_sample/data"
+data_pth = "outputs_asample/imgs/test5_env1/rgb_all_data"
 
 sampler = SampleLoader(data_pth, glbstep=True)
 inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
 
 
-with open("./asample_straight_indices.pkl", "rb") as f:
+with open("./asample_straight_indices_2.pkl", "rb") as f:
     glb_frames_indices = pickle.load(f)
 
 # num_every_scene = 
 
-num_scene_cnt = {0:0, 1:0, 2:0, 3:0}
+num_scene_cnt = {0:0, 1:0, 2:0, 3:0, 4:0}
 # for env, episode, glbstep, step in zip(inputs[0], inputs[1], inputs[2], inputs[3]):
-env_sample_indices = {0:[], 1:[], 2:[], 3:[]}
+env_sample_indices = {0:[], 1:[], 2:[], 3:[], 4:[]}
 
 # 保留指定数量样本
-num_every_scene = 900
+num_every_scene = 1400
 sequence_sample_indices = []
 for env, data in glb_frames_indices.items():
     for episode, data_epi in data.items():
@@ -42,7 +42,7 @@ for e, samples in env_sample_indices.items():
 print(f"总采样数 {len(sequence_sample_indices)},")
             
 
-with open("./asample_straight_sampled_seq.pkl", "wb") as f:
+with open("./asample_straight_sampled_seq_2_1.pkl", "wb") as f:
     pickle.dump(sequence_sample_indices, f)
     
     
