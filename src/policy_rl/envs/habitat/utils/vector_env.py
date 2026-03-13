@@ -38,6 +38,8 @@ try:
     import torch.multiprocessing as mp
 except ImportError:
     import multiprocessing as mp
+    
+IS_SEQUENCE = True
 
 STEP_COMMAND = "step"
 RESET_COMMAND = "reset"
@@ -401,7 +403,10 @@ class VectorEnv:
         obs, infos = zip(*results)
 
         self._is_waiting = False
-        return np.stack(obs), infos
+        if IS_SEQUENCE:
+            return obs, infos
+        else:
+            return np.stack(obs), infos
 
     def reset_at(self, index_env: int):
         r"""Reset in the index_env environment in the vector.
@@ -619,14 +624,25 @@ class VectorEnv:
     def step_and_preprocess(self, action, input):
         self._assert_not_closed()
         self._is_waiting = True
-        for e, write_fn in enumerate(self._connection_write_fns):
-            write_fn((STEP_AND_PREPROCESS, ({"action":action[e], "inputs":input[e],})))
+        if not IS_SEQUENCE:
+            for e, write_fn in enumerate(self._connection_write_fns):
+                write_fn((STEP_AND_PREPROCESS, ({"action":action[e], "inputs":input[e],})))
+        else:
+            env_frames = {i:[] for i in range(len(input[0]))}
+            for f in range(len(input)):
+                for e in range(len(input[0])):
+                    env_frames[e].append(input[f][e])
+            for e, write_fn in enumerate(self._connection_write_fns):
+                write_fn((STEP_AND_PREPROCESS, ({"action":action[e], "inputs":env_frames[e],})))
         results = []
         for read_fn in self._connection_read_fns:
             results.append(read_fn())
         obs, rews, dones, infos = zip(*results)
         self._is_waiting = False
-        return np.stack(obs), np.stack(rews), np.stack(dones), infos
+        if IS_SEQUENCE:
+            return obs, np.stack(rews), np.stack(dones), infos
+        else:   
+            return np.stack(obs), np.stack(rews), np.stack(dones), infos
 
     def step_and_wait(self, action, wait_env):
         self._assert_not_closed()

@@ -73,6 +73,8 @@ def get_args():
                         help='Frame height (default)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length, steps in an episode""")
+    parser.add_argument('-els', '--max_episode_length_straight', type=int, default=100,
+                        help="""Maximum episode length, steps in an episode, in straight envs""")
     parser.add_argument("--task_config", type=str,
                         default="tasks/objectnav_gibson.yaml",
                         help="path to config yaml containing task information")
@@ -157,6 +159,7 @@ def get_args():
     parser.add_argument('--map_pred_threshold', type=float, default=1.0)
     parser.add_argument('--exp_pred_threshold', type=float, default=1.0)
     parser.add_argument('--collision_threshold', type=float, default=0.20)
+    parser.add_argument('--collision_threshold_real', type=float, default=0.10)
 
     # samples
     parser.add_argument('--save_samples', default=False,
@@ -234,6 +237,10 @@ def get_args():
     )
     parser.add_argument(
         "--sample_mode", action="store_true", default=False
+    )
+    # for panorama
+    parser.add_argument(
+        "--panorama", action="store_true", default=False
     )
     # parse arguments
     args = parser.parse_args()

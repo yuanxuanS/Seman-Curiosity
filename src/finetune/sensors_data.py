@@ -417,6 +417,17 @@ class AgentPoseSense(Pose):
     
 MODALITY_SENSE = {
     "rgb": RGBSense,
+    "rgb_30": RGBSense,
+    "rgb_60": RGBSense,
+    "rgb_90": RGBSense,
+    "rgb_120": RGBSense,
+    "rgb_150": RGBSense,
+    "rgb_180": RGBSense,
+    "rgb_210": RGBSense,
+    "rgb_240": RGBSense,
+    "rgb_270": RGBSense,
+    "rgb_300": RGBSense,
+    "rgb_330": RGBSense,
     "depth":  DepthSense,
     "semantic": SemanticSense,
     # "semanticinstances": VisualSense,   #SemanticInstancesSense,

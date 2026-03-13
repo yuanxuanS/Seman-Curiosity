@@ -12,7 +12,7 @@ from detectron2.structures.boxes import BoxMode
 import pycocotools.mask as mask_util
 
 
-def save_obs(exp_path, env_id, episode_id, observations, timestamp):
+def save_obs(exp_path, env_id, episode_id, observations, timestamp, frameid=None):
 
     paths = []
     # for camera_id, camera_obs in enumerate(observations):
@@ -24,14 +24,17 @@ def save_obs(exp_path, env_id, episode_id, observations, timestamp):
             modality,
             int(timestamp),
             data,
+            frameid,
         )
         paths.append(saved_path)
     return paths
 
-def _save_data(exp_path, env_id, episode_id, modality, timestamp, data):
+def _save_data(exp_path, env_id, episode_id, modality, timestamp, data, frameid=None):
 
-    path = f"{exp_path}/env_{env_id:02d}_episode_{episode_id:06d}_step_{timestamp:05d}_modality_{modality}.npy"
-
+    if frameid is None:
+        path = f"{exp_path}/env_{env_id:02d}_episode_{episode_id:06d}_step_{timestamp:05d}_modality_{modality}.npy"
+    else:
+        path = f"{exp_path}/env_{env_id:02d}_episode_{episode_id:06d}_gl_{timestamp:05d}_step_{frameid:02d}_modality_{modality}.npy"
     np.save(
         path,
         data,

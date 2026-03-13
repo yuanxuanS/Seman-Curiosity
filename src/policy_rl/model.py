@@ -9,6 +9,7 @@ from src.policy_rl.utils.distributions import Categorical, DiagGaussian
 from src.policy_rl.utils.model import get_grid, ChannelPool, Flatten, NNBase
 from src.policy_rl.envs.utils import depth_utils as du
 import cv2
+from src.policy_rl.panorama_model import panorama_model, model_config, ModelConfig
 
 class RBFEncoding(nn.Module):
     def __init__(self, centers, sigma=15.0):
@@ -457,7 +458,66 @@ class RL_Policy(nn.Module):
 
         return value, action_log_probs, dist_entropy, rnn_hxs
 
+class RL_Policy2(nn.Module):
+    model_config = model_config
+    def __init__(self, obs_shape, action_space, device=0,
+                 base_kwargs=None):
 
+        super(RL_Policy2, self).__init__()
+        
+        if action_space.__class__.__name__ == "Discrete":
+            # num_outputs = action_space.n
+            num_outputs = 12
+        elif action_space.__class__.__name__ == "Box":
+            num_outputs = action_space.shape[0]
+        
+        model_config = ModelConfig(**self.model_config)
+        self.network = panorama_model(model_config, device)
+
+        if action_space.__class__.__name__ == "Discrete":
+            self.dist = Categorical(self.network.output_size, num_outputs)
+        elif action_space.__class__.__name__ == "Box":
+            self.dist = DiagGaussian(self.network.output_size, num_outputs)
+        else:
+            raise NotImplementedError
+        
+    @property
+    def is_recurrent(self):
+        return False
+    
+    def forward(self, inputs, extras=None):
+        if extras is None:
+            return self.network(inputs,)
+        else:
+            return self.network(inputs, extras)
+    
+    def act(self, inputs, extras=None, deterministic=False):
+        value, actor_features= self(inputs, None)
+        dist = self.dist(actor_features)
+
+        if deterministic:
+            action = dist.mode()
+            action = action.reshape(-1)
+        else:
+            action = dist.sample()
+
+        action_log_probs = dist.log_probs(action)
+
+        return value, action, action_log_probs
+
+    def get_value(self, inputs, extras=None):
+        value, _ = self(inputs, None)
+        return value
+
+    def evaluate_actions(self, inputs, action, extras=None):
+        value, actor_features = self(inputs, None)
+        dist = self.dist(actor_features)
+        action_log_probs = dist.log_probs(action)
+        dist_entropy = dist.entropy().mean()
+
+        return value, action_log_probs, dist_entropy
+    
+    
 class Semantic_Mapping(nn.Module):
 
     """

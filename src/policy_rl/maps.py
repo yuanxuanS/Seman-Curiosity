@@ -36,6 +36,13 @@ class Maps_Env:
                             self.local_h).float().to(device)
         self.full_map = torch.zeros(num_scenes, nc, self.full_w, self.full_h).float().to(device)
         self.curr_full_map = torch.zeros(num_scenes, nc, self.full_w, self.full_h).float().to(device)
+        
+        # for orientation map 0: -30~30; 1:30~90; 2:90~150, 3: 150~210, 4: 210~270, 5: 270~330, 
+        self.orient_full_maps = {
+            i: torch.zeros(num_scenes, 2, self.full_w, self.full_h).float().to(device)
+            for i in range(6)
+        }
+        
         # Initial full and local pose
         self.full_pose = torch.zeros(num_scenes, 3).float().to(device)
         self.local_pose = torch.zeros(num_scenes, 3).float().to(device)
@@ -165,7 +172,7 @@ class Maps_Env:
         return [gx1, gx2, gy1, gy2]
 
     
-    def _update_next_view_local(self, local_map, local_pose, curr_local_map=None):
+    def _update_next_view_local(self, local_map, local_pose, curr_local_map=None, orients=None, straight=None):
         '''
         '''
         # update the full and local maps; 
@@ -180,6 +187,14 @@ class Maps_Env:
                 self.curr_full_map[e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = \
                     curr_local_map[e]
                 
+                # update orient map
+                if straight[e]:
+                    idx = int(orients[e])
+                    original_map = self.orient_full_maps[idx][e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]]
+                    maps_= torch.cat((original_map.unsqueeze(1), curr_local_map[e][:2, ...].unsqueeze(1)), 1)
+                    maps_, _ = torch.max(maps_, 1)
+                    self.orient_full_maps[idx][e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = maps_
+                    
             self.full_pose[e] = local_pose[e] + \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
 
@@ -226,23 +241,6 @@ class Maps_Env:
         _, local_map, _, local_pose, curr_local_map = \
             self.semantic_map(obs, poses, self.local_map, self.local_pose, True)
         
-        # check floor
-        # locs = local_pose.cpu().numpy()
-        # for e in range(self.num_scenes):
-        #     r, c = locs[e, 1], locs[e, 0]
-        #     loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
-        #                     int(c * 100.0 / self.args.map_resolution)]
-        #     if 'on_floor' in infos[e] and infos[e]['on_floor']:
-        #         # set obstacle on map to avoid go to floor
-        #         square_size = 20
-        #         size = local_map[e].shape[-1]
-        #         r_start = loc_r
-        #         r_end = min(loc_r + square_size, size)
-        #         c_start = loc_c
-        #         c_end = min(loc_c + square_size, size)
-        #         local_map[e, 0, r_start:r_end, c_start:c_end] = 1.
-                
-        #         infos[e]['on_floor'] = False
         # update 2-3: curr and past maps
         locs = local_pose.cpu().numpy()
         self.pose_inputs[:, :3] = locs + self.origins
@@ -260,6 +258,40 @@ class Maps_Env:
 
         return local_map, local_pose
     
+    def update_semantic_map2(self, obs, sensor_pose, orients, straight):
+
+        poses = torch.from_numpy(np.asarray(
+                [sensor_pose[env_idx] for env_idx
+                in range(self.num_scenes)])
+            ).float().to(self.device)
+        
+        # update 0: obstacle 1: explored 4...: semantic
+        # agent当前观察到的自我中心的map
+        _, local_map, _, local_pose, curr_local_map = \
+            self.semantic_map(obs, poses, self.local_map, self.local_pose, True)
+        
+        # update 2-3: curr and past maps
+        locs = local_pose.cpu().numpy()
+        self.pose_inputs[:, :3] = locs + self.origins
+        local_map[:, 2, :, :].fill_(0.)
+        for e in range(self.num_scenes):
+            r, c = locs[e, 1], locs[e, 0]
+            loc_r, loc_c = [int(r * 100.0 / self.args.map_resolution),
+                            int(c * 100.0 / self.args.map_resolution)]
+            local_map[e, 2:4, loc_r - 1:loc_r + 2, loc_c - 1:loc_c + 2] = 1.
+        
+        local_map, local_pose, curr_local_map = self._update_next_view_local(local_map, 
+                                                                             local_pose, 
+                                                                             curr_local_map,
+                                                                             orients,
+                                                                             straight)
+        # update 
+        self.local_map = local_map
+        self.local_pose = local_pose
+
+        return local_map, local_pose
+    
+            
     def update_local_semantic_map(self, obs, infos):
 
         poses = torch.from_numpy(np.asarray(

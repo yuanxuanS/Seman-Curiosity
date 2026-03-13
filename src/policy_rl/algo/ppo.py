@@ -62,10 +62,13 @@ class PPO():
                 adv_targ = sample['adv_targ']
 
                 # Reshape to do in a single forward pass for all steps
-                values, action_log_probs, dist_entropy, _ = \
+                # values, action_log_probs, dist_entropy, _ = \
+                values, action_log_probs, dist_entropy  = \
                     self.actor_critic.evaluate_actions(
-                        sample['obs'], sample['rec_states'],
-                        sample['masks'], sample['actions'],
+                        sample['obs'], 
+                        # sample['rec_states'],
+                        # sample['masks'], 
+                        sample['actions'],
                         extras=sample['extras']
                     )
 

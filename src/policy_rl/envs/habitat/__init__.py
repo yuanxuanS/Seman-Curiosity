@@ -18,10 +18,13 @@ from src.policy_rl.agents.expert import Expert_Env_Agent
 from src.policy_rl.agents.transport import Transport_Env_Agent
 from src.policy_rl.agents.vsqf_v3 import Vsqf_v3_Env_Agent
 from src.policy_rl.agents.active_cam import Active_cam_Agent
+from src.policy_rl.agents.sequence import Sequence_Env_Agent
 from .curio_env import Seman_Curio_Env
 from .sample_obj_env import Sample_Obj_Env
 from .utils.vector_env import VectorEnv, ThreadedVectorEnv
 from src import constants
+from asample.utils import get_camera_orientations12
+from copy import deepcopy
 
 def make_env_fn(args, config_env, rank):
     dataset = make_dataset(config_env.DATASET.TYPE, config=config_env.DATASET)
@@ -79,6 +82,10 @@ def make_env_fn(args, config_env, rank):
                         dataset=dataset)
     elif args.env == "active_camera":
         env = Active_cam_Agent(args=args, rank=rank,
+                        config_env=config_env,
+                        dataset=dataset)
+    elif args.env == "sequence":
+        env = Sequence_Env_Agent(args=args, rank=rank,
                         config_env=config_env,
                         dataset=dataset)
     else:
@@ -185,6 +192,27 @@ def construct_envs(args):
         config_env.SIMULATOR.SEMANTIC_SENSOR.POSITION = \
             [0, args.camera_height, 0]
 
+        # for 12 orientations
+        if args.panorama:
+            # resize_config = config_env.RL.POLICY.OBS_TRANSFORMS.RESIZER_PER_SENSOR.SIZES
+            # crop_config = config_env.RL.POLICY.OBS_TRANSFORMS.CENTER_CROPPER_PER_SENSOR.SENSOR_CROPS
+            camera_orientations = get_camera_orientations12()
+            for sensor_type in ["RGB", "DEPTH", ]:
+                # resizer_size = dict(resize_config)[sensor_type.lower()]
+                # cropper_size = dict(crop_config)[sensor_type.lower()]
+                sensor = getattr(config_env.SIMULATOR, f"{sensor_type}_SENSOR")
+                for action, orient in camera_orientations.items():
+                    camera_template = f"{sensor_type}_{action}"
+                    camera_config = deepcopy(sensor)
+                    camera_config.ORIENTATION = camera_orientations[action]
+                    camera_config.UUID = camera_template.lower()
+                    setattr(config_env.SIMULATOR, camera_template, camera_config)
+                    config_env.SIMULATOR.AGENT_0.SENSORS.append(camera_template)
+                    # resize_config.append((camera_template.lower(), resizer_size))
+                    # crop_config.append((camera_template.lower(), cropper_size))
+            # self.config.RL.POLICY.OBS_TRANSFORMS.RESIZER_PER_SENSOR.SIZES = resize_config
+            # self.config.RL.POLICY.OBS_TRANSFORMS.CENTER_CROPPER_PER_SENSOR.SENSOR_CROPS = crop_config
+                
         config_env.SIMULATOR.TURN_ANGLE = args.turn_angle
         config_env.DATASET.SPLIT = args.split
         config_env.DATASET.DATA_PATH = \
