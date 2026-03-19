@@ -127,6 +127,9 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         
         # preprocess obs
         obs, info = self._preprocess_obs(obs, info) 
+        self.timestep += 1
+        info['time'] = self.timestep
+        
         self.last_action = action['action']     
         self.obs = obs
         self.info = info
@@ -377,11 +380,11 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                 goal_x = goal_r
                 goal_y = goal_c
                 
-                st_goal = inputs['short_time_goal']
-                st_goal_r, st_goal_c = st_goal
-                st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
-                st_goal_x = st_goal_r
-                st_goal_y = st_goal_c
+                # st_goal = inputs['short_time_goal']
+                # st_goal_r, st_goal_c = st_goal
+                # st_goal_r, st_goal_c = int(st_goal_r), int(st_goal_c)
+                # st_goal_x = st_goal_r
+                # st_goal_y = st_goal_c
 
                 size = self.visited_vis.shape[0]
                 square_size = 20
@@ -392,13 +395,13 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                         j = min(j, size-1)
                         sem_map_full[i, j] = 12
                         
-                square_size = 10
-                half_size = square_size // 2
-                for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
-                    for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
-                        i = min(i, size-1)
-                        j = min(j, size-1)
-                        sem_map_full[i, j] = 12
+                # square_size = 10
+                # half_size = square_size // 2
+                # for i in range(st_goal_x - half_size, st_goal_x + half_size + 1):
+                #     for j in range(st_goal_y - half_size, st_goal_y + half_size + 1):
+                #         i = min(i, size-1)
+                #         j = min(j, size-1)
+                #         sem_map_full[i, j] = 12
                         
         # pos
         # size = map_pred_full.shape[0]
