@@ -55,8 +55,8 @@ class Expert_Env_Agent(Vsqf_active_Env):
             self.rgb_vis = None
             self.goal_name = "No"
 
-        with open("./gibson_objects_loc2.pkl", "rb") as f:
-            self.objects_loc = pickle.load(f)
+        # with open("./gibson_objects_loc2.pkl", "rb") as f:
+        #     self.objects_loc = pickle.load(f)
         
         
     def reset(self):

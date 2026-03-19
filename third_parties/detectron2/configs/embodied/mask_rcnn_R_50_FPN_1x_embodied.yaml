@@ -11,8 +11,8 @@ MODEL:
     SCORE_THRESH_TEST: 0.5
 
 DATASETS:
-  TRAIN: ("embodied_train",)
-  TEST: ("embodied_val",)
+  TRAIN: ("embodied_scene",)
+  TEST: ("embodied_scene",)
 DATASET_NAME: "embodied"    # 
 
 SOLVER:

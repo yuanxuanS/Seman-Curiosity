@@ -77,9 +77,10 @@ class Transport_Env(habitat.RLEnv):
         sem_map = scene_info[floor_idx]['sem_map']
         self.sample_pts_num = int(sem_map[0].sum() / 5)
         
-        # saved_file = "./data/visibles/info/cate_objs_"+scene_name
-        # with open(saved_file+".pkl", "wb") as f:
-        #     pickle.dump(category_objects, f)
+        if args.sample_mode:
+            saved_file = "./data_scene/visibles/info/cate_objs_"+scene_name
+            with open(saved_file+".pkl", "wb") as f:
+                pickle.dump(category_objects, f)
         
         # for transport action
         if not args.sample_mode:
@@ -88,6 +89,7 @@ class Transport_Env(habitat.RLEnv):
                 self.tp_loc = json.load(f)       # dict: objid, loc
             
         self.tp_budget = 5
+        
         
     def reset(self):
         """Resets the environment to a new episode.
@@ -204,7 +206,7 @@ class Transport_Env(habitat.RLEnv):
                     valid_rgb_cnt += 1
         
         print(f"valid rgb :{valid_rgb_cnt}")
-        file = "./data/visibles/info/"
+        file = "./data_scene/visibles/info/"
         with open(file+scene_name+".json", "w") as f:
             json.dump(surrounding_locs, f)
                 

@@ -370,6 +370,15 @@ PROJ_CATEGORIES = [
 
 ]
 
+EMBODIED_CATEGORIES = [
+    # {"color": [0, 0, 142], "isthing": 1, "id": 0, "name": "car"}, # proj_prune
+    
+    {"color": [220, 20, 60], "isthing": 1, "id": 0, "name": "chair"},
+    {"color": [0, 0, 230], "isthing": 1, "id": 1, "name": "couch"},
+    {"color": [142, 108, 45], "isthing": 1, "id": 2, "name": "bed"},
+    {"color": [100, 170, 30], "isthing": 1, "id": 3, "name": "toilet"},
+    {"color": [119, 11, 32], "isthing": 1, "id": 4, "name": "refrigerator"},
+]
 PROJ_CLSAG_CATEGORIES = [
     # {"color": [0, 0, 142], "isthing": 1, "id": 0, "name": "car"}, # proj_prune
     
@@ -391,6 +400,15 @@ def get_custom_metadata(dataset_name):
         thing_ids = [k["id"] for k in PROJ_CLSAG_CATEGORIES]
         thing_colors = [k["color"] for k in PROJ_CLSAG_CATEGORIES]
         thing_classes = [k["name"] for k in PROJ_CLSAG_CATEGORIES]
+        ret = {
+            # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
+            "thing_classes": thing_classes,
+            "thing_colors": thing_colors,
+        }
+    elif dataset_name == "embodied":
+        thing_ids = [k["id"] for k in EMBODIED_CATEGORIES]
+        thing_colors = [k["color"] for k in EMBODIED_CATEGORIES]
+        thing_classes = [k["name"] for k in EMBODIED_CATEGORIES]
         ret = {
             # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
             "thing_classes": thing_classes,

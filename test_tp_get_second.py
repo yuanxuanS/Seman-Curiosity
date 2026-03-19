@@ -70,7 +70,7 @@ for img_info in rgb_infos['images']:
         # print(step_num)  # 输出: 125
         rgb_input_info[step_num] = img_info
 
-scene_name = "Allensville"
+scene_name = "Wiconisco"
 
 output_dir = f"embodied_{scene_name}"
 result_info = f"/home/wpp/Seman-Curiosity/third_parties/detectron2/output/{output_dir}/inference/embodied_scene/coco_instances_results.json"
@@ -107,7 +107,7 @@ if not os.path.exists(save_dir):
     os.mkdir(save_dir)
 
 # 要挑选的目标id
-target_ids = [6,7,8]
+target_ids = [14,15,16,17,19,20,21,22,25,51,52,53,54]
 best_locs = {}
 for obj_id, rgb_ids in obj_rgb_ids.items():
     obj_id = int(obj_id)
@@ -137,8 +137,10 @@ for obj_id, rgb_ids in obj_rgb_ids.items():
                 # best_score = detection_result['score']
                 # best_img = [detection_result, step]
                 # cand_imgs.append()
-                rgb_name = f"epi0_env0_step{step}.png"
+                rgb_name = f"epi0_env1_step{step}.png"
                 rgb_img = cv2.imread(img_dir+rgb_name)
+                if rgb_img is None:
+                    continue
                 rgb_img = visualize_coco_result(rgb_img, detection_result)
                 cv2.imwrite(save_dir + f"/{step}_id{int(obj_id)}.png", rgb_img)
     

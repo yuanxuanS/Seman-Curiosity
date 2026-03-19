@@ -205,7 +205,11 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
-
+    
+    cfg.defrost()
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
+    cfg.freeze()
+    
     model = build_model(cfg)
     
     keep_class = { 
