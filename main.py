@@ -188,6 +188,10 @@ def main():
     elif args.agent == "frontier":
         l_policy = Frontier(args)
         l_policy.reset(num_scenes)
+        for e, p_input in enumerate(vis_inputs):
+            p_input['depth'] = infos[e]['depth']
+            p_input['time'] = infos[e]['time']
+            # p_input['sample_stage'] = False
         l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
         for e, p_input in enumerate(vis_inputs):
             if args.visualize or args.print_images:
@@ -319,7 +323,7 @@ def main():
             p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
             p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
             p_input['pose_pred'] = maps.get_all_pose()[e]
-            
+            p_input['time'] = infos[e]['time']
 
             if args.visualize or args.print_images:
                 local_map[e, -1, :, :] = 1e-5
@@ -330,6 +334,10 @@ def main():
                                                         ].argmax(0).cpu().numpy()                    
         
         if args.agent == "frontier":  # must be after updating vis_inputs
+            for e, p_input in enumerate(vis_inputs):
+                p_input['depth'] = infos[e]['depth']
+                p_input['time'] = infos[e]['time']
+                # p_input['sample_stage'] = False
             l_action, goals, short_time_goals = l_policy.get_actions(vis_inputs)        
             if args.visualize or args.print_images:
                 for e, p_input in enumerate(vis_inputs):
@@ -356,7 +364,7 @@ def main():
         torch.set_grad_enabled(True)
         # if l_step == args.num_local_steps - 1:
         if l_step == 100 - 1:
-            if not args.eval:
+            if not args.eval and args.agent == "rl":
                 l_next_value = l_policy.get_value(
                     l_rollouts.obs[-1],
                     l_rollouts.rec_states[-1],
@@ -431,7 +439,7 @@ def main():
                 num_scenes:
             if len(l_episode_rewards) >= 20 and \
                     (np.mean(l_episode_rewards) >= best_l_reward) \
-                    and not args.eval:
+                    and not args.eval and args.agent == "rl":
                 torch.save(l_policy.state_dict(),
                            os.path.join(log_dir, "model_best.pth"))
                 best_l_reward = np.mean(l_episode_rewards)
@@ -439,7 +447,7 @@ def main():
         if (step * num_scenes) % args.save_periodic < \
                 num_scenes:
             total_steps = step * num_scenes
-            if not args.eval:
+            if not args.eval and args.agent == 'rl':
                 torch.save(l_policy.state_dict(),
                            os.path.join(dump_dir,
                                         "periodic_{}.pth".format(total_steps)))
