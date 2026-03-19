@@ -289,8 +289,7 @@ class Seman_Curio_Env(habitat.RLEnv):
         depth = obs['depth']
         state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
 
-        self.timestep += 1
-        self.info['time'] = self.timestep
+        
         self.info['semantic_gt'] = obs['semantic']
         self.info['depth'] = depth
         
@@ -320,7 +319,7 @@ class Seman_Curio_Env(habitat.RLEnv):
 
 
     def get_done(self, observations, *args):
-        if self.info['time'] >= self.args.max_episode_length - 2:       # 
+        if self.info['time'] >= self.args.max_episode_length - 1:       # 
             done = True
         else:
             done = False
