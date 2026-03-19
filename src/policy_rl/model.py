@@ -10,6 +10,7 @@ from src.policy_rl.utils.model import get_grid, ChannelPool, Flatten, NNBase
 from src.policy_rl.envs.utils import depth_utils as du
 import cv2
 from src.policy_rl.panorama_model import panorama_model, model_config, ModelConfig
+import time
 
 class RBFEncoding(nn.Module):
     def __init__(self, centers, sigma=15.0):
@@ -514,7 +515,6 @@ class RL_Policy2(nn.Module):
         dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
-
         return value, action_log_probs, dist_entropy
     
     

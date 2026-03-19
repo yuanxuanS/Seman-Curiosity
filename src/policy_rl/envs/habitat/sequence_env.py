@@ -72,7 +72,7 @@ class Sequence_Env(habitat.RLEnv):
         
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
-        if self.split == "val":
+        if self.split == "val": # and self.args.eval:
             obs = self.load_episode_loc()       # load episode for inital start position
         else:
             obs = self.initial_possible_loc()       # train时，随机生成初始位置

@@ -305,7 +305,9 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            l_reward = args.reward_coeff* maps.sum_of_orient_map()
+            l_reward = args.reward_coeff* 10 *maps.sum_of_orient_semantic_map()
+            # l_reward = args.reward_coeff* maps.sum_of_explore_map()
+            # l_reward = args.reward_coeff* maps.sum_of_orient_map()
             # l_reward = args.reward_coeff* maps.sum_of_semantic_map()
 
         # divesity reward

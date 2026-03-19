@@ -42,6 +42,10 @@ class Maps_Env:
             i: torch.zeros(num_scenes, 2, self.full_w, self.full_h).float().to(device)
             for i in range(6)
         }
+        self.orient_semantic_full_maps = {
+            i: torch.zeros(num_scenes, 1, self.full_w, self.full_h).float().to(device)
+            for i in range(6)
+        }
         
         # Initial full and local pose
         self.full_pose = torch.zeros(num_scenes, 3).float().to(device)
@@ -113,6 +117,8 @@ class Maps_Env:
             
     def _init_map_and_pose_for_env(self, e):
         self.full_map[e].fill_(0.)
+        for i in range(6):
+            self.orient_full_maps[i][e].fill_(0.)
         self.curr_full_map[e].fill_(0.)
         self.full_pose[e].fill_(0.)
         self.full_pose[e, :2] = self.args.map_size_cm / 100.0 / 2.0
@@ -193,7 +199,14 @@ class Maps_Env:
                     original_map = self.orient_full_maps[idx][e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]]
                     maps_= torch.cat((original_map.unsqueeze(1), curr_local_map[e][:2, ...].unsqueeze(1)), 1)
                     maps_, _ = torch.max(maps_, 1)
-                    self.orient_full_maps[idx][e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = maps_
+                    self.orient_full_maps[idx][e, :, 
+                                               self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = maps_
+                    
+                    original_sem_map = self.orient_semantic_full_maps[idx][e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]]
+                    sem_maps = torch.cat((original_sem_map.unsqueeze(1), curr_local_map[e][4:9, ...].sum(0).unsqueeze(0).unsqueeze(0)), 1)
+                    sem_maps, _ = torch.max(sem_maps, 1)
+                    self.orient_semantic_full_maps[idx][e, :,
+                                                        self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]] = sem_maps
                     
             self.full_pose[e] = local_pose[e] + \
                 torch.from_numpy(self.origins[e]).to(self.device).float()
@@ -402,6 +415,33 @@ class Maps_Env:
 
         return sum_res
     
+    def sum_of_orient_semantic_map(self):
+        sum_ = []
+        for e in range(self.args.num_processes):
+            sum_env = []
+            for i, ori_sem_map in self.orient_semantic_full_maps.items():
+                os_map = ori_sem_map[e, 0, ...]
+                sum_env.append(os_map.sum())
+            sum_.append(torch.tensor(sum_env).sum())
+        return torch.tensor(sum_).to(os_map.device)
+    
+    def sum_of_orient_map(self):
+        sum_ = []
+        for e in range(self.args.num_processes):
+            sum_env = []
+            for i, ori_map in self.orient_full_maps.items():
+                exp_map = ori_map[e, 1, ...]
+                sum_env.append(exp_map.sum())
+            sum_.append(torch.tensor(sum_env).sum())
+        return torch.tensor(sum_).to(exp_map.device)
+    
+    def sum_of_explore_map(self):
+        sum_ = []
+        for e in range(self.num_scenes):
+            explored_area = self.full_map[e, 1].sum(1).sum(0)
+            sum_.append(explored_area)
+        return torch.tensor(sum_).to(explored_area.device)
+        
     def get_explore_area(self, explo_area):
         '''
         explo_area: num_scenes, 
