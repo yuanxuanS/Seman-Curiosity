@@ -271,7 +271,8 @@ def get_specify_samples(all_tracks):
 iou_threshold=0.4
 
 # 加载数据
-data_pth = "outputs_asample/imgs/test5_env1/rgb_all_data"
+data_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test_eval/episodes_data"
+# "outputs_asample/imgs/test5_env1/rgb_all_data"
 sampler = SampleLoader(data_pth, glbstep=True)
 inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
 
@@ -289,8 +290,8 @@ inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)
 #         glb_frames[env][episode][glbstep] = [step]
 #     else:
 #         glb_frames[env][episode][glbstep].append(step)
-# # print(glb_frames)
-# with open("./asample_straight_indices_2.pkl", "wb") as f:
+# print(glb_frames)
+# with open("./asample_straight_indices_rand.pkl", "wb") as f:
 #     pickle.dump(glb_frames, f)
 
 
@@ -298,7 +299,7 @@ glb_frames_tracks = {}
 glb_frames_sampled = []
 mod = ["bbsgt" , "bbspred", "rgb",]     #  "depth", "position", "semantic", ]
 
-with open("./asample_straight_indices_2.pkl", "rb") as f:
+with open("./asample_straight_indices_rand.pkl", "rb") as f:
     glb_frames_indices = pickle.load(f)
     
 device = "cuda:3" if torch.cuda.is_available() else "cpu"
@@ -363,10 +364,10 @@ for env, env_data in glb_frames_indices.items():
 
     
     
-with open("./asample_straight_tracks_2.pkl", "wb") as f:
+with open("./asample_straight_tracks_rand.pkl", "wb") as f:
     pickle.dump(glb_frames_tracks, f)
     
-with open("./asample_straight_sampled_2.pkl", "wb") as f:
+with open("./asample_straight_sampled_rand.pkl", "wb") as f:
     pickle.dump(glb_frames_sampled, f)
 print(glb_frames_sampled)
 

@@ -20,7 +20,7 @@ def mask_to_rle(binary_mask):
     
     return rle
 
-json_dir = "./third_parties/detectron2/datasets/asample_test_seq_2_1/"
+json_dir = "./third_parties/detectron2/datasets/asample_test_rand/"
 if not os.path.exists(json_dir):
     os.mkdir(json_dir)
 
@@ -33,7 +33,8 @@ coco_json = json_dir+"/instances_train.json"     # save path
 # scene_name = "Woodbine"
 # data_pth = base_dir + "/" + scene_name
 
-data_pth = "outputs_asample/imgs/test5_env1/rgb_all_data"
+data_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test_eval/episodes_data"
+# "outputs_asample/imgs/test5_env1/rgb_all_data"
 # data_pth = "./exps/dump/tp_diver2_m5_woema_thr6_eval/episodes_data"
 save_rgb = True     # 转化为rgb进行保存
 save_rgb_dir = data_pth + "_imgs/"
@@ -57,7 +58,7 @@ coco_dict = {"info": {},
 sampler = SampleLoader(data_pth, glbstep=True)
 inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
 
-with open("./asample_straight_sampled_seq_2_1.pkl", "rb") as f:
+with open("./asample_straight_sampled_rand.pkl", "rb") as f:
     glb_frames_indices = pickle.load(f)
 print(f"采样到{len(glb_frames_indices)}张")
 # print(glb_frames_indices)
