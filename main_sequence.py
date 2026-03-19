@@ -99,6 +99,7 @@ def main():
     
     full_map = maps.full_map
     vis_inputs = [{} for e in range(num_scenes)]
+    orient_full_map = maps.orient_full_maps
     for e, p_input in enumerate(vis_inputs):
         p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
         p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
@@ -113,6 +114,20 @@ def main():
                                                 ].argmax(0).cpu().numpy()   # 如果无object，选最后一个通道
             full_map[e, -1, :, :] = 1e-5
             p_input['sem_map_pred_full'] = full_map[e, 4:, :, :].argmax(0).cpu().numpy()
+            
+            p_input['orient_full_map_0_obsta'] = orient_full_map[0][e, 0, :, :].cpu().numpy()
+            p_input['orient_full_map_0_exp'] = orient_full_map[0][e, 1, :, :].cpu().numpy()
+            p_input['orient_full_map_1_obsta'] = orient_full_map[1][e, 0, :, :].cpu().numpy()
+            p_input['orient_full_map_1_exp'] = orient_full_map[1][e, 1, :, :].cpu().numpy()
+            p_input['orient_full_map_2_obsta'] = orient_full_map[2][e, 0, :, :].cpu().numpy()
+            p_input['orient_full_map_2_exp'] = orient_full_map[2][e, 1, :, :].cpu().numpy()
+            p_input['orient_full_map_3_obsta'] = orient_full_map[3][e, 0, :, :].cpu().numpy()
+            p_input['orient_full_map_3_exp'] = orient_full_map[3][e, 1, :, :].cpu().numpy()
+            p_input['orient_full_map_4_obsta'] = orient_full_map[4][e, 0, :, :].cpu().numpy()
+            p_input['orient_full_map_4_exp'] = orient_full_map[4][e, 1, :, :].cpu().numpy()
+            p_input['orient_full_map_5_obsta'] = orient_full_map[5][e, 0, :, :].cpu().numpy()
+            p_input['orient_full_map_5_exp'] = orient_full_map[5][e, 1, :, :].cpu().numpy()
+                     
     vis_inputs_frames = [vis_inputs]
 
     if args.agent == "rl":
@@ -211,7 +226,7 @@ def main():
     # print(f"action is {l_action}")
     obs_all, _, done, infos = envs.step_and_preprocess(action, vis_inputs_frames)
     action = torch.tensor(action)
-    # update map
+        
     max_len = max([len(obs) for obs in obs_all])
     obs_pad_all = []
     obs_paded = torch.zeros_like(obs_all[0][0]).to(obs_all[0][0].device)
@@ -231,7 +246,7 @@ def main():
         obs_.extend([obs_paded]*(max_len - len(obs_)))
         obs_pad_all.append(torch.concat(obs_, axis=0).unsqueeze(0))
         
-        
+    # update map
     obs_pad_all = torch.concat(obs_pad_all, axis=0)
     vis_inputs_frames = []
     for frame in range(obs_pad_all.shape[1]):
@@ -286,12 +301,12 @@ def main():
         if finished.sum() == args.num_processes:    # eval over
             break
                 
-           
         # get reward: map change after state transition
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            l_reward = args.reward_coeff* maps.sum_of_semantic_map()
+            l_reward = args.reward_coeff* maps.sum_of_orient_map()
+            # l_reward = args.reward_coeff* maps.sum_of_semantic_map()
 
         # divesity reward
         # if args.use_diversity_reward:
@@ -392,6 +407,7 @@ def main():
                     p_input["frontier_goal"] = goals[e]
                     p_input["short_time_goal"] = short_time_goals[e]
         
+        
         # transition: next state
         # pred instance, get semantic masks and step env
         actions.append(action)
@@ -403,7 +419,8 @@ def main():
             if x:
                 maps._init_map_and_pose_for_env(e)
                 print(f"Env {e}'s episode over in {step} step, {l_step} local step, reset maps")
-                
+        
+        
         # update map
         max_len = max([len(obs) for obs in obs_all])
         obs_pad_all = []
@@ -427,6 +444,7 @@ def main():
         # 将所有环境的frame的观测对其，遍历frame更新地图
         obs_pad_all = torch.concat(obs_pad_all, axis=0)
         vis_inputs_frames = []
+        orient_full_map = maps.orient_full_maps
         for frame in range(obs_pad_all.shape[1]):
             obs = obs_pad_all[:, frame, ...]
             sensor_pose = [infos[e]['sensor_pose_all'][frame] for e in range(num_scenes)]
@@ -452,10 +470,24 @@ def main():
                                                         ].argmax(0).cpu().numpy()
                     full_map[e, -1, :, :] = 1e-5
                     p_input['sem_map_pred_full'] = full_map[e, 4:, :, :
-                                                            ].argmax(0).cpu().numpy()                    
+                                                            ].argmax(0).cpu().numpy() 
+                    p_input['orient_full_map_0_obsta'] = orient_full_map[0][e, 0, :, :].cpu().numpy()
+                    p_input['orient_full_map_0_exp'] = orient_full_map[0][e, 1, :, :].cpu().numpy()
+                    p_input['orient_full_map_1_obsta'] = orient_full_map[1][e, 0, :, :].cpu().numpy()
+                    p_input['orient_full_map_1_exp'] = orient_full_map[1][e, 1, :, :].cpu().numpy()
+                    p_input['orient_full_map_2_obsta'] = orient_full_map[2][e, 0, :, :].cpu().numpy()
+                    p_input['orient_full_map_2_exp'] = orient_full_map[2][e, 1, :, :].cpu().numpy()
+                    p_input['orient_full_map_3_obsta'] = orient_full_map[3][e, 0, :, :].cpu().numpy()
+                    p_input['orient_full_map_3_exp'] = orient_full_map[3][e, 1, :, :].cpu().numpy()
+                    p_input['orient_full_map_4_obsta'] = orient_full_map[4][e, 0, :, :].cpu().numpy()
+                    p_input['orient_full_map_4_exp'] = orient_full_map[4][e, 1, :, :].cpu().numpy()
+                    p_input['orient_full_map_5_obsta'] = orient_full_map[5][e, 0, :, :].cpu().numpy()
+                    p_input['orient_full_map_5_exp'] = orient_full_map[5][e, 1, :, :].cpu().numpy()
+                                   
             vis_inputs_frames.append(vis_inputs_)
 
         full_pose = maps.full_pose
+        
         # ------------------------------------------------------------------
         # Training
         torch.set_grad_enabled(True)
@@ -470,6 +502,7 @@ def main():
                 ).detach()
                 rollouts.compute_returns(next_value, args.use_gae,
                                            args.gamma, args.tau)
+                
                 value_loss, action_loss, dist_entropy = \
                     agent.update(rollouts)
                 value_losses.append(value_loss)
@@ -481,6 +514,7 @@ def main():
                 pass
         torch.set_grad_enabled(False)
 
+        # st = time.time()
         # ------------------------------------------------------------------
         # Logging: TODO
         if step % args.log_interval == 0:

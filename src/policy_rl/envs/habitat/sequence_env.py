@@ -456,7 +456,7 @@ class Sequence_Env(habitat.RLEnv):
         # 处理超出 330 的部分归为区间 5 (或者根据你的需求处理)
         indices[indices == 5] = 5 
     
-        return indices
+        return list(indices)
     
     def get_sim_location_z(self):
         agent_state = super().habitat_env.sim.get_agent_state(0)

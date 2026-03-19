@@ -8,7 +8,9 @@ import argparse
 import torch
 from torch import nn
 import math
-
+import time
+from torchvision.transforms import v2
+import torchvision
 def build_feature_extractor(model_name, device, checkpoint_file=None):
     """使用 timm 库加载 ResNet 或 ViT 模型"""
     
@@ -246,8 +248,9 @@ class panorama_model(nn.Module):
         self.device = device
         with torch.no_grad():
             model_name = 'vit_base_patch16_224'
-            self.vit_model, self.img_transforms, device = build_feature_extractor(model_name, device, )
-    
+            self.vit_model, img_transforms, device = build_feature_extractor(model_name, device, )
+            self.img_transforms = v2.Compose([trans for trans in img_transforms.transforms 
+                                              if not isinstance(trans, torchvision.transforms.transforms.ToTensor) ])
         self.img_embeddings = ImageEmbeddings(config)
         self.attention = BertAttention(config)
         # self.next_action = NextActionPrediction(config.hidden_size, config.pred_head_dropout_prob)
@@ -269,14 +272,21 @@ class panorama_model(nn.Module):
         '''
         fts = []
         for e in range(images.shape[0]):
+            # t1 = time.time()
             images_ = images[e, ...]
-            images_l = []
-            for i in range(images_.shape[0]):
-                images_l.append(Image.fromarray(images_[i, ...].cpu().numpy().astype(np.uint8)) )
-            images_ = torch.stack([self.img_transforms(image).to(self.device) for image in images_l], 0)
+            # images_l = []
+            # for i in range(images_.shape[0]):
+            #     images_l.append(Image.fromarray(images_[i, ...].cpu().numpy().astype(np.uint8)) )
+            
+            # images_ = torch.stack([self.img_transforms(image).to(self.device) for image in images_l], 0)
+            images_ = self.img_transforms(images_.permute(0,3,1,2))
+            
+            # print(f"in encoder, type convert{time.time()- t1}")
+            t2 = time.time()
             b_fts = self.vit_model.forward_features(images_)
             b_fts = b_fts.data
             fts.append(b_fts.unsqueeze(0))
+            # print(f"in encoder, forward feature {time.time()- t2}")
         
         fts = torch.concat(fts, 0)
         return fts
@@ -290,7 +300,7 @@ class panorama_model(nn.Module):
             ob_img_feats = self.encoder(obs).to(self.device)
             ang_feats = get_all_point_angle_feature(self.config.angle_feat_size, )
             ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(env, 1,1).to(self.device)
-    
+        
         # policy
         ob_embeds = self.img_embeddings(ob_img_feats, ob_ang_feats)
         attention_outputs = self.attention(ob_embeds,)[0].sum(-2)

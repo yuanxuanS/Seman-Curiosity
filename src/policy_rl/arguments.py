@@ -73,8 +73,7 @@ def get_args():
                         help='Frame height (default)')
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length, steps in an episode""")
-    parser.add_argument('-els', '--max_episode_length_straight', type=int, default=100,
-                        help="""Maximum episode length, steps in an episode, in straight envs""")
+    
     parser.add_argument("--task_config", type=str,
                         default="tasks/objectnav_gibson.yaml",
                         help="path to config yaml containing task information")
@@ -139,7 +138,7 @@ def get_args():
                         help='ppo clip parameter (default: 0.2)')
     parser.add_argument('--use_recurrent_local', type=int, default=1,
                         help='use a recurrent local policy')
-    parser.add_argument('--reward_coeff', type=float, default=2.5e-3,
+    parser.add_argument('--reward_coeff', type=float, default=1e-6,      # 2.5e-3,
                         help="Semantic curiosity reward coefficient")
     parser.add_argument('--distance_reward_coeff', type=float, default=1.,
                         help="distance reduce reward coefficient")
@@ -242,6 +241,8 @@ def get_args():
     parser.add_argument(
         "--panorama", action="store_true", default=False
     )
+    parser.add_argument('-els', '--max_episode_length_straight', type=int, default=25,
+                        help="""Maximum episode length, steps in an episode, in straight envs""")
     # parse arguments
     args = parser.parse_args()
 

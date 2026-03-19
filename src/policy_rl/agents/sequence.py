@@ -77,7 +77,7 @@ class Sequence_Env_Agent(Sequence_Env):
         
         # visualize
         if args.visualize or args.print_images:
-            self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
+            self.vis_image = vu.init_vis_image(self.goal_name, self.legend, mode=5)
         
         return obs, info
     
@@ -343,6 +343,50 @@ class Sequence_Env_Agent(Sequence_Env):
 
         sem_map_full[vis_mask_full] = 3       # agent位置区域赋值3
 
+        # orient map
+        orient_full = np.zeros((495, 750), dtype=np.uint8)
+        sub_size = 240
+        gap = 15
+        for i in range(6):
+            obs_key = f'orient_full_map_{i}_obsta'
+            exp_key = f'orient_full_map_{i}_exp'
+            
+            if obs_key in inputs and exp_key in inputs:
+                # 1. 提取并合成语义数据
+                o_obs = inputs[obs_key]
+                o_exp = inputs[exp_key]
+                
+                # 创建单通道数据：0背景，1障碍(obsta)，2探索(exp)
+                o_sem = np.zeros_like(o_obs, dtype=np.uint8)
+                o_sem[np.rint(o_exp) == 1] = 2
+                o_sem[np.rint(o_obs) == 1] = 1
+                
+                # 2. 转换为彩色图 (使用与主图相同的 color_palette)
+                # o_vis_img = Image.new("P", (o_sem.shape[1], o_sem.shape[0]))
+                # o_vis_img.putpalette(color_pal)
+                # o_vis_img.putdata(o_sem.flatten().astype(np.uint8))
+                # o_vis_img = o_vis_img.convert("RGB")
+                
+                # o_vis_img = np.flipud(o_vis_img)
+                # o_vis_bgr = np.array(o_vis_img)[:, :, [2, 1, 0]]
+                
+                o_vis_res = cv2.resize(o_sem, (sub_size, sub_size), 
+                                      interpolation=cv2.INTER_NEAREST)
+                
+                # 5. 计算在 orient_vis (495, 750) 上的位置
+                # 两排三列布局
+                row_idx = i // 3  # 0, 1
+                col_idx = i % 3   # 0, 1, 2
+                
+                y_start = row_idx * (sub_size + gap)
+                x_start = col_idx * (sub_size + gap)
+                
+                # 将小图贴到 orient_vis 画布上
+                orient_full[y_start:y_start + sub_size, 
+                           x_start:x_start + sub_size] = o_vis_res
+        
+        
+        
         if 'frontier_goal' in inputs:
             if inputs['frontier_goal'] is not None:
                 goal = inputs['frontier_goal']
@@ -407,8 +451,40 @@ class Sequence_Env_Agent(Sequence_Env):
         
         rgb_vis = cv2.resize(self.rgb_vis_frames[frame_id], (480, 480),
                                  interpolation=cv2.INTER_NEAREST)
+        
         self.vis_image[50:530, 15:495] = rgb_vis
         self.vis_image[50:530, 510:990] = sem_map_vis
+        
+        
+        # for orient map
+        orient_vis = Image.new("P", (orient_full.shape[1],
+                                        orient_full.shape[0]))
+        orient_vis.putpalette(color_pal)
+        orient_vis.putdata(orient_full.flatten().astype(np.uint8))
+        orient_vis = orient_vis.convert("RGB")
+        orient_vis = np.flipud(orient_vis)
+        
+        # for i in range(6):
+        #     row_idx = i // 3
+        #     col_idx = i % 3
+        #     y_start = row_idx * (sub_size + gap)
+        #     x_start = col_idx * (sub_size + gap)
+            
+        #     # 文本内容和位置
+        #     text = f"Orient {i}"
+        #     # 这里的坐标 (x, y) 是文字左下角
+        #     text_pos = (x_start + 100, y_start + 25) 
+            
+        #     # 绘制黑边阴影（可选，增加可读性）
+        #     # cv2.putText(orient_vis, text, (text_pos[0]+1, text_pos[1]+1),
+        #     #             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        #     # 绘制白色主文字
+        #     cv2.putText(orient_vis, text, text_pos,
+        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        
+        
+        orient_vis = orient_vis[:, :, [2, 1, 0]]
+        self.vis_image[50:545, 1005:1755] = orient_vis
         
         # 绘制agent位置
         if mode == "local":
