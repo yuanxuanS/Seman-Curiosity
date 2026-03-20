@@ -16,6 +16,16 @@ from detectron2.utils.visualizer import ColorMode, Visualizer
 from src.vqf_constants import target_coco_categories, \
                             target_coco_categories_mapping, \
                                 clsid_name_maps
+import time
+from src.policy_rl.sequence_utils import (
+    get_all_sample_score,
+    get_specify_samples,
+    aggre_score_in_obj_tracks,
+    score_tracks,
+    group_by_object_and_score,
+)
+
+
 class Sequence_Env_Agent(Sequence_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
     object is used for each environment thread.
@@ -178,6 +188,10 @@ class Sequence_Env_Agent(Sequence_Env):
         
         state_all = []
         self.rgb_vis_frames = []
+        # for sequence reward
+        obs_rgbs = []
+        obs_detections = []
+        
         for f, obs in enumerate(obs_seq):
             rgb = obs['rgb'].astype(np.uint8)
             depth = obs['depth']
@@ -203,7 +217,11 @@ class Sequence_Env_Agent(Sequence_Env):
                 "Cannot return both score and instance at the same time."
             sem_seg_pred, obj = self._get_sem_pred(
                 rgb.astype(np.uint8), use_seg=use_seg, return_score=return_score, return_instance=return_instance)
-
+            # for sequence reward
+            if f > self.info['no_straight_num'] - 1:
+                obs_rgbs.append(obs_seq[f]['rgb'])
+                obs_detections.append(obj)
+            obs_detections.append(obj)
             depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
             ds = args.det_frame_width // args.frame_width  # Downscaling factor
@@ -223,6 +241,25 @@ class Sequence_Env_Agent(Sequence_Env):
             state = np.concatenate((rgb, depth, sem_seg_pred),
                                 axis=2).transpose(2, 0, 1)
             state_all.append(state)
+        
+        # # for sequence reward
+        groups = group_by_object_and_score(obs_detections)
+        num_frames = len(obs_detections)
+        sequence_reward = 0.
+        for g in groups:
+            if g.has_object():
+                g_r = 0.
+                if g.frames[0] > 0:
+                    g_r += 1.
+                if g.frames[-1] < num_frames - 1:
+                    g_r += 1.
+                sequence_reward += g_r
+        info['sequence_reward'] = sequence_reward
+
+        # groups = score_tracks(groups, obs_detections)
+        # groups = aggre_score_in_obj_tracks(groups, mode="frame")
+        # groups = get_all_sample_score(clip_model, preprocess, text, groups, frame_rgbs)
+        
         return state_all, info
     
     def obj_exist(self, instances_1, instances_2):

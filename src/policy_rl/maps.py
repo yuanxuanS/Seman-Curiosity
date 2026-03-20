@@ -119,6 +119,7 @@ class Maps_Env:
         self.full_map[e].fill_(0.)
         for i in range(6):
             self.orient_full_maps[i][e].fill_(0.)
+            self.orient_semantic_full_maps[i][e].fill_(0.)
         self.curr_full_map[e].fill_(0.)
         self.full_pose[e].fill_(0.)
         self.full_pose[e, :2] = self.args.map_size_cm / 100.0 / 2.0

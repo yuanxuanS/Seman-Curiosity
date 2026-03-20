@@ -38,8 +38,8 @@ class Sequence_Env(habitat.RLEnv):
         self.action_space = gym.spaces.Discrete(12)
 
         self.observation_space = gym.spaces.Box(0, 255,
-                                                (12, args.frame_height,
-                                                 args.frame_width, 3),
+                                                (12, args.env_frame_height,
+                                                 args.env_frame_width, 3),
                                                 dtype='uint8')
 
         # Scene info
