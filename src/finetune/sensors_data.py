@@ -11,6 +11,7 @@ from detectron2.data import MetadataCatalog
 import torch
 import dataclasses
 import quaternion
+from src.vqf_constants import clsid_name_maps
 
 WIDTH, HEIGHT = 300, 400
 @dataclass
@@ -154,7 +155,7 @@ class BBSense(VisualSense):
     #     # 62: "tv",
     #     # 60: "table",
     # }
-    from src.vqf_constants import clsid_name_maps
+    
     CLASSES = clsid_name_maps
     
     # assert  CLASSES.keys() == coco_categories_mapping.keys()
@@ -256,13 +257,16 @@ class BBPredSense(BBSense):
     class id is start from 0; remap to orignal idx in cocodataset
     '''
     CODE = "bbs_prediction"
-    CLASSES = {0: "couch",     # bbs prediction
-        1: "plant",
-        2: "bed",
-        3: "toilet",
-        4: "tv",
-        5: "table",
-    }
+    # CLASSES = {0: "couch",     # bbs prediction
+    #     1: "plant",
+    #     2: "bed",
+    #     3: "toilet",
+    #     4: "tv",
+    #     5: "table",
+    # }
+    CLASSES = clsid_name_maps
+    assert CLASSES.keys() == target_coco_categories_mapping.keys()
+
     REMAP = {i: k for i, k in enumerate(CLASSES)}
     # CLASSES_TO_IDX = {k: i for i, k in enumerate(CLASSES.keys())}
     CLS_ID_MAP = {0: 57, 1:58, 2:59, 3:61, 4:62, 5:60, 6:6}
@@ -413,11 +417,23 @@ class AgentPoseSense(Pose):
     
 MODALITY_SENSE = {
     "rgb": RGBSense,
+    "rgb_30": RGBSense,
+    "rgb_60": RGBSense,
+    "rgb_90": RGBSense,
+    "rgb_120": RGBSense,
+    "rgb_150": RGBSense,
+    "rgb_180": RGBSense,
+    "rgb_210": RGBSense,
+    "rgb_240": RGBSense,
+    "rgb_270": RGBSense,
+    "rgb_300": RGBSense,
+    "rgb_330": RGBSense,
     "depth":  DepthSense,
     "semantic": SemanticSense,
     # "semanticinstances": VisualSense,   #SemanticInstancesSense,
     "bbs": BBPredSense,
     "bbsgt": BBSense,
+    "bbspred": BBPredSense,
     'position': AgentPoseSense,
     # 'egomap': VisualSense,  #EgomapSense,
     # 'disagreement_map': VisualSense,    #DisagreementSense,

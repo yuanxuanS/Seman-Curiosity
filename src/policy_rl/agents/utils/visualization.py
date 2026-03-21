@@ -57,6 +57,8 @@ def init_vis_image(goal_name, legend, mode=2):
        vis_image = np.ones((655, 1500, 3)).astype(np.uint8) * 255
     elif mode == 4:
         vis_image = np.ones((655, 1995, 3)).astype(np.uint8) * 255
+    elif mode == 5:
+        vis_image = np.ones((655, 1770, 3)).astype(np.uint8) * 255
     font = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 1
     color = (20, 20, 20)  # BGR

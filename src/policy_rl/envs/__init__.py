@@ -2,6 +2,7 @@ import torch
 
 from .habitat import construct_envs
 from .sensors import *
+from .habitat.utils.vector_env import IS_SEQUENCE
 
 def make_vec_envs(args):
     envs = construct_envs(args)
@@ -22,8 +23,14 @@ class VecPyTorch():
 
     def reset(self):
         obs, info = self.venv.reset()
-        obs = torch.from_numpy(obs).float().to(self.device) # 环境obs放在主线程的gpu上，保证和训练在同一个gpu
-        return obs, info
+        if not IS_SEQUENCE:
+            obs = torch.from_numpy(obs).float().to(self.device) # 环境obs放在主线程的gpu上，保证和训练在同一个gpu
+            return obs, info
+        else:
+            obs_ = []
+            for ob in obs:
+                obs_.append(torch.from_numpy(ob[0]).unsqueeze(0).float().to(self.device))
+            return obs_, info
 
     def step_async(self, actions):
         actions = actions.cpu().numpy()
@@ -52,7 +59,16 @@ class VecPyTorch():
         
     def step_and_preprocess(self, action, input):
         obs, reward, done, info = self.venv.step_and_preprocess(action, input)
-        obs = torch.from_numpy(obs).float().to(self.device)
+        if not IS_SEQUENCE:
+            obs = torch.from_numpy(obs).float().to(self.device)
+        else:
+            obs_ = []
+            for ob in obs:
+                ob_frames = []
+                for ob_frame in ob:
+                    ob_frames.append(torch.from_numpy(ob_frame).unsqueeze(0).float().to(self.device))
+                obs_.append(ob_frames)
+            obs = obs_
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
     

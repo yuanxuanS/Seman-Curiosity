@@ -12,7 +12,7 @@ from detectron2.structures.boxes import BoxMode
 import pycocotools.mask as mask_util
 
 
-def save_obs(exp_path, env_id, episode_id, observations, timestamp):
+def save_obs(exp_path, env_id, episode_id, observations, timestamp, frameid=None):
 
     paths = []
     # for camera_id, camera_obs in enumerate(observations):
@@ -24,14 +24,17 @@ def save_obs(exp_path, env_id, episode_id, observations, timestamp):
             modality,
             int(timestamp),
             data,
+            frameid,
         )
         paths.append(saved_path)
     return paths
 
-def _save_data(exp_path, env_id, episode_id, modality, timestamp, data):
+def _save_data(exp_path, env_id, episode_id, modality, timestamp, data, frameid=None):
 
-    path = f"{exp_path}/env_{env_id:02d}_episode_{episode_id:06d}_step_{timestamp:05d}_modality_{modality}.npy"
-
+    if frameid is None:
+        path = f"{exp_path}/env_{env_id:02d}_episode_{episode_id:06d}_step_{timestamp:05d}_modality_{modality}.npy"
+    else:
+        path = f"{exp_path}/env_{env_id:02d}_episode_{episode_id:06d}_gl_{timestamp:05d}_step_{frameid:02d}_modality_{modality}.npy"
     np.save(
         path,
         data,
@@ -82,7 +85,8 @@ class SampleLoader:
         data name type: episode_modality_id_step
         modality = MODALITY_SENSE
     '''
-    def __init__(self, exp_path, samples_path=None):
+    def __init__(self, exp_path, samples_path=None, glbstep=False):
+        self.glbstep = glbstep
         self._load_paths(exp_path)
         
     def _load_paths(self, load_path):
@@ -92,27 +96,49 @@ class SampleLoader:
         # 所有数据的episode等，相同episode、step包括了多个模态，所以一定会有重复的 TODO： 改成set？
         env_list = [int(_get_info_from_string(s, "env")) for s in samples_paths]
         episode_list = [int(_get_info_from_string(s, "episode")) for s in samples_paths]
+        if self.glbstep:
+            glb_list = [int(_get_info_from_string(s, "gl")) for s in samples_paths]
         steps_list = [int(_get_info_from_string(s, "step")) for s in samples_paths]
         mod_list = [_get_info_from_string_withend(s, "modality", next_str="") for s in samples_paths]
 
-        for sample_path, env_id, episode_id, step, mod in zip(
-            samples_paths, env_list, episode_list, steps_list, mod_list
-        ):  
-            if env_id not in paths:
-                paths[env_id] = {}
-            if episode_id not in paths[env_id]:
-                paths[env_id][episode_id] = {}
-            if step not in paths[env_id][episode_id]:
-                paths[env_id][episode_id][step] = {}
-            if mod not in paths[env_id][episode_id][step]:
-                paths[env_id][episode_id][step][mod] = {}
+        if self.glbstep:
+            for sample_path, env_id, episode_id, glb, step, mod in zip(
+                samples_paths, env_list, episode_list, glb_list, steps_list, mod_list
+            ):  
+                if env_id not in paths:
+                    paths[env_id] = {}
+                if episode_id not in paths[env_id]:
+                    paths[env_id][episode_id] = {}
+                if glb not in paths[env_id][episode_id]:
+                    paths[env_id][episode_id][glb] = {}
+                if step not in paths[env_id][episode_id][glb]:
+                    paths[env_id][episode_id][glb][step] = {}
+                if mod not in paths[env_id][episode_id][glb][step]:
+                    paths[env_id][episode_id][glb][step][mod] = {}
 
-            paths[env_id][episode_id][step][mod]= sample_path
+                paths[env_id][episode_id][glb][step][mod]= sample_path
+        else:
+            for sample_path, env_id, episode_id, step, mod in zip(
+                samples_paths, env_list, episode_list, steps_list, mod_list
+            ):  
+                if env_id not in paths:
+                    paths[env_id] = {}
+                if episode_id not in paths[env_id]:
+                    paths[env_id][episode_id] = {}
+                if step not in paths[env_id][episode_id]:
+                    paths[env_id][episode_id][step] = {}
+                if mod not in paths[env_id][episode_id][step]:
+                    paths[env_id][episode_id][step][mod] = {}
+
+                paths[env_id][episode_id][step][mod]= sample_path
 
         self.paths = paths
         self.env_list = np.array(env_list)
         self.episode_list = np.array(episode_list)
+        if self.glbstep:
+            self.glb_list = np.array(glb_list)
         self.steps_list = np.array(steps_list)
+        
         
     def __len__(self):
         return len(self.get_env_episode_and_steps_dense_list()[0])
@@ -122,12 +148,15 @@ class SampleLoader:
         mod = _get_info_from_string_withend(path, "modality", next_str="")
         return MODALITY_SENSE[mod].load(path)
     
-    def get_sample(self, env, episode, step, mod):
+    def get_sample(self, env, episode, step, mod, glbstep=None):
         try:
-            data_path = self.paths[env][episode][step][mod]
+            if self.glbstep:
+                data_path = self.paths[env][episode][glbstep][step][mod]
+            else:
+                data_path = self.paths[env][episode][step][mod]
             return SampleLoader._load_data(data_path)
         except Exception as ex:
-            raise Exception(f"{env}, {episode}, {step}, {mod}")
+            raise Exception(f"{env}, {episode}, {step}, {mod}, glbstep {glbstep}")
 
     def get_env_episode_and_steps_dense_list(self, filter_envs=None, filter_episodes=None, more_mode=True):
         if more_mode:
@@ -146,14 +175,22 @@ class SampleLoader:
             )
             mask *= mask_episodes
 
-        return self.env_list[mask], self.episode_list[mask], self.steps_list[mask]
+        if self.glbstep:
+            return self.env_list[mask], self.episode_list[mask], self.glb_list[mask], self.steps_list[mask]
+        else:
+            return self.env_list[mask], self.episode_list[mask], self.steps_list[mask]
     
-    def get_sample_multimodality(self, env_id, episode_id, step, modalities):
+    def get_sample_multimodality(self, env_id, episode_id, step, modalities, glbstep=None):
         results = {}
         for mod in modalities:
-            data = self.get_sample(env_id, episode_id, step, mod)
+            if self.glbstep:
+                data = self.get_sample(env_id, episode_id, step, mod, glbstep)
+            else:
+                data = self.get_sample(env_id, episode_id, step, mod)
             results[mod] = data
         return results
+    
+    
 
 
 

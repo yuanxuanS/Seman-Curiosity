@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
+import time
 
 class PPO():
 
@@ -56,19 +56,21 @@ class PPO():
                     advantages, self.num_mini_batch)
 
             for sample in data_generator:
-
                 value_preds = sample['value_preds']
                 returns = sample['returns']
                 adv_targ = sample['adv_targ']
 
                 # Reshape to do in a single forward pass for all steps
-                values, action_log_probs, dist_entropy, _ = \
+                # values, action_log_probs, dist_entropy, _ = \
+                values, action_log_probs, dist_entropy  = \
                     self.actor_critic.evaluate_actions(
-                        sample['obs'], sample['rec_states'],
-                        sample['masks'], sample['actions'],
+                        sample['obs'], 
+                        # sample['rec_states'],
+                        # sample['masks'], 
+                        sample['actions'],
                         extras=sample['extras']
                     )
-
+                
                 ratio = torch.exp(action_log_probs -
                                   sample['old_action_log_probs'])
                 surr1 = ratio * adv_targ
@@ -87,14 +89,15 @@ class PPO():
                                                 value_losses_clipped).mean()
                 else:
                     value_loss = 0.5 * (returns - values).pow(2).mean()
-
+                
+                
                 self.optimizer.zero_grad()
                 (value_loss * self.value_loss_coef + action_loss -
                  dist_entropy * self.entropy_coef).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
                 self.optimizer.step()
-
+                
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()

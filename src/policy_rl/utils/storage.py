@@ -213,7 +213,7 @@ class GlobalRolloutStorage(RolloutStorage):
             num_steps, num_processes, obs_shape, action_space, rec_state_size)
         self.extras = torch.zeros((num_steps + 1, num_processes, extras_size),
                                   dtype=torch.long)
-        self.has_extras = True
+        self.has_extras = False
         self.extras_size = extras_size
 
     def insert(self, obs, rec_states, actions, action_log_probs, value_preds,

@@ -1,0 +1,89 @@
+
+target_classes = ['chair', 'bed', 'toilet', 'couch', 'refrigerator']
+target_cls_id_in_scene = [0, 1, 3, 4, 9]
+
+target_coco_categories = {
+    "chair": 0,
+    "couch": 1,
+    # "potted plant": 2,
+    "bed": 3,
+    "toilet": 4,
+    # "tv": 5,
+    # "dining-table": 6,
+    # "oven": 7,
+    # "sink": 8,
+    "refrigerator": 9,
+    # "book": 10,
+    # "clock": 11,
+    # "vase": 12,
+    # "cup": 13,
+    # "bottle": 14
+}
+
+target_coco_categories_mapping = {
+    56: 0,  # chair
+    57: 1,  # couch
+    72: 2,  # refrigerator
+    59: 3,  # bed
+    61: 4,  # toilet
+    
+    # 62: 5,  # tv
+    # 60: 6,  # dining-table
+    # 69: 7,  # oven
+    # 71: 8,  # sink
+    
+    # 73: 10,  # book
+    # 74: 11,  # clock
+    # 75: 12,  # vase
+    # 41: 13,  # cup
+    # 39: 14,  # bottle
+}
+clsid_name_maps = {
+    56: "chair",
+    57: "couch",
+    59: "bed",
+    61: "toilet",
+    72: "refrigerator",
+}
+
+SIM_TO_COCO_MAPPING = {
+    "chair": 56,  # chair
+    "couch": 57,  # couch
+    # "potted plant": 58,  # plan
+    "bed": 59,  # bed
+    "toilet": 61,  # toilet
+    "refrigerator": 72
+    
+}
+
+category_maps = {0: "chair", 1:"couch", 3:"bed", 4:"toilet", 9:"refrigerator"}
+category_id_maps = {0: 56, 1:57, 3:59, 4:61, 9:72}
+
+color_palette_vsqf = [      # rgb
+    1., 1., 1.,     # 白色背景
+    # Blues
+    0.96862745, 0.98431373, 1.,
+    0.91326413, 0.9488812,  0.98228374,
+    0.8584083,  0.91344867, 0.96456747,
+    0.80525952, 0.87801615, 0.94685121,
+    0.73094963, 0.83947712, 0.92132257,
+    0.64236832, 0.80183007, 0.89031911,
+    0.53568627, 0.74608228, 0.86425221,
+    0.41708574, 0.68063053, 0.83823145,
+    0.32628989, 0.61862361, 0.80279892,
+    0.24004614, 0.55377163, 0.76679739,
+    0.16696655, 0.48069204, 0.72915033,
+    0.0994233,  0.40475202, 0.67981546,
+    # hot
+    # 0.0416, 0., 0., 
+    # 0.22690719, 0., 0.,
+    # 0.41221439, 0., 0.,
+    # 0.59752158, 0., 0.,
+    # 0.79312362, 0., 0.,
+    # 0.97843081, 0., 0.,
+    # 1., 0.16372618, 0.,
+    # 1., 0.3593141,  0.,
+    # 1., 0.54460792, 0.,
+    # 1., 0.72990173, 0.,
+    # 1., 0.91519555, 0.,
+    ]
