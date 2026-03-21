@@ -138,7 +138,7 @@ def get_args():
                         help='ppo clip parameter (default: 0.2)')
     parser.add_argument('--use_recurrent_local', type=int, default=1,
                         help='use a recurrent local policy')
-    parser.add_argument('--reward_coeff', type=float, default=2.5e-5,      # 2.5e-3,
+    parser.add_argument('--reward_coeff', type=float, default=2.5e-4,      # 2.5e-3,
                         help="Semantic curiosity reward coefficient")
     parser.add_argument('--distance_reward_coeff', type=float, default=1.,
                         help="distance reduce reward coefficient")

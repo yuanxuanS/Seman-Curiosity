@@ -1,6 +1,7 @@
 from PIL import Image
 import torch
 from src.policy_rl.agents.utils.detect_utils import box_iou_calc
+import numpy as np
 
 iou_threshold=0.4
 
@@ -73,8 +74,9 @@ def group_by_object_and_score(sequence_detections, ):
                     last_box = last_data.pred_boxes.tensor.cpu().numpy()
                     iou = box_iou_calc(last_box, curr_box)
                     if iou > iou_threshold and iou > best_iou:
-                        best_iou = iou
-                        best_idx = i
+                        if obj.pred_classes == last_data.pred_classes:
+                            best_iou = iou
+                            best_idx = i
                 
                 if best_idx != -1:
                     track.history[t] = curr_objs[best_idx]
@@ -222,7 +224,7 @@ def aggre_score_in_obj_tracks(all_tracks, mode='frame'):
             track.aggre_scores[f] = curr_score + frames_to_aggre[f]
     return all_tracks
         
-def get_all_sample_score(clip_model, preprocess, text, all_tracks, all_frames):
+def get_all_sample_score(clip_model, preprocess, text, all_tracks, all_frames, device):
     '''
     得到每个frame的分数，交叉track的分数叠加
     '''

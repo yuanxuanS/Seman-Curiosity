@@ -24,7 +24,10 @@ from src.policy_rl.sequence_utils import (
     score_tracks,
     group_by_object_and_score,
 )
-
+import math
+from collections import Counter
+from detectron2.structures.instances import Instances
+from detectron2.structures.boxes import Boxes, BoxMode
 
 class Sequence_Env_Agent(Sequence_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -70,6 +73,12 @@ class Sequence_Env_Agent(Sequence_Env):
                     
             self.found_class = []
             self.found_id = []
+            
+        # for class entropy
+        self.total_objects = 0
+        self.history_counts = Counter()  # 记录所有历史帧中物体类别的频率
+        self.prev_entropy = 0.0
+        
     def reset(self):
         args = self.args
         
@@ -89,6 +98,10 @@ class Sequence_Env_Agent(Sequence_Env):
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend, mode=5)
         
+        # for class entropy
+        self.total_objects = 0
+        self.history_counts = Counter()  # 记录所有历史帧中物体类别的频率
+        self.prev_entropy = 0.0
         return obs, info
     
     def step_and_preprocess(self, action, inputs):
@@ -218,10 +231,11 @@ class Sequence_Env_Agent(Sequence_Env):
             sem_seg_pred, obj = self._get_sem_pred(
                 rgb.astype(np.uint8), use_seg=use_seg, return_score=return_score, return_instance=return_instance)
             # for sequence reward
+            target_obj = self.filter_instance(obj)
             if f > self.info['no_straight_num'] - 1:
                 obs_rgbs.append(obs_seq[f]['rgb'])
-                obs_detections.append(obj)
-            obs_detections.append(obj)
+                obs_detections.append(target_obj)
+            obs_detections.append(target_obj)
             depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
 
             ds = args.det_frame_width // args.frame_width  # Downscaling factor
@@ -248,20 +262,51 @@ class Sequence_Env_Agent(Sequence_Env):
         sequence_reward = 0.
         for g in groups:
             if g.has_object():
+                g_class = int(list(g.history.values())[0].pred_classes.cpu().numpy())
+                g_coeff = 0.01 / (self.history_counts.get(g_class, 0.) + 1. )
                 g_r = 0.
                 if g.frames[0] > 0:
-                    g_r += 1.
+                    g_r += g_coeff
                 if g.frames[-1] < num_frames - 1:
-                    g_r += 1.
+                    g_r += g_coeff
                 sequence_reward += g_r
         info['sequence_reward'] = sequence_reward
 
         # groups = score_tracks(groups, obs_detections)
         # groups = aggre_score_in_obj_tracks(groups, mode="frame")
         # groups = get_all_sample_score(clip_model, preprocess, text, groups, frame_rgbs)
+        for od in obs_detections:
+            if len(od) == 0:
+                continue
+            for det in range(len(od)):
+                pred_cls = int(od[det].pred_classes.cpu().numpy())
+                # if not pred_cls in list(target_coco_categories_mapping.keys()):
+                #     continue
+                self.history_counts.update([pred_cls])
+                self.total_objects += 1
         
+        
+        curr_entropy = self._calculate_entropy()
+        cls_etp = curr_entropy - self.prev_entropy
+        info['cls_etp'] = cls_etp * 0.5
+        
+        self.prev_entropy = curr_entropy
         return state_all, info
     
+    def _calculate_entropy(self):
+        """
+        根据当前频率分布计算 Shannon 熵 H_t
+        """
+        if self.total_objects == 0:
+            return 0.0
+        
+        entropy = 0.0
+        for count in self.history_counts.values():
+            p_i = count / self.total_objects
+            if p_i > 0:
+                entropy -= p_i * math.log(p_i)
+        return entropy
+        
     def obj_exist(self, instances_1, instances_2):
         """
         Check if instances from instances_1 exist in instances_2 by comparing their bounding boxes.
