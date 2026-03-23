@@ -286,7 +286,9 @@ _MY_PROJ_SPLIT['embodied'] = {
     'asample_seq_2_1': ('asample_test_seq_2/train', 'asample_test_seq_2_1/annotations/instances_train.json'),
     'asample_rand': ('asample_test_rand/train', 'asample_test_rand/annotations/instances_train.json'),
     'embodied_frontier': ('embodied_frontier/train', 'embodied_frontier/annotations/instances_train.json'),
-    'embodied_curiosity': ('embodied_curiosity/train', 'embodied_curiosity/annotations/instances_train.json')
+    'embodied_curiosity': ('embodied_curiosity/train', 'embodied_curiosity/annotations/instances_train.json'),
+    'embodied_testtrain': ('embodied_testtrain/train', 'embodied_testtrain/annotations/instances_train.json'),
+    'embodied_testtrain_dl': ('embodied_testtrain/train', 'embodied_testtrain/annotations/instances_train_dl.json')
 }
 def register_proj(root):
     for dataset_name, splits_per_dataset in _MY_PROJ_SPLIT.items():

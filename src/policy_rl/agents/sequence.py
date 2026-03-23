@@ -28,6 +28,15 @@ import math
 from collections import Counter
 from detectron2.structures.instances import Instances
 from detectron2.structures.boxes import Boxes, BoxMode
+from asample.waypoint_pred.TRM_net import BinaryDistPredictor_TRM
+from asample.models.encoders.resnet_encoders import (
+    TorchVisionResNet50,
+    ResnetDepthEncoder,
+    CLIPEncoder,
+)
+import gym
+import torch.nn.functional as F
+from asample.waypoint_pred.utils import nms
 
 class Sequence_Env_Agent(Sequence_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -79,6 +88,46 @@ class Sequence_Env_Agent(Sequence_Env):
         self.history_counts = Counter()  # 记录所有历史帧中物体类别的频率
         self.prev_entropy = 0.0
         
+        # for wypred
+        device=torch.device("cuda:3")
+        self.waypoint_predictor = BinaryDistPredictor_TRM(device=device)
+        
+        
+        
+        cwp_fn = 'data_scene/wp_pred/check_cwp_bestdist_hfov90'
+        self.waypoint_predictor.load_state_dict(torch.load(cwp_fn, map_location = torch.device('cpu'))['predictor']['state_dict'])
+        for param in self.waypoint_predictor.parameters():
+            param.requires_grad_(False)
+            
+        self.waypoint_predictor.to(device)
+        self.waypoint_predictor.eval()
+        model_config = {
+        "depth_encoder": {
+            "output_size": 128,          # 对应 forward 中的 depth 维度
+            "ddppo_checkpoint": "data_scene/ddppo-models/gibson-2plus-resnet50.pth",
+            "backbone": "resnet50",      # 或者 "resnet18"
+        },
+        # "rgb_encoder": {
+        #     "output_size": 256,         # 对应 forward 中的 rgb 维度 (ResNet50 为 2048)
+        #     "checkpoint": "path/to/rgb_ckpt.pth",
+        #     "backbone": "resnet50",
+        # },
+        "spatial_output": False           # 必须为 True 才能输出 [C, H, W] 特征图
+        }   
+        dos = gym.spaces.Box(0., 1.0,
+                        (args.env_frame_height,
+                            args.env_frame_width, 1),
+                        dtype='float32')
+        
+        self.depth_encoder = ResnetDepthEncoder(
+            {'depth':dos},
+            output_size=model_config['depth_encoder']['output_size'],
+            checkpoint=model_config['depth_encoder']['ddppo_checkpoint'],
+            backbone=model_config['depth_encoder']['backbone'],
+            spatial_output=model_config['spatial_output'],
+        ).to(device)
+        self.rgb_encoder = CLIPEncoder(device)
+
     def reset(self):
         args = self.args
         
@@ -104,6 +153,92 @@ class Sequence_Env_Agent(Sequence_Env):
         self.prev_entropy = 0.0
         return obs, info
     
+    def pred_wp_heatmap(self, observations,):
+        batch_size = 1
+        
+        NUM_ANGLES = 120    # 360度划分为120个扇区，每个3度
+        NUM_IMGS = 12      # 输入的12张环视图像
+        NUM_CLASSES = 12   # 每个扇区预测12个距离等级 (0.25m - 3.0m)
+        angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
+        # 2. 预处理：将输入图像从逆时针顺序转换为顺时针顺序（适应 Waypoint Predictor 训练分布）
+        # H, W = observations['rgb'].shape[0], observations['rgb'].shape[1]
+        rgb_batch = torch.zeros((NUM_IMGS, 224, 224, 3), dtype=torch.float32)
+        depth_batch = torch.zeros((NUM_IMGS, 256, 256, 1), dtype=torch.float32)
+
+        # 2. 遍历角度并进行坐标系转换与维度置换
+        for i, angle in enumerate(angles):
+            # 构建键名：0度直接用 'rgb'/'depth'，其余带后缀
+            rgb_key = 'rgb' if angle == 0 else f'rgb_{angle}'
+            depth_key = 'depth' if angle == 0 else f'depth_{angle}'
+            
+            # 计算目标索引：将逆时针索引转换为顺时针索引
+            # i=0(0°) -> target=0
+            # i=1(30°) -> target=11 (对应顺时针的 330°)
+            # i=2(60°) -> target=10 (对应顺时针的 300°)
+            target_idx = (NUM_IMGS - i) % NUM_IMGS
+            
+            # 获取数据并处理维度 (H, W, C) 
+            rgb_img = torch.from_numpy(observations[rgb_key]).float().permute(2, 0, 1)
+            depth_img = torch.from_numpy(observations[depth_key]).float().permute(2, 0, 1)
+            # RGB resize 为 224*224
+            rgb_tensor = F.interpolate(
+                rgb_img.unsqueeze(0), 
+                size=(224, 224), 
+                mode='bilinear', 
+                align_corners=False
+            ).squeeze(0)
+            
+            # Depth resize 为 256*256
+            depth_tensor = F.interpolate(
+                depth_img.unsqueeze(0), 
+                size=(256, 256), 
+                mode='bilinear', 
+                align_corners=False
+            ).squeeze(0)
+    
+            # 填充到对应的 batch 位置
+            rgb_batch[target_idx] = rgb_tensor.permute(1,2,0)
+            depth_batch[target_idx] = depth_tensor.permute(1,2,0)
+
+        obs_view12 = {'depth': depth_batch.to("cuda:3"), 'rgb': rgb_batch.to("cuda:3")}
+
+        # 3. 特征提取
+        # depth_embedding: [bs*12, 128, 4, 4], rgb_embedding: [bs*12, 2048, 7, 7]/[bs*12, 512]
+        depth_embedding = self.depth_encoder(obs_view12)
+        rgb_embedding = self.rgb_encoder(obs_view12)
+
+        # 4. 热图预测 (模型输出 logits)
+        # output shape: [batch_size, NUM_ANGLES * NUM_CLASSES] -> [bs, 1440]
+        waypoint_heatmap_logits = self.waypoint_predictor(rgb_embedding, depth_embedding)
+
+        # 5. 将 Logits 转换为概率分布 (Softmax)
+        # 转换形状为 [Batch, 角度, 距离]
+        # from heatmap to points
+        batch_prob_map = torch.softmax(
+            waypoint_heatmap_logits.reshape(batch_size, NUM_ANGLES * NUM_CLASSES), 
+            dim=1
+        ).reshape(batch_size, NUM_ANGLES, NUM_CLASSES)
+
+        batch_x_norm_wrap = torch.cat((
+            batch_prob_map[:,-1:,:], 
+            batch_prob_map, 
+            batch_prob_map[:,:1,:]), 
+            dim=1)
+        batch_output_map = nms(
+            batch_x_norm_wrap.unsqueeze(1), 
+            max_predictions=5,
+            sigma=(7.0,5.0))
+
+        # predicted waypoints before sampling
+        batch_output_map = batch_output_map.squeeze(1)[:,1:-1,:]
+
+        # 6. (可选) 如果你的后续逻辑需要逆时针坐标系，在此处进行 Flip
+        # 注意：原始代码在处理特征时进行了 flip，但在处理 heatmap 概率时通常保持顺时针，
+        # 只有在最后计算 cand_angles 时才转回逆时针。
+        
+        return batch_output_map # Shape: [B, 120, 12]
+
+
     def step_and_preprocess(self, action, inputs):
         """Function responsible for taking the action and
         preprocessing observations

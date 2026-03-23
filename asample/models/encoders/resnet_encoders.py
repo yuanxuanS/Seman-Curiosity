@@ -24,7 +24,8 @@ class ResnetDepthEncoder(nn.Module):
     ):
         super().__init__()
         self.visual_encoder = ResNetEncoder(
-            spaces.Dict({"depth": observation_space.spaces["depth"]}),
+            # spaces.Dict({"depth": observation_space.spaces["depth"]}),
+            spaces.Dict({"depth": observation_space["depth"]}),
             baseplanes=resnet_baseplanes,
             ngroups=resnet_baseplanes // 2,
             make_backbone=getattr(resnet, backbone),

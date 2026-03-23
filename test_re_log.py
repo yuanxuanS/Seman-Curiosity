@@ -3,7 +3,7 @@ import re
 import matplotlib.pyplot as plt
 
 # 日志文件路径（替换为实际路径）
-note = "rl_sequence_testtrain"
+note = "rl_sequence_test_train6-2"
 reward ="episode mean reward" #"dis reward"  
 cumu = False 
 log_file_path = f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/{note}.log"

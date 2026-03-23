@@ -48,7 +48,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -306,14 +306,14 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            sequence_r =  torch.tensor([infos[e]['sequence_reward'] for e in range(num_scenes)]).to(last_reward.device)
+            # sequence_r =  torch.tensor([infos[e]['sequence_reward'] for e in range(num_scenes)]).to(last_reward.device)
             cls_entropy_r =   torch.tensor([infos[e]['cls_etp'] for e in range(num_scenes)]).to(last_reward.device)
             # l_reward = last_reward + sequence_reward  #  + cls_entropy_r
             # l_reward = args.reward_coeff* 30 *maps.sum_of_orient_semantic_map()
             # l_reward = args.reward_coeff* maps.sum_of_explore_map()
             # l_reward = args.reward_coeff* maps.sum_of_orient_map()
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
-            step_other_reward += cls_entropy_r  + sequence_r
+            step_other_reward += cls_entropy_r #  + sequence_r
             
         # divesity reward
         # if args.use_diversity_reward:
@@ -334,7 +334,7 @@ def main():
             # extras[:, :2] = local_xy[:]
             # print(f"input sxtras: {extras}")
         # Add samples to local policy storage
-        reward = l_reward - last_reward + cls_entropy_r + sequence_r
+        reward = l_reward - last_reward + cls_entropy_r #+ sequence_r
         
         if args.agent == "rl":
             rollouts.insert(
