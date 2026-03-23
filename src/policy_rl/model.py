@@ -517,6 +517,14 @@ class RL_Policy2(nn.Module):
         dist_entropy = dist.entropy().mean()
         return value, action_log_probs, dist_entropy
     
+    def evaluate_actions_with_supervise(self, inputs, action, expert_probs, extras=None):
+        value, actor_features = self(inputs, None)
+        dist = self.dist(actor_features)
+                
+        action_log_probs = dist.log_probs(action)
+        dist_entropy = dist.entropy().mean()
+        
+        return value, action_log_probs, dist_entropy, actor_features
     
 class Semantic_Mapping(nn.Module):
 

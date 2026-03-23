@@ -41,6 +41,7 @@ class RolloutStorage(object):
         self.has_extras = False
         self.extras_size = None
 
+        self.expert_probs_size = 12
     def reset(self):
         self.obs = torch.zeros_like(self.obs)
         self.rec_states = torch.zeros_like(self.rec_states)
@@ -53,6 +54,9 @@ class RolloutStorage(object):
         self.step = 0
         self.has_extras = False
         self.extras_size = None
+        if hasattr(self, 'expert_probs'):
+            self.expert_probs = torch.zeros_like(self.expert_probs)
+        
     def to(self, device):
         self.obs = self.obs.to(device)
         self.rec_states = self.rec_states.to(device)
@@ -64,6 +68,8 @@ class RolloutStorage(object):
         self.masks = self.masks.to(device)
         if self.has_extras:
             self.extras = self.extras.to(device)
+        if hasattr(self, 'expert_probs'):
+            self.expert_probs = self.expert_probs.to(device)
         return self
 
     def insert(self, obs, rec_states, actions, action_log_probs, value_preds,
@@ -130,7 +136,10 @@ class RolloutStorage(object):
                 'adv_targ': advantages.view(-1)[indices],
                 'extras': self.extras[:-1].view(
                     -1, self.extras_size)[indices]
-                if self.has_extras else None,
+                    if self.has_extras else None,
+                'expert_probs': self.expert_probs[:-1].view(
+                    -1, self.expert_probs_size)[indices]
+                    if hasattr(self, 'expert_probs') else None,
             }
 
     def recurrent_generator(self, advantages, num_mini_batch):
@@ -156,7 +165,9 @@ class RolloutStorage(object):
             adv_targ = []
             if self.has_extras:
                 extras = []
-
+            if hasattr(self, 'expert_probs'):
+                expert_probs = []
+    
             for offset in range(num_envs_per_batch):
                 if start_ind + offset > num_processes - 1:
                     break
@@ -171,6 +182,8 @@ class RolloutStorage(object):
                 adv_targ.append(advantages[:, ind])
                 if self.has_extras:
                     extras.append(self.extras[:-1, ind])
+                if hasattr(self, 'expert_probs'):
+                    expert_probs.append(self.expert_probs[:-1, ind])
 
             # These are all tensors of size (T, N, ...)
             obs = torch.stack(obs, 1)
@@ -182,7 +195,8 @@ class RolloutStorage(object):
             adv_targ = torch.stack(adv_targ, 1)
             if self.has_extras:
                 extras = torch.stack(extras, 1)
-
+            if hasattr(self, 'expert_probs'):
+                expert_probs = torch.stack(expert_probs, 1)
             yield {
                 'obs': _flatten_helper(T, N, obs),
                 'actions': _flatten_helper(T, N, actions),
@@ -195,6 +209,7 @@ class RolloutStorage(object):
                 'extras': _flatten_helper(
                     T, N, extras) if self.has_extras else None,
                 'rec_states': torch.stack(rec_states, 1).view(N, -1),
+                'expert_probs': _flatten_helper(T, N, expert_probs) if hasattr(self, 'expert_probs') else None,
             }
 
 
@@ -207,7 +222,8 @@ class GlobalRolloutStorage(RolloutStorage):
         obs_shape, 
         action_space,
         rec_state_size, 
-        extras_size
+        extras_size,
+        expert_probs_size=12
     ):
         super(GlobalRolloutStorage, self).__init__(
             num_steps, num_processes, obs_shape, action_space, rec_state_size)
@@ -215,10 +231,21 @@ class GlobalRolloutStorage(RolloutStorage):
                                   dtype=torch.long)
         self.has_extras = False
         self.extras_size = extras_size
+        
+        # for supervise
+        self.expert_probs_size = expert_probs_size
+        self.expert_probs = torch.zeros(num_steps + 1, num_processes, expert_probs_size)
+        
+    def reset(self):
+        super(GlobalRolloutStorage, self).reset()
+        if hasattr(self, 'expert_probs'):
+            self.expert_probs = torch.zeros_like(self.expert_probs)
 
     def insert(self, obs, rec_states, actions, action_log_probs, value_preds,
-               rewards, masks, extras):
+               rewards, masks, extras, expert_probs=None):
         self.extras[self.step + 1].copy_(extras)
+        if expert_probs is not None:
+            self.expert_probs[self.step + 1].copy_(expert_probs)
         super(GlobalRolloutStorage, self).insert(
             obs, rec_states, actions,
             action_log_probs, value_preds, rewards, masks)

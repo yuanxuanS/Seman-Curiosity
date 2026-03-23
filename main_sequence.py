@@ -12,6 +12,7 @@ from src.policy_rl.envs import make_vec_envs
 from src.policy_rl.maps import Maps_Env
 from src.policy_rl.utils.storage import GlobalRolloutStorage
 from src.policy_rl.model import RL_Policy, RL_Policy2
+from src.policy_rl.expert_predictor import ExpertPredictor
 from  src.policy_rl import algo 
 from src.policy_rl.baseline_frontier import Frontier
 import cv2
@@ -48,7 +49,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:1" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -72,6 +73,7 @@ def main():
     value_losses = deque(maxlen=1000)
     action_losses = deque(maxlen=1000)
     dist_entropies = deque(maxlen=1000)
+    distill_losses = deque(maxlen=1000)
 
     # Starting environments
     torch.set_num_threads(1)
@@ -153,6 +155,9 @@ def main():
                         args.num_mini_batch, args.value_loss_coef,
                         args.entropy_coef, lr=args.lr, eps=args.eps,
                         max_grad_norm=args.max_grad_norm)
+        
+        # Initialize Expert Predictor for knowledge distillation
+        expert_predictor = ExpertPredictor(device="cuda:3")
 
         
     
@@ -337,10 +342,15 @@ def main():
         reward = l_reward - last_reward + cls_entropy_r + sequence_r
         
         if args.agent == "rl":
+            # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
+            panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+            expert_probs_batch = expert_predictor.predict(panorama_obs_list)
+            
             rollouts.insert(
                     local_input, rec_states,      # state_t+1
                     action, action_log_prob, value,   # action, reward_t
-                    reward, l_masks, extras
+                    reward, l_masks, extras,
+                    expert_probs=expert_probs_batch
                 )
         last_reward = l_reward
 
@@ -512,11 +522,12 @@ def main():
                 rollouts.compute_returns(next_value, args.use_gae,
                                            args.gamma, args.tau)
                 
-                value_loss, action_loss, dist_entropy = \
-                    agent.update(rollouts)
+                value_loss, action_loss, dist_entropy, distill_loss = \
+                    agent.update_with_supervise(rollouts)
                 value_losses.append(value_loss)
                 action_losses.append(action_loss)
                 dist_entropies.append(dist_entropy)
+                distill_losses.append(distill_loss)
             if args.agent == "rl":
                 rollouts.after_update()       # rollout的最后一个state是下一次initial state
             elif args.agent == "random":
@@ -557,6 +568,7 @@ def main():
                         np.mean(action_losses),
                         np.mean(dist_entropies))
                 ])
+                log += " Distill Loss: {:.3f},".format(np.mean(distill_losses))
                 
             if done[0]:
                 if len(episode_rewards) > 0:

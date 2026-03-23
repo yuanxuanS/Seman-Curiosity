@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import time
+import torch.nn.functional as F
 
 class PPO():
 
@@ -109,3 +110,90 @@ class PPO():
         dist_entropy_epoch /= num_updates
 
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+    
+    def update_with_supervise(self, rollouts):
+        advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
+        advantages = (advantages - advantages.mean()) / (
+            advantages.std() + 1e-5)
+
+        value_loss_epoch = 0
+        action_loss_epoch = 0
+        dist_entropy_epoch = 0
+        distill_loss_epoch = 0 # 新增：记录蒸馏损失
+        
+        for _ in range(self.ppo_epoch):
+
+            if self.actor_critic.is_recurrent:
+                data_generator = rollouts.recurrent_generator(
+                    advantages, self.num_mini_batch)
+            else:
+                data_generator = rollouts.feed_forward_generator(
+                    advantages, self.num_mini_batch)
+
+            for sample in data_generator:
+                value_preds = sample['value_preds']
+                returns = sample['returns']
+                adv_targ = sample['adv_targ']
+
+                # Reshape to do in a single forward pass for all steps
+                # values, action_log_probs, dist_entropy, _ = \
+                values, action_log_probs, dist_entropy, actor_features  = \
+                    self.actor_critic.evaluate_actions_with_supervise(
+                        sample['obs'], 
+                        # sample['rec_states'],
+                        # sample['masks'], 
+                        sample['actions'],
+                        sample['expert_probs'],  # 新增：传入专家概率分布
+                        extras=sample['extras'],
+                    )
+                
+                ratio = torch.exp(action_log_probs -
+                                  sample['old_action_log_probs'])
+                surr1 = ratio * adv_targ
+                surr2 = torch.clamp(ratio, 1.0 - self.clip_param,
+                                    1.0 + self.clip_param) * adv_targ
+                action_loss = -torch.min(surr1, surr2).mean()
+
+                if self.use_clipped_value_loss:
+                    value_pred_clipped = value_preds + \
+                        (values - value_preds).clamp(
+                            -self.clip_param, self.clip_param)
+                    value_losses = (values - returns).pow(2)
+                    value_losses_clipped = (value_pred_clipped
+                                            - returns).pow(2)
+                    value_loss = .5 * torch.max(value_losses,
+                                                value_losses_clipped).mean()
+                else:
+                    value_loss = 0.5 * (returns - values).pow(2).mean()
+                
+                # 监督损失
+                current_dist = self.actor_critic.dist(actor_features)
+                current_log_probs = torch.log_softmax(current_dist.logits, dim=-1) 
+                target_expert_probs = sample['expert_probs']
+                distill_loss = F.kl_div(current_log_probs, target_expert_probs, reduction='batchmean')
+                distill_coef = 0.5
+                
+                # 反向传播总损失
+                self.optimizer.zero_grad()
+                total_loss = (value_loss * self.value_loss_coef + 
+                          action_loss - 
+                          dist_entropy * self.entropy_coef + 
+                          distill_loss * distill_coef)
+                total_loss.backward()
+                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                                         self.max_grad_norm)
+                self.optimizer.step()
+                
+                value_loss_epoch += value_loss.item()
+                action_loss_epoch += action_loss.item()
+                dist_entropy_epoch += dist_entropy.item()
+                distill_loss_epoch += distill_loss.item()
+
+        num_updates = self.ppo_epoch * self.num_mini_batch
+
+        value_loss_epoch /= num_updates
+        action_loss_epoch /= num_updates
+        dist_entropy_epoch /= num_updates
+        distill_loss_epoch /= num_updates
+        
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, distill_loss_epoch

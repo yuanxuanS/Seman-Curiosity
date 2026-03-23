@@ -359,9 +359,10 @@ class Sequence_Env(habitat.RLEnv):
                     'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
                     'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
         panorama_obs = [obs_all[-1][obt][:,:,::-1][None, ...] for obt in obs_type]
+        self.info['panorama_obs_all'] = obs_all[-1]
         self.info['panorama_obs'] = np.concatenate(panorama_obs, axis=0)
         
-        self.pred_wp_heatmap(obs_all[-1])
+        # self.pred_wp_heatmap(obs_all[-1])
         # rgb = obs['rgb'].astype(np.uint8)
         # depth = obs['depth']
         # state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)
