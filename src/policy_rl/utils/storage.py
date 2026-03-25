@@ -223,7 +223,8 @@ class GlobalRolloutStorage(RolloutStorage):
         action_space,
         rec_state_size, 
         extras_size,
-        expert_probs_size=12
+        expert_probs_size=12,
+        hidden_size=768
     ):
         super(GlobalRolloutStorage, self).__init__(
             num_steps, num_processes, obs_shape, action_space, rec_state_size)
@@ -236,16 +237,60 @@ class GlobalRolloutStorage(RolloutStorage):
         self.expert_probs_size = expert_probs_size
         self.expert_probs = torch.zeros(num_steps + 1, num_processes, expert_probs_size)
         
+        self.hidden_size = hidden_size
+        
+        # 全景特征存储 (不再使用hist_len维度)
+        # views = 12 (全景视角数), image_feat_size = 768, angle_feat_size = 2
+        self.image_feat_size = 768
+        self.angle_feat_size = 2
+        self.num_views = 12
+        self.pano_img_feats = torch.zeros((num_steps + 1, num_processes, self.num_views, self.image_feat_size))
+        self.pano_ang_feats = torch.zeros((num_steps + 1, num_processes, self.num_views, self.angle_feat_size))
+        
     def reset(self):
         super(GlobalRolloutStorage, self).reset()
         if hasattr(self, 'expert_probs'):
             self.expert_probs = torch.zeros_like(self.expert_probs)
+        # 重置全景特征
+        self.pano_img_feats = torch.zeros_like(self.pano_img_feats)
+        self.pano_ang_feats = torch.zeros_like(self.pano_ang_feats)
+
+    def to(self, device):
+        super(GlobalRolloutStorage, self).to(device)
+        self.pano_img_feats = self.pano_img_feats.to(device)
+        self.pano_ang_feats = self.pano_ang_feats.to(device)
+        return self
 
     def insert(self, obs, rec_states, actions, action_log_probs, value_preds,
-               rewards, masks, extras, expert_probs=None):
+               rewards, masks, extras, expert_probs=None, 
+               pano_img_feats=None, pano_ang_feats=None):
         self.extras[self.step + 1].copy_(extras)
         if expert_probs is not None:
             self.expert_probs[self.step + 1].copy_(expert_probs)
+        # 保存全景特征
+        if pano_img_feats is not None:
+            self.pano_img_feats[self.step + 1].copy_(pano_img_feats)
+        if pano_ang_feats is not None:
+            self.pano_ang_feats[self.step + 1].copy_(pano_ang_feats)
         super(GlobalRolloutStorage, self).insert(
             obs, rec_states, actions,
             action_log_probs, value_preds, rewards, masks)
+
+    def after_update(self):
+        super(GlobalRolloutStorage, self).after_update()
+        # 更新全景特征
+        self.pano_img_feats[0].copy_(self.pano_img_feats[-1])
+        self.pano_ang_feats[0].copy_(self.pano_ang_feats[-1])
+        
+    def get_pano_feats(self, step):
+        """获取指定 step 的全景特征"""
+        return self.pano_img_feats[step], self.pano_ang_feats[step]
+        
+    def get_actions(self, step):
+        """获取历史动作"""
+        return self.actions[:step+1] if step > 0 else None
+        
+    def get_all_pano_feats(self, step):
+        """获取从0到step的所有全景特征作为历史特征"""
+        # 返回 (num_processes, step+1, num_views, image_feat_size)
+        return self.pano_img_feats[:step+1], self.pano_ang_feats[:step+1]

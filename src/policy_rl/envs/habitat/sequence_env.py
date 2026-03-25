@@ -96,7 +96,8 @@ class Sequence_Env(habitat.RLEnv):
                     'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
         panorama_obs = [obs[obt][:,:, ::-1][None, ...] for obt in obs_type]
         self.info['panorama_obs'] = np.concatenate(panorama_obs, axis=0)
-
+        self.info['panorama_obs_all'] = obs
+        
         return [obs], self.info
     
     def load_episode_loc(self):

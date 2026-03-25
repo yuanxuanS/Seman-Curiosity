@@ -6,12 +6,17 @@ Expert Predictor: 从 panorama observations 预测 expert action probabilities
 import torch
 import torch.nn.functional as F
 import gym
+import clip
+import numpy as np
+from PIL import Image
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from asample.waypoint_pred.TRM_net import BinaryDistPredictor_TRM
 from asample.models.encoders.resnet_encoders import (
     ResnetDepthEncoder,
     CLIPEncoder,
 )
 from asample.waypoint_pred.utils import nms
+from src.vqf_constants import target_coco_categories
 
 
 class ExpertPredictor:
@@ -37,8 +42,142 @@ class ExpertPredictor:
         self.NUM_CLASSES = 12     # 每个扇区预测12个距离等级 (0.25m - 3.0m)
         self.angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
         
+        # CLIP model for semantic scoring
+        print("Loading CLIP model...")
+        self.clip_model, self.clip_preprocess = clip.load("ViT-L/14", device=self.device)
+        print("CLIP model loaded.")
+        self.clip_model.eval()
+        
+        # Target category names from target_coco_categories
+        self.target_category_names = list(target_coco_categories.keys())
+        
+        # Tokenize text for target categories
+        self.clip_text_tokens = self._tokenize_text()
+        
+        # CLIP preprocess (same as sequence.py)
+        self.clip_preprocess = Compose([
+            Resize(224, interpolation=Image.BICUBIC),
+            CenterCrop(224),
+            ToTensor(),
+            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        ])
+        
         # Initialize models
         self._init_models(checkpoint_path)
+    
+    def _tokenize_text(self):
+        """Tokenize text prompts for target categories."""
+        text_prompts = [f"a photo contains a {goal}." for goal in self.target_category_names]
+        text_tokens = clip.tokenize(text_prompts).to(self.device)
+        return text_tokens
+    
+    def clip_score_panorama(self, observations):
+        """
+        Compute CLIP semantic scores for 12 panorama images.
+        
+        For each of the 12 direction images:
+        1. Get CLIP scores for all target categories
+        2. Normalize scores (softmax)
+        3. Take max probability as semantic score
+        
+        Returns:
+            semantic_scores: tensor of shape [12] with semantic scores for each direction
+        """
+        NUM_IMGS = 12
+        angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
+        
+        # Collect all 12 images
+        images = []
+        for i, angle in enumerate(angles):
+            rgb_key = 'rgb' if angle == 0 else f'rgb_{angle}'
+            rgb_img = observations[rgb_key]
+            
+            # Convert numpy array to PIL Image
+            if rgb_img.dtype != np.uint8:
+                rgb_img = (rgb_img * 255).astype(np.uint8) if rgb_img.max() <= 1.0 else rgb_img.astype(np.uint8)
+            
+            pil_img = Image.fromarray(rgb_img)
+            # Preprocess for CLIP
+            clip_img = self.clip_preprocess(pil_img).to(self.device)
+            images.append(clip_img)
+        
+        # Stack all images: [12, 3, 224, 224]
+        images = torch.stack(images)
+        
+        # Compute CLIP scores
+        with torch.no_grad():
+            # Get image-text similarity logits
+            logits_per_image, _ = self.clip_model(images, self.clip_text_tokens)
+            
+            # Convert logits to probabilities (softmax over text categories)
+            probs = torch.softmax(logits_per_image, dim=1)  # [12, num_categories]
+            
+            # Get max probability for each image (semantic score for that direction)
+            semantic_scores = probs.max(dim=1)[0]  # [12]
+        
+        return semantic_scores  # Shape: [12]
+    
+    def clip_score_panorama_batch(self, panorama_obs_list):
+        """
+        Compute CLIP semantic scores for multiple panorama observations in batch.
+        
+        Args:
+            panorama_obs_list: list of panorama_obs dicts (batch of scenes)
+        
+        Returns:
+            semantic_scores_batch: tensor of shape [batch_size, 12] with semantic scores for each direction
+                             Order is clockwise to match batch_output_map
+        """
+        NUM_IMGS = 12
+        angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
+        batch_size = len(panorama_obs_list)
+        
+        # Collect all images from all scenes: [batch_size * 12, 3, 224, 224]
+        # Use clockwise order to match batch_output_map
+        all_images = []
+        
+        for b, panorama_obs in enumerate(panorama_obs_list):
+            # Collect images first, then reorder to clockwise order (same as in predict)
+            scene_images = [None] * NUM_IMGS
+            for i, angle in enumerate(angles):
+                rgb_key = 'rgb' if angle == 0 else f'rgb_{angle}'
+                rgb_img = panorama_obs[rgb_key]
+                
+                # Convert counter-clockwise index to clockwise index
+                # target_idx = (NUM_IMGS - i) % NUM_IMGS
+                target_idx = i
+                
+                # Convert numpy array to PIL Image
+                if rgb_img.dtype != np.uint8:
+                    rgb_img = (rgb_img * 255).astype(np.uint8) if rgb_img.max() <= 1.0 else rgb_img.astype(np.uint8)
+                
+                pil_img = Image.fromarray(rgb_img)
+                # Preprocess for CLIP
+                clip_img = self.clip_preprocess(pil_img).to(self.device)
+                scene_images[target_idx] = clip_img
+            
+            # Add scene images in clockwise order
+            all_images.extend(scene_images)
+
+        
+        # Stack all images: [batch_size * 12, 3, 224, 224]
+        images = torch.stack(all_images)
+        
+        # Compute CLIP scores in batch
+        with torch.no_grad():
+            # Get image-text similarity logits
+            logits_per_image, _ = self.clip_model(images, self.clip_text_tokens)
+            
+            # Convert logits to probabilities (softmax over text categories)
+            probs = torch.softmax(logits_per_image, dim=1)  # [batch_size * 12, num_categories]
+            
+            # Get max probability for each image (semantic score for that direction)
+            semantic_scores_all = probs.max(dim=1)[0]  # [batch_size * 12]
+        
+        # Reshape to [batch_size, 12] to get scores for each scene
+        semantic_scores_batch = semantic_scores_all.view(batch_size, NUM_IMGS)
+        
+        return semantic_scores_batch  # Shape: [batch_size, 12], clockwise order
     
     def _init_models(self, checkpoint_path):
         """Initialize and load waypoint prediction models"""
@@ -112,7 +251,8 @@ class ExpertPredictor:
                     depth_key = 'depth' if angle == 0 else f'depth_{angle}'
                     
                     # Convert counter-clockwise index to clockwise index
-                    target_idx = (self.NUM_IMGS - i) % self.NUM_IMGS
+                    # target_idx = (self.NUM_IMGS - i) % self.NUM_IMGS
+                    target_idx = i
                     
                     # Get and process RGB image
                     rgb_img = torch.from_numpy(panorama_obs[rgb_key]).float()
@@ -179,6 +319,11 @@ class ExpertPredictor:
                 self.NUM_CLASSES
             )
             
+            # Compute CLIP semantic scores for ALL scenes in batch BEFORE the loop
+            # This is more efficient than computing individually in the loop
+            semantic_scores_batch = self.clip_score_panorama_batch(panorama_obs_list)  # [batch_size, 12]
+            semantic_scores_batch = semantic_scores_batch.to(self.device)
+            
             # Apply NMS for each scene in batch
             expert_probs_list = []
             for b in range(batch_size):
@@ -198,20 +343,30 @@ class ExpertPredictor:
                 # batch_output_map = batch_output_map.squeeze(1)[:, 1:-1, :]
                 
                 # Flip to counter-clockwise coordinates
-                batch_output_map = scene_prob.flip(dims=[1])
+                # batch_output_map = scene_prob.flip(dims=[1])
+                
                 
                 # Group angles: 120 -> 12 (each group has 10 angles)
-                batch_output_map = batch_output_map.view(1, 12, 10, 12)
+                batch_output_map = scene_prob.view(1, 12, 10, 12)
                 batch_output_map = batch_output_map.sum(dim=3).sum(dim=2)
                 
-                # Normalize over 12 directions
+                # 7.5 Add semantic_scores to batch_output_map before softmax (CLIP score fusion)
+                # Extract semantic scores for the current scene from the batch
+                semantic_scores = semantic_scores_batch[b]  # [12]
                 
-                # scene_probs = torch.softmax(
-                #     batch_output_map / temperature, 
-                #     dim=1
-                # )  # Shape: [1, 12]
+                # Normalize semantic_scores first (L2 normalization)
+                semantic_scores_normalized = F.normalize(semantic_scores.unsqueeze(0), p=1, dim=1).squeeze(0)
+                semantic_scores_normalized = torch.softmax(semantic_scores_normalized / 0.03, dim=0)
+                # semantic_scores_normalized = semantic_scores_normalized.flip(dims=[0])
+                # semantic_weight controls the influence of CLIP scores
+                semantic_weight = 1.0  # Can be adjusted
+                batch_output_map = batch_output_map + semantic_scores_normalized.unsqueeze(0) * semantic_weight
+                
+                # Final normalization over 12 directions
+                batch_output_map = F.normalize(batch_output_map, p=1, dim=1)
                 
                 expert_probs_list.append(batch_output_map)
+
             
             expert_probs = torch.cat(expert_probs_list, dim=0)  # [batch_size, 12]
             

@@ -486,14 +486,86 @@ class RL_Policy2(nn.Module):
     def is_recurrent(self):
         return False
     
-    def forward(self, inputs, extras=None):
-        if extras is None:
-            return self.network(inputs,)
+    def forward(self, inputs, extras=None, 
+                hist_pano_img_feats=None, hist_img_feats=None, hist_masks=None,
+                compute_hist_embed=False):
+        """
+        Forward 函数: 使用新的 forward_with_history 方法
+        - hist_pano_img_feats: 历史全景视角特征 (num_processes, hist_len, views, image_feat_size)
+        - hist_pano_ang_feats: 历史全景角度特征 (num_processes, hist_len, views, angle_feat_size)
+        - hist_actions: 历史动作 (num_processes, hist_len)
+        - hist_masks: 历史掩码 (num_processes, hist_len)
+        
+        Args:
+            inputs: 当前观测 (全景图) (num_processes, views, H, W, C)
+            extras: 额外输入（可选）
+            hist_pano_img_feats: 历史全景视角特征
+            hist_pano_ang_feats: 历史全景角度特征
+            hist_actions: 历史动作
+            hist_masks: 历史掩码
+            compute_hist_embed: 是否计算并返回当前观测的嵌入用于历史存储
+        """
+        # 如果有原始历史特征，使用新的 forward_with_history 方法
+        if hist_pano_img_feats is not None:
+            return self.network.forward_with_history(
+                curr_pano_img_feats=inputs['pano_img_feats'],
+                curr_pano_ang_feats=inputs['pano_ang_feats'],
+                hist_pano_img_feats=hist_pano_img_feats,
+                hist_pano_ang_feats=hist_img_feats,  # 这里hist_img_feats实际上是hist_pano_ang_feats
+                hist_actions=hist_masks,  # 这里hist_masks实际上是hist_actions
+                hist_masks=None,
+                compute_hist_embed=compute_hist_embed
+            )
         else:
-            return self.network(inputs, extras)
+            # 无历史时，使用旧的 forward 方法（需要编码 inputs）
+            # inputs 是原始图像，需要先编码
+            with torch.no_grad():
+                ob_img_feats = self.network.encoding(inputs).to(self.device)
+                from src.policy_rl.panorama_model import get_all_point_angle_feature
+                ang_feats = get_all_point_angle_feature(self.network.config.angle_feat_size, )
+                ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(inputs.shape[0], 1, 1).to(self.device)
+            
+            return self.network.forward_with_history(
+                curr_pano_img_feats=ob_img_feats,
+                curr_pano_ang_feats=ob_ang_feats,
+                hist_pano_img_feats=None,
+                hist_pano_ang_feats=None,
+                hist_actions=None,
+                hist_masks=None,
+                compute_hist_embed=compute_hist_embed
+            )
     
-    def act(self, inputs, extras=None, deterministic=False):
-        value, actor_features= self(inputs, None)
+    def act(self, inputs, extras=None, deterministic=False, 
+            curr_pano_img_feats=None, curr_pano_ang_feats=None,
+            hist_pano_img_feats=None, hist_pano_ang_feats=None,
+            hist_actions=None, hist_masks=None,
+            compute_hist_embed=False):
+        """
+        Act 函数:
+        - 如果 compute_hist_embed=True，需要返回当前观测的嵌入用于历史存储
+        - curr_pano_img_feats: 当前全景视角的ViT特征 (num_processes, views, image_feat_size)
+        - curr_pano_ang_feats: 当前全景角度特征 (num_processes, views, angle_feat_size)
+        - hist_pano_img_feats: 历史全景图像特征 (num_processes, hist_len, views, image_feat_size)
+        - hist_pano_ang_feats: 历史全景角度特征 (num_processes, hist_len, views, angle_feat_size)
+        - hist_actions: 历史动作 (num_processes, hist_len)
+        - hist_masks: 历史掩码 (num_processes, hist_len)
+        """
+        # 调用新的 forward_with_history 方法
+        result = self.network.forward_with_history(
+            curr_pano_img_feats=curr_pano_img_feats,
+            curr_pano_ang_feats=curr_pano_ang_feats,
+            hist_pano_img_feats=hist_pano_img_feats,
+            hist_pano_ang_feats=hist_pano_ang_feats,
+            hist_actions=hist_actions,
+            hist_masks=hist_masks,
+            compute_hist_embed=compute_hist_embed
+        )
+        
+        if compute_hist_embed:
+            value, actor_features, curr_embed = result
+        else:
+            value, actor_features = result
+            
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -504,23 +576,63 @@ class RL_Policy2(nn.Module):
 
         action_log_probs = dist.log_probs(action)
 
+        # if compute_hist_embed:
+        #     # 返回 curr_pano_img_feats 用于后续存储（而不是 curr_embed）
+        #     return value, action, action_log_probs, curr_pano_img_feats
         return value, action, action_log_probs
 
-    def get_value(self, inputs, extras=None):
-        value, _ = self(inputs, None)
+    def get_value(self, inputs, extras=None, 
+                  curr_pano_img_feats=None, curr_pano_ang_feats=None,
+                  hist_pano_img_feats=None, hist_pano_ang_feats=None,
+                  hist_actions=None, hist_masks=None):
+        result = self.network.forward_with_history(
+            curr_pano_img_feats=curr_pano_img_feats,
+            curr_pano_ang_feats=curr_pano_ang_feats,
+            hist_pano_img_feats=hist_pano_img_feats,
+            hist_pano_ang_feats=hist_pano_ang_feats,
+            hist_actions=hist_actions,
+            hist_masks=hist_masks,
+            compute_hist_embed=False
+        )
+        value, _ = result
         return value
 
-    def evaluate_actions(self, inputs, action, extras=None):
-        value, actor_features = self(inputs, None)
+    def evaluate_actions(self, inputs, action, extras=None, 
+                        curr_pano_img_feats=None, curr_pano_ang_feats=None,
+                        hist_pano_img_feats=None, hist_pano_ang_feats=None,
+                        hist_actions=None, hist_masks=None):
+        result = self.network.forward_with_history(
+            curr_pano_img_feats=curr_pano_img_feats,
+            curr_pano_ang_feats=curr_pano_ang_feats,
+            hist_pano_img_feats=hist_pano_img_feats,
+            hist_pano_ang_feats=hist_pano_ang_feats,
+            hist_actions=hist_actions,
+            hist_masks=hist_masks,
+            compute_hist_embed=False
+        )
+        
+        value, actor_features = result
         dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
         return value, action_log_probs, dist_entropy
     
-    def evaluate_actions_with_supervise(self, inputs, action, expert_probs, extras=None):
-        value, actor_features = self(inputs, None)
+    def evaluate_actions_with_supervise(self, inputs, action, expert_probs, extras=None, 
+                                       curr_pano_img_feats=None, curr_pano_ang_feats=None,
+                                       hist_pano_img_feats=None, hist_pano_ang_feats=None,
+                                       hist_actions=None, hist_masks=None):
+        result = self.network.forward_with_history(
+            curr_pano_img_feats=curr_pano_img_feats,
+            curr_pano_ang_feats=curr_pano_ang_feats,
+            hist_pano_img_feats=hist_pano_img_feats,
+            hist_pano_ang_feats=hist_pano_ang_feats,
+            hist_actions=hist_actions,
+            hist_masks=hist_masks,
+            compute_hist_embed=False
+        )
+        
+        value, actor_features = result
         dist = self.dist(actor_features)
-                
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
         

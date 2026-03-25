@@ -243,6 +243,11 @@ def get_args():
     )
     parser.add_argument('-els', '--max_episode_length_straight', type=int, default=25,
                         help="""Maximum episode length, steps in an episode, in straight envs""")
+    # for supervised training
+    parser.add_argument(
+        "--use_supervised", action="store_true", default=False,
+        help="Enable supervised training with expert predictions"
+    )
     # parse arguments
     args = parser.parse_args()
 

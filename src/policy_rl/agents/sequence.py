@@ -37,6 +37,8 @@ from asample.models.encoders.resnet_encoders import (
 import gym
 import torch.nn.functional as F
 from asample.waypoint_pred.utils import nms
+import clip
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 
 class Sequence_Env_Agent(Sequence_Env):
     """The Sem_Curiosity environment agent class. A seperate Sem_Curi_Env_Agent class
@@ -89,44 +91,119 @@ class Sequence_Env_Agent(Sequence_Env):
         self.prev_entropy = 0.0
         
         # for wypred
-        device=torch.device("cuda:3")
-        self.waypoint_predictor = BinaryDistPredictor_TRM(device=device)
+        # device=torch.device("cuda:3")
+        # self.waypoint_predictor = BinaryDistPredictor_TRM(device=device)
         
         
         
-        cwp_fn = 'data_scene/wp_pred/check_cwp_bestdist_hfov90'
-        self.waypoint_predictor.load_state_dict(torch.load(cwp_fn, map_location = torch.device('cpu'))['predictor']['state_dict'])
-        for param in self.waypoint_predictor.parameters():
-            param.requires_grad_(False)
+        # cwp_fn = 'data_scene/wp_pred/check_cwp_bestdist_hfov90'
+        # self.waypoint_predictor.load_state_dict(torch.load(cwp_fn, map_location = torch.device('cpu'))['predictor']['state_dict'])
+        # for param in self.waypoint_predictor.parameters():
+        #     param.requires_grad_(False)
             
-        self.waypoint_predictor.to(device)
-        self.waypoint_predictor.eval()
-        model_config = {
-        "depth_encoder": {
-            "output_size": 128,          # 对应 forward 中的 depth 维度
-            "ddppo_checkpoint": "data_scene/ddppo-models/gibson-2plus-resnet50.pth",
-            "backbone": "resnet50",      # 或者 "resnet18"
-        },
-        # "rgb_encoder": {
-        #     "output_size": 256,         # 对应 forward 中的 rgb 维度 (ResNet50 为 2048)
-        #     "checkpoint": "path/to/rgb_ckpt.pth",
-        #     "backbone": "resnet50",
+        # self.waypoint_predictor.to(device)
+        # self.waypoint_predictor.eval()
+        # model_config = {
+        # "depth_encoder": {
+        #     "output_size": 128,          # 对应 forward 中的 depth 维度
+        #     "ddppo_checkpoint": "data_scene/ddppo-models/gibson-2plus-resnet50.pth",
+        #     "backbone": "resnet50",      # 或者 "resnet18"
         # },
-        "spatial_output": False           # 必须为 True 才能输出 [C, H, W] 特征图
-        }   
-        dos = gym.spaces.Box(0., 1.0,
-                        (args.env_frame_height,
-                            args.env_frame_width, 1),
-                        dtype='float32')
+        # # "rgb_encoder": {
+        # #     "output_size": 256,         # 对应 forward 中的 rgb 维度 (ResNet50 为 2048)
+        # #     "checkpoint": "path/to/rgb_ckpt.pth",
+        # #     "backbone": "resnet50",
+        # # },
+        # "spatial_output": False           # 必须为 True 才能输出 [C, H, W] 特征图
+        # }   
+        # dos = gym.spaces.Box(0., 1.0,
+        #                 (args.env_frame_height,
+        #                     args.env_frame_width, 1),
+        #                 dtype='float32')
         
-        self.depth_encoder = ResnetDepthEncoder(
-            {'depth':dos},
-            output_size=model_config['depth_encoder']['output_size'],
-            checkpoint=model_config['depth_encoder']['ddppo_checkpoint'],
-            backbone=model_config['depth_encoder']['backbone'],
-            spatial_output=model_config['spatial_output'],
-        ).to(device)
-        self.rgb_encoder = CLIPEncoder(device)
+        # self.depth_encoder = ResnetDepthEncoder(
+        #     {'depth':dos},
+        #     output_size=model_config['depth_encoder']['output_size'],
+        #     checkpoint=model_config['depth_encoder']['ddppo_checkpoint'],
+        #     backbone=model_config['depth_encoder']['backbone'],
+        #     spatial_output=model_config['spatial_output'],
+        # ).to(device)
+        # self.rgb_encoder = CLIPEncoder(device)
+        
+        # # CLIP model for semantic scoring
+        # self.clip_device = device
+        # print("Loading CLIP model...")
+        # self.clip_model, self.clip_preprocess = clip.load("ViT-L/14", device=self.clip_device)
+        # print("CLIP model loaded.")
+        # # Set CLIP model to eval mode
+        # self.clip_model.eval()
+        
+        # # Target category names from target_coco_categories
+        # self.target_category_names = list(target_coco_categories.keys())
+        
+        # # Tokenize text for target categories (store tokenized tokens, not encoded features)
+        # self.clip_text_tokens = self._tokenize_text()
+        
+        # # CLIP preprocess (same as main_active_cam.py)
+        # self.clip_preprocess = Compose([
+        #     Resize(224, interpolation=Image.BICUBIC),
+        #     CenterCrop(224),
+        #     ToTensor(),
+        #     Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        # ])
+        
+    def _tokenize_text(self):
+        """Tokenize text prompts for target categories."""
+        text_prompts = [f"a photo contains a {goal}." for goal in self.target_category_names]
+        text_tokens = clip.tokenize(text_prompts).to(self.clip_device)
+        return text_tokens
+    
+    def clip_score_panorama(self, observations):
+        """
+        Compute CLIP semantic scores for 12 panorama images.
+        
+        For each of the 12 direction images:
+        1. Get CLIP scores for all 5 target categories
+        2. Normalize scores (softmax)
+        3. Take max probability as semantic score
+        
+        Returns:
+            semantic_scores: tensor of shape [12] with semantic scores for each direction
+        """
+        NUM_IMGS = 12
+        angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
+        
+        # Collect all 12 images
+        images = []
+        for i, angle in enumerate(angles):
+            rgb_key = 'rgb' if angle == 0 else f'rgb_{angle}'
+            rgb_img = observations[rgb_key]
+            
+            # Convert numpy array to PIL Image
+            if rgb_img.dtype != np.uint8:
+                rgb_img = (rgb_img * 255).astype(np.uint8) if rgb_img.max() <= 1.0 else rgb_img.astype(np.uint8)
+            
+            pil_img = Image.fromarray(rgb_img)
+            # Preprocess for CLIP
+            clip_img = self.clip_preprocess(pil_img).to(self.clip_device)
+            images.append(clip_img)
+        
+        # Stack all images: [12, 3, 224, 224]
+        images = torch.stack(images)
+        
+        # Compute CLIP scores
+        with torch.no_grad():
+            # Get image-text similarity logits
+            # Pass tokenized text tokens to CLIP model (not pre-encoded features)
+            logits_per_image, _ = self.clip_model(images, self.clip_text_tokens)
+            
+            # Convert logits to probabilities (softmax over text categories)
+            probs = torch.softmax(logits_per_image, dim=1)  # [12, num_categories]
+            
+            # Get max probability for each image (semantic score for that direction)
+            semantic_scores = probs.max(dim=1)[0]  # [12]
+        
+        return semantic_scores  # Shape: [12]
 
     def reset(self):
         args = self.args
@@ -175,7 +252,8 @@ class Sequence_Env_Agent(Sequence_Env):
             # i=0(0°) -> target=0
             # i=1(30°) -> target=11 (对应顺时针的 330°)
             # i=2(60°) -> target=10 (对应顺时针的 300°)
-            target_idx = (NUM_IMGS - i) % NUM_IMGS
+            # target_idx = (NUM_IMGS - i) % NUM_IMGS
+            target_idx = i
             
             # 获取数据并处理维度 (H, W, C) 
             rgb_img = torch.from_numpy(observations[rgb_key]).float().permute(2, 0, 1)
@@ -211,6 +289,14 @@ class Sequence_Env_Agent(Sequence_Env):
         # output shape: [batch_size, NUM_ANGLES * NUM_CLASSES] -> [bs, 1440]
         waypoint_heatmap_logits = self.waypoint_predictor(rgb_embedding, depth_embedding)
 
+        # 4.5 Compute CLIP semantic scores for panorama images and weight onto heatmap
+        # Get semantic scores for 12 directions
+        semantic_scores = self.clip_score_panorama(observations)  # [12]
+        semantic_scores = semantic_scores.to(waypoint_heatmap_logits.device)
+        
+        # Store semantic_scores for adding to batch_output_map before final softmax
+        # semantic_scores will be added later, after the sum operation on batch_output_map
+
         # 5. 将 Logits 转换为概率分布 (Softmax)
         # 转换形状为 [Batch, 角度, 距离]
         # from heatmap to points
@@ -219,35 +305,45 @@ class Sequence_Env_Agent(Sequence_Env):
             dim=1
         ).reshape(batch_size, NUM_ANGLES, NUM_CLASSES)
 
-        batch_x_norm_wrap = torch.cat((
-            batch_prob_map[:,-1:,:], 
-            batch_prob_map, 
-            batch_prob_map[:,:1,:]), 
-            dim=1)
-        batch_output_map = nms(
-            batch_x_norm_wrap.unsqueeze(1), 
-            max_predictions=5,
-            sigma=(7.0,5.0))
+        # batch_x_norm_wrap = torch.cat((
+        #     batch_prob_map[:,-1:,:], 
+        #     batch_prob_map, 
+        #     batch_prob_map[:,:1,:]), 
+        #     dim=1)
+        # batch_output_map = nms(
+        #     batch_x_norm_wrap.unsqueeze(1), 
+        #     max_predictions=5,
+        #     sigma=(7.0,5.0))
 
         # predicted waypoints before sampling
-        batch_output_map = batch_output_map.squeeze(1)[:,1:-1,:]
+        # batch_output_map = batch_prob_map.squeeze(1)[:,1:-1,:]
 
         # 6. (可选) 如果你的后续逻辑需要逆时针坐标系，在此处进行 Flip
         # 注意：原始代码在处理特征时进行了 flip，但在处理 heatmap 概率时通常保持顺时针，
         # 只有在最后计算 cand_angles 时才转回逆时针。
-        batch_output_map = batch_output_map.flip(dims=[1])
+        # batch_output_map = batch_prob_map.flip(dims=[1])
         
         # 7. 处理热图：将第二维(120)每10个划分为一个区间，共12个区间
-        batch_size = batch_output_map.shape[0]
+        batch_size = batch_prob_map.shape[0]
         
         # 将120个角度分成12组，每组10个角度，对每组内的10个角度求和
-        batch_output_map = batch_output_map.view(batch_size, 12, 10, 12)
-        batch_output_map = batch_output_map.sum(dim=3).sum(dim=2)  # Shape: [B, 10, 12]
+        batch_output_map = batch_prob_map.view(batch_size, 12, 10, 12)
+        batch_output_map = batch_output_map.sum(dim=3).sum(dim=2)  # Shape: [B, 12]
         
+        # 7.5 Add semantic_scores to batch_output_map before softmax
+        # Normalize semantic_scores first (L2 normalization)
+        semantic_scores_normalized = F.normalize(semantic_scores.unsqueeze(0), p=1, dim=1).squeeze(0)
+        semantic_scores_normalized = torch.softmax(semantic_scores_normalized / 0.03, dim=0)
+        
+        # semantic_scores shape: [12], batch_output_map shape: [B, 12]
+        semantic_weight = 1.0  # Can be adjusted
+        batch_output_map = batch_output_map + semantic_scores_normalized.unsqueeze(0) * semantic_weight
+        
+        batch_output_map = F.normalize(batch_output_map, p=1, dim=1)
         # 8. 归一化12个方向的值 (在第2维上归一化，即对每个区间内的12个方向归一化)
-        temperature = 0.003
-        temperature = max(temperature, 1e-6)  # 防止温度过低导致数值不稳定
-        batch_output_map =torch.softmax(batch_output_map / temperature, dim=1)  # Shape: [B, 12]
+        # temperature = 0.003
+        # temperature = max(temperature, 1e-6)  # 防止温度过低导致数值不稳定
+        # batch_output_map =torch.softmax(batch_output_map / temperature, dim=1)  # Shape: [B, 12]
         
         # 9. 可视化：将12个方向的RGB图像拼接，并标注batch_output_map值
         # 创建保存目录
