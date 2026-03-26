@@ -137,6 +137,7 @@ class PPO():
 
                 # Reshape to do in a single forward pass for all steps
                 # values, action_log_probs, dist_entropy, _ = \
+                    
                 values, action_log_probs, dist_entropy, actor_features  = \
                     self.actor_critic.evaluate_actions_with_supervise(
                         sample['obs'], 
@@ -145,6 +146,13 @@ class PPO():
                         sample['actions'],
                         sample['expert_probs'],  # 新增：传入专家概率分布
                         extras=sample['extras'],
+                        curr_pano_img_feats=sample['curr_pano_img_feats'],
+                        curr_pano_ang_feats=sample['curr_pano_ang_feats'],
+                        hist_pano_img_feats=sample['hist_pano_img_feats'],
+                        hist_pano_ang_feats=sample['hist_pano_ang_feats'],
+                        hist_actions=sample['hist_actions'],
+                        hist_masks=sample['hist_masks']
+                        
                     )
                 
                 ratio = torch.exp(action_log_probs -

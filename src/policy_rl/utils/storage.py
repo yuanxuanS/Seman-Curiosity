@@ -124,6 +124,32 @@ class RolloutStorage(object):
                                mini_batch_size, drop_last=False)
 
         for indices in sampler:
+            T_max = self.pano_img_feats.size(0) - 1 
+            num_envs = self.pano_img_feats.size(1)
+            device = self.pano_img_feats.device
+            
+            indices_mask = torch.tensor(indices, device=device)
+            env_indices = indices_mask % num_envs   # 形状: [batch_size]
+            step_indices = indices_mask // num_envs # 形状: [batch_size]，代表当前是第几步
+            # 1. 创建一个时间轴 [0, 1, 2, ..., T_max - 1]
+            time_steps = torch.arange(T_max, device=device).view(1, -1) # [1, T_max]
+            # 2. 将每个样本的当前步长扩展为 [batch_size, 1]
+            current_steps = step_indices.view(-1, 1) # [batch_size, 1]
+            # 3. 广播比较：如果时间轴上的点 <= 当前步，则为 True
+            # 这确保了对于第 i 个样本，只有 0 到 step_indices[i] 的位置是 True
+            batch_hist_masks = (time_steps <= current_steps)        # env*steplen, steplen
+            
+            # 1. 使用 env_indices 提取对应的环境序列
+            # 提取后的形状: [T_max, batch_size, 12, 768]
+            hist_img_all_envs = self.pano_img_feats[:-1][:, env_indices]
+            hist_ang_all_envs = self.pano_ang_feats[:-1][:, env_indices]
+            # 2. 转置维度，使 batch_size 成为第一个维度
+            # 目标形状: [batch_size, T_max, 12, 768]
+            hist_img_final = hist_img_all_envs.permute(1, 0, 2, 3)
+            hist_ang_final = hist_ang_all_envs.permute(1, 0, 2, 3)
+            # 3. 对 actions 进行同样处理 (假设 actions 原始为 [T_max, num_envs, n_actions])
+            # 提取后转置为 [batch_size, T_max, n_actions]
+            hist_actions_final = self.actions[:, env_indices].permute(1, 0, 2)
             yield {
                 'obs': self.obs[:-1].view(-1, *self.obs.size()[2:])[indices],
                 'rec_states': self.rec_states[:-1].view(
@@ -140,6 +166,14 @@ class RolloutStorage(object):
                 'expert_probs': self.expert_probs[:-1].view(
                     -1, self.expert_probs_size)[indices]
                     if hasattr(self, 'expert_probs') else None,
+                'curr_pano_img_feats': self.pano_img_feats[:-1].view(-1,
+                *self.pano_img_feats.size()[2:])[indices] if hasattr(self, 'pano_img_feats') else None,
+                'curr_pano_ang_feats': self.pano_ang_feats[:-1].view(-1,
+                *self.pano_ang_feats.size()[2:])[indices] if hasattr(self, 'pano_ang_feats') else None,
+                'hist_pano_img_feats': hist_img_final,
+                'hist_pano_ang_feats': hist_ang_final,
+                'hist_actions': hist_actions_final,   
+                'hist_masks':  batch_hist_masks,            
             }
 
     def recurrent_generator(self, advantages, num_mini_batch):
@@ -290,7 +324,7 @@ class GlobalRolloutStorage(RolloutStorage):
         """获取历史动作"""
         return self.actions[:step+1] if step > 0 else None
         
-    def get_all_pano_feats(self, step):
+    def get_all_pano_feats(self):
         """获取从0到step的所有全景特征作为历史特征"""
         # 返回 (num_processes, step+1, num_views, image_feat_size)
-        return self.pano_img_feats[:step+1], self.pano_ang_feats[:step+1]
+        return self.pano_img_feats[:self.step], self.pano_ang_feats[:self.step]

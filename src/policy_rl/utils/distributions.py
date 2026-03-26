@@ -38,7 +38,7 @@ class Categorical(nn.Module):
         self.linear = nn.Linear(num_inputs, num_outputs)
 
     def forward(self, x):
-        x = self.linear(x)
+        x = self.linear(x).squeeze(-1)
         return FixedCategorical(logits=x)
 
 

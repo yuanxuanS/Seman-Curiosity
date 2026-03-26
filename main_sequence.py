@@ -375,16 +375,6 @@ def main():
             #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
             #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
             
-            # 获取当前步之前的所有全景特征作为历史特征
-            hist_pano_img_feats, hist_pano_ang_feats = rollouts.get_all_pano_feats(l_step)
-            hist_pano_img_feats = hist_pano_img_feats.detach()  # (num_scenes, l_step+1, views, image_feat_size)
-            hist_pano_ang_feats = hist_pano_ang_feats.detach()
-            
-            # 获取历史动作
-            curr_hist_actions = rollouts.actions[:l_step+1].transpose(0, 1) if l_step > 0 else None  # (num_scenes, l_step+1)
-            
-            # 历史掩码（所有历史位置都是有效的）
-            curr_hist_masks = torch.ones(num_scenes, l_step + 1, dtype=torch.bool, device=device)
             
             # 获取当前观测的全景特征
             with torch.no_grad():
@@ -475,7 +465,23 @@ def main():
         # Sample next action
         if args.agent == "rl":
             
-            # 调用 act() 时传入历史特征，compute_hist_embed=True
+            # 调用 act() 时传入历史特征
+            # 获取当前步之前的所有全景特征作为历史特征
+            if rollouts.step > 0:
+                hist_pano_img_feats, hist_pano_ang_feats = rollouts.get_all_pano_feats()
+                hist_pano_img_feats = hist_pano_img_feats.detach().transpose(1,0)  # (num_scenes, his_len, views, image_feat_size)
+                hist_pano_ang_feats = hist_pano_ang_feats.detach().transpose(1,0) 
+            
+                # 获取历史动作
+                hist_actions = rollouts.actions[:rollouts.step].transpose(1,0).squeeze(-1)  # (num_scenes, his_len)
+                
+                # 历史掩码（所有历史位置都是有效的）
+                hist_masks = torch.ones(num_scenes, rollouts.step, dtype=torch.bool, device=device)
+            else:
+                hist_pano_img_feats = None
+                hist_pano_ang_feats = None
+                hist_actions = None
+                hist_masks = None
             # 这样会返回当前观测的特征，用于下一步
             value, action, action_log_prob  = \
                 policy.act(
@@ -486,46 +492,14 @@ def main():
                     curr_pano_ang_feats=curr_pano_ang_feats,
                     hist_pano_img_feats=hist_pano_img_feats,
                     hist_pano_ang_feats=hist_pano_ang_feats,
-                    hist_actions=curr_hist_actions,
-                    hist_masks=curr_hist_masks,
+                    hist_actions=hist_actions,
+                    hist_masks=hist_masks,
                     compute_hist_embed=False
                 )
             
-            # 保存当前步的特征到 rollouts（使用 insert 方法存储）
-            # rollouts.insert(
-            #     local_input, rec_states,
-            #     action, action_log_prob, value,
-            #     reward, l_masks, rollouts.extras[l_step + 1],
-            #     expert_probs=None,
-            #     pano_img_feats=curr_pano_img_feats,
-            #     pano_ang_feats=curr_pano_ang_feats
-            # )
-            
             action = action.cpu().numpy()
         elif args.agent == "random":
-            action = np.random.randint(0, 12, num_scenes)
-
-        # full_map = maps.full_map
-        # vis_inputs = [{} for e in range(num_scenes)]
-        # for e, p_input in enumerate(vis_inputs):
-                
-        #     p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
-        #     p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
-        #     p_input['pose_pred'] = maps.get_all_pose()[e]
-
-        #     p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
-        #     p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
-        #     p_input['pose_pred'] = maps.get_all_pose()[e]
-            
-
-        #     if args.visualize or args.print_images:
-        #         local_map[e, -1, :, :] = 1e-5
-        #         p_input['sem_map_pred'] = local_map[e, 4:, :, :
-        #                                             ].argmax(0).cpu().numpy()
-        #         full_map[e, -1, :, :] = 1e-5
-        #         p_input['sem_map_pred_full'] = full_map[e, 4:, :, :
-        #                                                 ].argmax(0).cpu().numpy()                    
-        
+            action = np.random.randint(0, 12, num_scenes)        
         if args.agent == "frontier":  # must be after updating vis_inputs
             action, goals, short_time_goals = policy.get_actions(vis_inputs)        
             if args.visualize or args.print_images:
@@ -624,7 +598,9 @@ def main():
                     rollouts.obs[-1],
                     # rollouts.rec_states[-1],
                     # rollouts.masks[-1],
-                    extras=None
+                    extras=None,
+                    curr_pano_img_feats=rollouts.pano_img_feats[-1],
+                    curr_pano_ang_feats=rollouts.pano_ang_feats[-1],
                 ).detach()
                 rollouts.compute_returns(next_value, args.use_gae,
                                            args.gamma, args.tau)

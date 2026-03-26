@@ -258,24 +258,28 @@ class HistoryEmbeddings(nn.Module):
         self.layer_norm = BertLayerNorm(config.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.hist_enc_pano = config.hist_enc_pano if hasattr(config, 'hist_enc_pano') else False
-        if self.hist_enc_pano:
-            self.pano_img_linear = nn.Linear(config.image_feat_size, config.hidden_size)
-            self.pano_img_layer_norm = BertLayerNorm(config.hidden_size, eps=1e-12)
-            self.pano_ang_linear = nn.Linear(config.angle_feat_size, config.hidden_size)
-            self.pano_ang_layer_norm = BertLayerNorm(config.hidden_size, eps=1e-12)
-            pano_enc_config = copy.copy(config)
-            pano_enc_config.num_hidden_layers = config.num_h_pano_layers if hasattr(config, 'num_h_pano_layers') else 2
-            self.pano_encoder = BertEncoder(pano_enc_config)
-        else:
-            self.pano_encoder = None
+        # self.hist_enc_pano = config.hist_enc_pano if hasattr(config, 'hist_enc_pano') else False
+        # if self.hist_enc_pano:
+        self.pano_img_linear = nn.Linear(config.image_feat_size, config.hidden_size)
+        self.pano_img_layer_norm = BertLayerNorm(config.hidden_size, eps=1e-12)
+        self.pano_ang_linear = nn.Linear(config.angle_feat_size, config.hidden_size)
+        self.pano_ang_layer_norm = BertLayerNorm(config.hidden_size, eps=1e-12)
+        pano_enc_config = copy.copy(config)
+        pano_enc_config.num_hidden_layers = config.num_h_pano_layers if hasattr(config, 'num_h_pano_layers') else 2
+        self.pano_encoder = BertEncoder(pano_enc_config)
+        # else:
+        #     self.pano_encoder = None
 
     def forward(self, img_feats, ang_feats, pos_ids, 
-                pano_img_feats=None, pano_ang_feats=None):
+                pano_img_feats=None, pano_ang_feats=None,
+                env=None, hist_len=None):
         '''Args:
         - img_feats: (batch_size, dim_feat) 当前视角的图像特征
+          当 batch_size = env * hist_len 时，表示 env 个环境，每个环境有 hist_len 个历史步
         - pos_ids: (batch_size, ) 位置ID
         - pano_img_feats: (batch_size, pano_len, dim_feat) 全景特征
+        - env: 环境数量（可选，用于恢复 batch_size = env * hist_len 的形状）
+        - hist_len: 历史长度（可选，用于恢复 batch_size = env * hist_len 的形状）
         '''
         device = next(iter(self.parameters())).device
         if img_feats is not None:
@@ -290,6 +294,10 @@ class HistoryEmbeddings(nn.Module):
         if img_feats is None:
             cls_embeddings = self.dropout(self.layer_norm(
                 self.cls_token.expand(batch_size, -1, -1)[:, 0] + type_embeddings))
+            # 如果提供了 env 和 hist_len，将输出 reshape 为 (env, hist_len, hidden_size)
+            if env is not None and hist_len is not None:
+                hidden_size = cls_embeddings.size(-1)
+                cls_embeddings = cls_embeddings.view(env, hist_len, hidden_size)
             return cls_embeddings
 
         # 历史嵌入 = 图像特征 + 角度特征 + 位置嵌入 + 类型嵌入
@@ -298,7 +306,7 @@ class HistoryEmbeddings(nn.Module):
                      self.position_embeddings(pos_ids) + \
                      type_embeddings
 
-        if self.pano_encoder is not None and pano_img_feats is not None:
+        if pano_img_feats is not None: # 对每个时间步的全景特征进行编码，并与历史嵌入相加
             pano_embeddings = self.pano_img_layer_norm(self.pano_img_linear(pano_img_feats)) + \
                               self.pano_ang_layer_norm(self.pano_ang_linear(pano_ang_feats))
             pano_embeddings = self.dropout(pano_embeddings)
@@ -310,6 +318,12 @@ class HistoryEmbeddings(nn.Module):
 
         embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
+        
+        # 如果提供了 env 和 hist_len，将输出 reshape 为 (env, hist_len, hidden_size)
+        if env is not None and hist_len is not None:
+            hidden_size = embeddings.size(-1)
+            embeddings = embeddings.view(env, hist_len, hidden_size)
+        
         return embeddings
 
 
@@ -718,17 +732,17 @@ class panorama_model(nn.Module):
         根据actions选择对应步的视角特征作为hist_img_feats
         
         Args:
-            pano_img_feats: 全景视角特征 (env, hist_len, views, image_feat_size)
-            actions: 历史动作 (env, hist_len) - 每个元素是0-11的视角索引
+            pano_img_feats: 全景视角特征 (hist_len,env,  views, image_feat_size)
+            actions: 历史动作 ( hist_len, env, 1) - 每个元素是0-11的视角索引
         
         Returns:
-            selected_feats: 选择的特征 (env, hist_len, image_feat_size)
+            selected_feats: 选择的特征 (hist_len, env, image_feat_size)
         """
-        env, hist_len, views, feat_size = pano_img_feats.shape
-        # actions: (env, hist_len) -> (env, hist_len, 1)
-        actions = actions.long().unsqueeze(-1)
+        hist_len, env, views, feat_size = pano_img_feats.shape
+        # actions: (hist_len, env, 1) -> (env, hist_len, 1)
+        actions = actions.long()
         # 使用 gather 选择对应视角的特征
-        # pano_img_feats: (env, hist_len, views, feat_size) -> (env, hist_len, 1, views) -> (env, hist_len, 1, feat_size)
+        # pano_img_feats: (hist_len, env, views, feat_size) 
         selected_feats = torch.gather(pano_img_feats, 2, actions.unsqueeze(-1).expand(-1, -1, 1, feat_size))
         selected_feats = selected_feats.squeeze(2)  # (env, hist_len, feat_size)
         return selected_feats
@@ -768,30 +782,58 @@ class panorama_model(nn.Module):
         if hist_pano_img_feats is not None and hist_actions is not None:
             # hist_pano_img_feats: (env, hist_len, views, image_feat_size)
             # hist_actions: (env, hist_len)
+            env = hist_pano_img_feats.shape[0]
+            hist_len = hist_pano_img_feats.shape[1]
+            
             # 根据 action 选择对应步的视角特征作为 hist_img_feats
-            hist_img_feats = self.select_action_feats(hist_pano_img_feats, hist_actions)  # (env, hist_len, image_feat_size)
+            # 需要将 (env, hist_len, views, feat) 转换为 (env*hist_len, views, feat) 供 select_action_feats 使用
+            hist_pano_img_feats_flat = hist_pano_img_feats.reshape(env * hist_len, -1, hist_pano_img_feats.shape[-1])  # (env*hist_len, views, feat)
+            hist_actions_flat = hist_actions.reshape(-1)  # (env*hist_len)
+            hist_actions_expanded = hist_actions_flat.unsqueeze(-1).unsqueeze(-1)  # (env*hist_len, 1, 1)
+            
+            # 使用 gather 选择对应视角的特征
+            selected_feats = torch.gather(
+                hist_pano_img_feats_flat, 1, 
+                hist_actions_expanded.expand(-1, 1, hist_pano_img_feats.shape[-1])
+            ).squeeze(1)  # (env*hist_len, image_feat_size)
+            
+            # 还原为 (env, hist_len, image_feat_size)
+            hist_img_feats = selected_feats.reshape(env, hist_len, -1)
             
             # 对历史全景特征取平均得到全景嵌入
-            hist_pano_avg = hist_pano_img_feats.mean(dim=2)  # (env, hist_len, image_feat_size)
+            # hist_pano_avg = hist_pano_img_feats.mean(dim=2)  # (env, hist_len, image_feat_size)
             
             # 根据 hist_actions 选择对应的角度特征
-            hist_ang_feats = self.select_action_feats(hist_pano_ang_feats, hist_actions)  # (env, hist_len, angle_feat_size)
+            hist_pano_ang_feats_flat = hist_pano_ang_feats.reshape(env * hist_len, -1, hist_pano_ang_feats.shape[-1])
+            selected_ang_feats = torch.gather(
+                hist_pano_ang_feats_flat, 1, 
+                hist_actions_expanded.expand(-1, 1, hist_pano_ang_feats.shape[-1])
+            ).squeeze(1)  # (env*hist_len, angle_feat_size)
+            hist_ang_feats = selected_ang_feats.reshape(env, hist_len, -1)
             
             # 创建位置编码
-            hist_len = hist_pano_img_feats.size(1)
             pos_ids = torch.arange(hist_len, dtype=torch.long, device=hist_pano_img_feats.device)
             pos_ids = pos_ids.unsqueeze(0).expand(env, -1)  # (env, hist_len)
+            # 展平为 (env*hist_len,) 以匹配 hist_img_feats 的 batch 维度
+            pos_ids_flat = pos_ids.reshape(-1)  # (env*hist_len,)
+            
+            # 将全景特征也展平为 (env*hist_len, views, feat)
+            pano_img_feats_flat = hist_pano_img_feats.reshape(env * hist_len, -1, hist_pano_img_feats.shape[-1])
+            pano_ang_feats_flat = hist_pano_ang_feats.reshape(env * hist_len, -1, hist_pano_ang_feats.shape[-1])
             
             # 使用 hist_img_feats 和 hist_ang_feats 编码历史，同时传入全景特征
-            # 更新后的 HistoryEmbeddings 支持 pano_img_feats 和 pano_ang_feats 参数
+            # 注意：这里传入展平后的数据，env*hist_len 作为 batch_size
             hist_embeds = self.hist_embeddings(
-                hist_img_feats,
-                hist_ang_feats,
-                pos_ids,
-                pano_img_feats=hist_pano_img_feats,  # 传入完整全景特征
-                pano_ang_feats=hist_pano_ang_feats   # 传入完整全景角度特征
+                hist_img_feats.reshape(env * hist_len, -1),  # (env*hist_len, image_feat_size)
+                hist_ang_feats.reshape(env * hist_len, -1),  # (env*hist_len, angle_feat_size)
+                pos_ids_flat,
+                pano_img_feats=pano_img_feats_flat,  # (env*hist_len, views, image_feat_size)
+                pano_ang_feats=pano_ang_feats_flat,  # (env*hist_len, views, angle_feat_size)
+                env=env,
+                hist_len=hist_len
             )
             
+            # hist_embeds 现在应该是 (env, hist_len, hidden_size)
             # 移除 cls_token（如果存在）
             if hist_embeds.size(1) > hist_len:
                 hist_embeds = hist_embeds[:, 1:, :]  # 移除 cls_token
@@ -817,7 +859,7 @@ class panorama_model(nn.Module):
             )
             
             # 聚合观测特征（使用注意力输出）
-            attention_outputs = curr_embeds.sum(-2)
+            # attention_outputs = curr_embeds.sum(-2)
         else:
             # 无历史时（t=0），使用 history_embedding 的 cls_token 编码
             # 调用 hist_embeddings 获取 cls_token embeddings: (env, hidden_size)
@@ -843,11 +885,15 @@ class panorama_model(nn.Module):
             )
             
             # 聚合观测特征（使用注意力输出）
-            attention_outputs = curr_embeds.sum(-2)
+            # attention_outputs = curr_embeds.sum(-2)
 
-        # policy
-        x = nn.ReLU()(self.policy_linear(attention_outputs))
-        value = self.critic_linear(x).squeeze(-1)
+        # 使用 next_action 预测动作logits（每个视图）
+        # curr_embeds: (env, 12, hidden_size)
+        # act_logits = self.next_action(curr_embeds).squeeze(-1)  # (env, 12)
+        
+        # policy features for critic (聚合特征)
+        x = nn.ReLU()(self.policy_linear(curr_embeds))
+        value = self.critic_linear(x.mean(-2)).squeeze(-1)
         
         # 如果需要返回历史嵌入用于存储
         if compute_hist_embed:

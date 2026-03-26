@@ -468,7 +468,7 @@ class RL_Policy2(nn.Module):
         
         if action_space.__class__.__name__ == "Discrete":
             # num_outputs = action_space.n
-            num_outputs = 12
+            num_outputs = 1
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
         
@@ -562,11 +562,11 @@ class RL_Policy2(nn.Module):
         )
         
         if compute_hist_embed:
-            value, actor_features, curr_embed = result
+            value, act_feature, curr_embed = result     # act_feature: env*12*h/2
         else:
-            value, actor_features = result
-            
-        dist = self.dist(actor_features)
+            value, act_feature = result
+        
+        dist = self.dist(act_feature)
 
         if deterministic:
             action = dist.mode()
@@ -576,9 +576,6 @@ class RL_Policy2(nn.Module):
 
         action_log_probs = dist.log_probs(action)
 
-        # if compute_hist_embed:
-        #     # 返回 curr_pano_img_feats 用于后续存储（而不是 curr_embed）
-        #     return value, action, action_log_probs, curr_pano_img_feats
         return value, action, action_log_probs
 
     def get_value(self, inputs, extras=None, 
