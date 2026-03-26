@@ -81,8 +81,8 @@ DATASET:
   # ]
     "Collierville.glb",
     "Corozal.glb",
-    "Darden.glb",
-    "Markleeville.glb",
+    # "Darden.glb",
+    # "Markleeville.glb",
     # "Wiconisco.glb"
   # ]
 

@@ -3,10 +3,10 @@ import re
 import matplotlib.pyplot as plt
 
 # 日志文件路径（替换为实际路径）
-note = "rl_tp_diver2_m3_rs2"
-reward ="episode mean diver reward" #"dis reward"  
+note = "rl_sequence_6-2"
+reward ="episode mean reward" #"dis reward"  
 cumu = False 
-log_file_path = f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/{note}.log"
+log_file_path = f"/home/wpp/Seman-Curiosity/{note}.log"
 # 读取文件内容
 with open(log_file_path, 'r') as file:
     log_lines = file.readlines()
