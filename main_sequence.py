@@ -49,7 +49,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:3" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -154,7 +154,7 @@ def main():
         # Initialize Expert Predictor for knowledge distillation
         expert_predictor = None
         if args.use_supervised:
-            expert_predictor = ExpertPredictor(device=device)
+            expert_predictor = ExpertPredictor(device=device, use_semantic_score=args.use_semantic_score)
 
         
     
@@ -270,6 +270,17 @@ def main():
     # pred instance, get semantic masks and step env: 
     actions = []
     actions.append(action)
+    # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
+    expert_probs_batch = None
+    if args.use_supervised:
+        panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+        
+        # Test: set the 3rd rgb (rgb_60, index 2 in angles list) of the first environment to all zeros
+        # panorama_obs_list[0]['rgb_60'] = np.zeros_like(panorama_obs_list[0]['rgb_60'])
+        # panorama_obs_list[0]['depth_60'] = np.zeros_like(panorama_obs_list[0]['depth_60'])
+        
+        expert_probs_batch = expert_predictor.predict(panorama_obs_list)
+            
     # print(f"action is {l_action}")
     obs_all, _, done, infos = envs.step_and_preprocess(action, vis_inputs_frames)
     action = torch.tensor(action)
@@ -411,16 +422,6 @@ def main():
         reward = l_reward - last_reward + cls_entropy_r + sequence_r
         
         if args.agent == "rl":
-            # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
-            expert_probs_batch = None
-            if args.use_supervised:
-                panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
-                
-                # Test: set the 3rd rgb (rgb_60, index 2 in angles list) of the first environment to all zeros
-                # panorama_obs_list[0]['rgb_60'] = np.zeros_like(panorama_obs_list[0]['rgb_60'])
-                # panorama_obs_list[0]['depth_60'] = np.zeros_like(panorama_obs_list[0]['depth_60'])
-                
-                expert_probs_batch = expert_predictor.predict(panorama_obs_list)
             
             rollouts.insert(
                     local_input, rec_states,      # state_t+1
@@ -498,6 +499,7 @@ def main():
                 )
             
             action = action.cpu().numpy()
+            
         elif args.agent == "random":
             action = np.random.randint(0, 12, num_scenes)        
         if args.agent == "frontier":  # must be after updating vis_inputs
@@ -511,6 +513,17 @@ def main():
         # transition: next state
         # pred instance, get semantic masks and step env
         actions.append(action)
+        # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
+        expert_probs_batch = None
+        if args.use_supervised:
+            panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+            
+            # Test: set the 3rd rgb (rgb_60, index 2 in angles list) of the first environment to all zeros
+            # panorama_obs_list[0]['rgb_60'] = np.zeros_like(panorama_obs_list[0]['rgb_60'])
+            # panorama_obs_list[0]['depth_60'] = np.zeros_like(panorama_obs_list[0]['depth_60'])
+            
+            expert_probs_batch = expert_predictor.predict(panorama_obs_list)
+            
         # print(f"action is {l_action}")
         obs_all, _, done, infos = envs.step_and_preprocess(action, vis_inputs_frames)    # if done ,envs.reset, obs are ones after reset
         action = torch.tensor(action)
@@ -595,7 +608,7 @@ def main():
         # if l_step == 100 - 1:
             if not args.eval and args.agent == "rl":
                 next_value = policy.get_value(
-                    rollouts.obs[-1],
+                    None,
                     # rollouts.rec_states[-1],
                     # rollouts.masks[-1],
                     extras=None,

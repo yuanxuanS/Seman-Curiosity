@@ -24,7 +24,7 @@ class RolloutStorage(object):
             self.n_actions = action_space.shape[0]
             action_type = torch.float32
 
-        self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
+        # self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
         self.rec_states = torch.zeros(num_steps + 1, num_processes,
                                       rec_state_size)
         self.rewards = torch.zeros(num_steps, num_processes)
@@ -43,7 +43,7 @@ class RolloutStorage(object):
 
         self.expert_probs_size = 12
     def reset(self):
-        self.obs = torch.zeros_like(self.obs)
+        # self.obs = torch.zeros_like(self.obs)
         self.rec_states = torch.zeros_like(self.rec_states)
         self.rewards = torch.zeros_like(self.rewards)
         self.value_preds = torch.zeros_like(self.value_preds)
@@ -58,7 +58,7 @@ class RolloutStorage(object):
             self.expert_probs = torch.zeros_like(self.expert_probs)
         
     def to(self, device):
-        self.obs = self.obs.to(device)
+        # self.obs = self.obs.to(device)
         self.rec_states = self.rec_states.to(device)
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
@@ -74,7 +74,7 @@ class RolloutStorage(object):
 
     def insert(self, obs, rec_states, actions, action_log_probs, value_preds,
                rewards, masks):
-        self.obs[self.step + 1].copy_(obs)
+        # self.obs[self.step + 1].copy_(obs)
         self.rec_states[self.step + 1].copy_(rec_states)
         self.actions[self.step].copy_(actions.view(-1, self.n_actions))
         self.action_log_probs[self.step].copy_(action_log_probs)
@@ -85,7 +85,7 @@ class RolloutStorage(object):
         self.step = (self.step + 1) % self.num_steps
 
     def after_update(self):
-        self.obs[0].copy_(self.obs[-1])
+        # self.obs[0].copy_(self.obs[-1])
         self.rec_states[0].copy_(self.rec_states[-1])
         self.masks[0].copy_(self.masks[-1])
         if self.has_extras:
@@ -151,7 +151,8 @@ class RolloutStorage(object):
             # 提取后转置为 [batch_size, T_max, n_actions]
             hist_actions_final = self.actions[:, env_indices].permute(1, 0, 2)
             yield {
-                'obs': self.obs[:-1].view(-1, *self.obs.size()[2:])[indices],
+                # 'obs': self.obs[:-1].view(-1, *self.obs.size()[2:])[indices],
+                'obs': None,
                 'rec_states': self.rec_states[:-1].view(
                     -1, self.rec_states.size(-1))[indices],
                 'actions': self.actions.view(-1, self.n_actions)[indices],
@@ -163,7 +164,7 @@ class RolloutStorage(object):
                 'extras': self.extras[:-1].view(
                     -1, self.extras_size)[indices]
                     if self.has_extras else None,
-                'expert_probs': self.expert_probs[:-1].view(
+                'expert_probs': self.expert_probs.view(
                     -1, self.expert_probs_size)[indices]
                     if hasattr(self, 'expert_probs') else None,
                 'curr_pano_img_feats': self.pano_img_feats[:-1].view(-1,
@@ -206,7 +207,7 @@ class RolloutStorage(object):
                 if start_ind + offset > num_processes - 1:
                     break
                 ind = perm[start_ind + offset]
-                obs.append(self.obs[:-1, ind])
+                # obs.append(self.obs[:-1, ind])
                 rec_states.append(self.rec_states[0:1, ind])
                 actions.append(self.actions[:, ind])
                 value_preds.append(self.value_preds[:-1, ind])
@@ -269,7 +270,7 @@ class GlobalRolloutStorage(RolloutStorage):
         
         # for supervise
         self.expert_probs_size = expert_probs_size
-        self.expert_probs = torch.zeros(num_steps + 1, num_processes, expert_probs_size)
+        self.expert_probs = torch.zeros(num_steps, num_processes, expert_probs_size)
         
         self.hidden_size = hidden_size
         
@@ -300,7 +301,7 @@ class GlobalRolloutStorage(RolloutStorage):
                pano_img_feats=None, pano_ang_feats=None):
         self.extras[self.step + 1].copy_(extras)
         if expert_probs is not None:
-            self.expert_probs[self.step + 1].copy_(expert_probs)
+            self.expert_probs[self.step].copy_(expert_probs)
         # 保存全景特征
         if pano_img_feats is not None:
             self.pano_img_feats[self.step + 1].copy_(pano_img_feats)
