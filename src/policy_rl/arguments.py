@@ -138,8 +138,12 @@ def get_args():
                         help='ppo clip parameter (default: 0.2)')
     parser.add_argument('--use_recurrent_local', type=int, default=1,
                         help='use a recurrent local policy')
-    parser.add_argument('--reward_coeff', type=float, default=2.5e-4,      # 2.5e-3,
+    parser.add_argument('--reward_coeff', type=float, default=1.25e-3,      
                         help="Semantic curiosity reward coefficient")
+    parser.add_argument('--reward_coeff_seq', type=float, default=0.002,      
+                        help="sequence reward coefficient")
+    parser.add_argument('--reward_coeff_ce', type=float, default=0.1,     
+                        help="class entropy reward coefficient")
     parser.add_argument('--distance_reward_coeff', type=float, default=1.,
                         help="distance reduce reward coefficient")
     parser.add_argument('--num_sem_categories', type=float, default=6,
@@ -251,6 +255,11 @@ def get_args():
     parser.add_argument(
         "--use_semantic_score", type=int, default=0,
         help="Whether to use semantic (CLIP) scores in expert predictor (default: 0)"
+    )
+    # for history policy
+    parser.add_argument(
+        "--use_history_policy", action="store_true", default=True,
+        help="Use history-based policy (default: True)"
     )
     # parse arguments
     args = parser.parse_args()

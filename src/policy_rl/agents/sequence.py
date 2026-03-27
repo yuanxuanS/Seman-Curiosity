@@ -555,7 +555,7 @@ class Sequence_Env_Agent(Sequence_Env):
         for g in groups:
             if g.has_object():
                 g_class = int(list(g.history.values())[0].pred_classes.cpu().numpy())
-                g_coeff = 0.01 / (self.history_counts.get(g_class, 0.) + 1. )
+                g_coeff = 1 / (self.history_counts.get(g_class, 0.) + 1. )
                 g_r = 0.
                 if g.frames[0] > 0:
                     g_r += g_coeff
@@ -580,7 +580,7 @@ class Sequence_Env_Agent(Sequence_Env):
         
         curr_entropy = self._calculate_entropy()
         cls_etp = curr_entropy - self.prev_entropy
-        info['cls_etp'] = cls_etp * 0.5
+        info['cls_etp'] = cls_etp 
         
         self.prev_entropy = curr_entropy
         return state_all, info

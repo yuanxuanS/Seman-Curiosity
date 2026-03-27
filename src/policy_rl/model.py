@@ -10,6 +10,7 @@ from src.policy_rl.utils.model import get_grid, ChannelPool, Flatten, NNBase
 from src.policy_rl.envs.utils import depth_utils as du
 import cv2
 from src.policy_rl.panorama_model import panorama_model, model_config, ModelConfig
+from src.policy_rl.panorama_model_non import panorama_model as NonHistoryPanoramaModel
 import time
 
 class RBFEncoding(nn.Module):
@@ -462,7 +463,7 @@ class RL_Policy(nn.Module):
 class RL_Policy2(nn.Module):
     model_config = model_config
     def __init__(self, obs_shape, action_space, device=0,
-                 base_kwargs=None):
+                 base_kwargs=None, use_history=True):
 
         super(RL_Policy2, self).__init__()
         
@@ -473,7 +474,17 @@ class RL_Policy2(nn.Module):
             num_outputs = action_space.shape[0]
         
         model_config = ModelConfig(**self.model_config)
-        self.network = panorama_model(model_config, device)
+        
+        # 根据 use_history 参数选择不同的模型
+        if use_history:
+            # 使用有历史信息的模型
+            self.network = panorama_model(model_config, device)
+        else:
+            # 使用无历史信息的模型
+            self.network = NonHistoryPanoramaModel(model_config, device)
+        
+        self.use_history = use_history
+        self.device = device
 
         if action_space.__class__.__name__ == "Discrete":
             self.dist = Categorical(self.network.output_size, num_outputs)
@@ -486,54 +497,56 @@ class RL_Policy2(nn.Module):
     def is_recurrent(self):
         return False
     
-    def forward(self, inputs, extras=None, 
+    def forward(self, inputs, extras=None,
+                curr_pano_img_feats=None, curr_pano_ang_feats=None,
                 hist_pano_img_feats=None, hist_img_feats=None, hist_masks=None,
                 compute_hist_embed=False):
         """
-        Forward 函数: 使用新的 forward_with_history 方法
-        - hist_pano_img_feats: 历史全景视角特征 (num_processes, hist_len, views, image_feat_size)
-        - hist_pano_ang_feats: 历史全景角度特征 (num_processes, hist_len, views, angle_feat_size)
-        - hist_actions: 历史动作 (num_processes, hist_len)
-        - hist_masks: 历史掩码 (num_processes, hist_len)
+        Forward 函数: 根据 use_history 参数选择不同的模型调用方式
         
         Args:
-            inputs: 当前观测 (全景图) (num_processes, views, H, W, C)
+            inputs: 当前观测 (全景图) (num_processes, views, H, W, C) 或特征字典
             extras: 额外输入（可选）
             hist_pano_img_feats: 历史全景视角特征
-            hist_pano_ang_feats: 历史全景角度特征
-            hist_actions: 历史动作
+            hist_pano_ang_feats: 历史全景角度特征 (在hist_img_feats参数中)
+            hist_actions: 历史动作 (在hist_masks参数中)
             hist_masks: 历史掩码
             compute_hist_embed: 是否计算并返回当前观测的嵌入用于历史存储
         """
-        # 如果有原始历史特征，使用新的 forward_with_history 方法
-        if hist_pano_img_feats is not None:
-            return self.network.forward_with_history(
-                curr_pano_img_feats=inputs['pano_img_feats'],
-                curr_pano_ang_feats=inputs['pano_ang_feats'],
-                hist_pano_img_feats=hist_pano_img_feats,
-                hist_pano_ang_feats=hist_img_feats,  # 这里hist_img_feats实际上是hist_pano_ang_feats
-                hist_actions=hist_masks,  # 这里hist_masks实际上是hist_actions
-                hist_masks=None,
-                compute_hist_embed=compute_hist_embed
-            )
+        if self.use_history:
+            # 历史模型: 使用 forward_with_history 方法
+            # 如果有原始历史特征，使用新的 forward_with_history 方法
+            if hist_pano_img_feats is not None:
+                return self.network.forward_with_history(
+                    curr_pano_img_feats=inputs['pano_img_feats'],
+                    curr_pano_ang_feats=inputs['pano_ang_feats'],
+                    hist_pano_img_feats=hist_pano_img_feats,
+                    hist_pano_ang_feats=hist_img_feats,  # 这里hist_img_feats实际上是hist_pano_ang_feats
+                    hist_actions=hist_masks,  # 这里hist_masks实际上是hist_actions
+                    hist_masks=None,
+                    compute_hist_embed=compute_hist_embed
+                )
+            else:
+                # 无历史时，使用旧的 forward 方法（需要编码 inputs）
+                # inputs 是原始图像，需要先编码
+                with torch.no_grad():
+                    ob_img_feats = self.network.encoding(inputs).to(self.device)
+                    from src.policy_rl.panorama_model import get_all_point_angle_feature
+                    ang_feats = get_all_point_angle_feature(self.network.config.angle_feat_size, )
+                    ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(inputs.shape[0], 1, 1).to(self.device)
+                
+                return self.network.forward_with_history(
+                    curr_pano_img_feats=ob_img_feats,
+                    curr_pano_ang_feats=ob_ang_feats,
+                    hist_pano_img_feats=None,
+                    hist_pano_ang_feats=None,
+                    hist_actions=None,
+                    hist_masks=None,
+                    compute_hist_embed=compute_hist_embed
+                )
         else:
-            # 无历史时，使用旧的 forward 方法（需要编码 inputs）
-            # inputs 是原始图像，需要先编码
-            with torch.no_grad():
-                ob_img_feats = self.network.encoding(inputs).to(self.device)
-                from src.policy_rl.panorama_model import get_all_point_angle_feature
-                ang_feats = get_all_point_angle_feature(self.network.config.angle_feat_size, )
-                ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(inputs.shape[0], 1, 1).to(self.device)
-            
-            return self.network.forward_with_history(
-                curr_pano_img_feats=ob_img_feats,
-                curr_pano_ang_feats=ob_ang_feats,
-                hist_pano_img_feats=None,
-                hist_pano_ang_feats=None,
-                hist_actions=None,
-                hist_masks=None,
-                compute_hist_embed=compute_hist_embed
-            )
+            # 非历史模型: 使用当前全景图像与角度特征
+            return self.network(curr_pano_img_feats, curr_pano_ang_feats)
     
     def act(self, inputs, extras=None, deterministic=False, 
             curr_pano_img_feats=None, curr_pano_ang_feats=None,
@@ -541,29 +554,27 @@ class RL_Policy2(nn.Module):
             hist_actions=None, hist_masks=None,
             compute_hist_embed=False):
         """
-        Act 函数:
-        - 如果 compute_hist_embed=True，需要返回当前观测的嵌入用于历史存储
-        - curr_pano_img_feats: 当前全景视角的ViT特征 (num_processes, views, image_feat_size)
-        - curr_pano_ang_feats: 当前全景角度特征 (num_processes, views, angle_feat_size)
-        - hist_pano_img_feats: 历史全景图像特征 (num_processes, hist_len, views, image_feat_size)
-        - hist_pano_ang_feats: 历史全景角度特征 (num_processes, hist_len, views, angle_feat_size)
-        - hist_actions: 历史动作 (num_processes, hist_len)
-        - hist_masks: 历史掩码 (num_processes, hist_len)
+        Act 函数: 根据 use_history 参数选择不同的模型调用方式
         """
-        # 调用新的 forward_with_history 方法
-        result = self.network.forward_with_history(
-            curr_pano_img_feats=curr_pano_img_feats,
-            curr_pano_ang_feats=curr_pano_ang_feats,
-            hist_pano_img_feats=hist_pano_img_feats,
-            hist_pano_ang_feats=hist_pano_ang_feats,
-            hist_actions=hist_actions,
-            hist_masks=hist_masks,
-            compute_hist_embed=compute_hist_embed
-        )
-        
-        if compute_hist_embed:
-            value, act_feature, curr_embed = result     # act_feature: env*12*h/2
+        if self.use_history:
+            # 历史模型: 使用 forward_with_history 方法
+            result = self.network.forward_with_history(
+                curr_pano_img_feats=curr_pano_img_feats,
+                curr_pano_ang_feats=curr_pano_ang_feats,
+                hist_pano_img_feats=hist_pano_img_feats,
+                hist_pano_ang_feats=hist_pano_ang_feats,
+                hist_actions=hist_actions,
+                hist_masks=hist_masks,
+                compute_hist_embed=compute_hist_embed
+            )
+            
+            if compute_hist_embed:
+                value, act_feature, curr_embed = result     # act_feature: env*12*h/2
+            else:
+                value, act_feature = result
         else:
+            # 非历史模型: 使用当前全景图像与角度特征
+            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
             value, act_feature = result
         
         dist = self.dist(act_feature)
@@ -582,33 +593,52 @@ class RL_Policy2(nn.Module):
                   curr_pano_img_feats=None, curr_pano_ang_feats=None,
                   hist_pano_img_feats=None, hist_pano_ang_feats=None,
                   hist_actions=None, hist_masks=None):
-        result = self.network.forward_with_history(
-            curr_pano_img_feats=curr_pano_img_feats,
-            curr_pano_ang_feats=curr_pano_ang_feats,
-            hist_pano_img_feats=hist_pano_img_feats,
-            hist_pano_ang_feats=hist_pano_ang_feats,
-            hist_actions=hist_actions,
-            hist_masks=hist_masks,
-            compute_hist_embed=False
-        )
-        value, _ = result
+        """
+        Get value: 根据 use_history 参数选择不同的模型调用方式
+        """
+        if self.use_history:
+            # 历史模型
+            result = self.network.forward_with_history(
+                curr_pano_img_feats=curr_pano_img_feats,
+                curr_pano_ang_feats=curr_pano_ang_feats,
+                hist_pano_img_feats=hist_pano_img_feats,
+                hist_pano_ang_feats=hist_pano_ang_feats,
+                hist_actions=hist_actions,
+                hist_masks=hist_masks,
+                compute_hist_embed=False
+            )
+            value, _ = result
+        else:
+            # 非历史模型: 使用当前全景图像与角度特征
+            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            value = result[0]
         return value
 
     def evaluate_actions(self, inputs, action, extras=None, 
                         curr_pano_img_feats=None, curr_pano_ang_feats=None,
                         hist_pano_img_feats=None, hist_pano_ang_feats=None,
                         hist_actions=None, hist_masks=None):
-        result = self.network.forward_with_history(
-            curr_pano_img_feats=curr_pano_img_feats,
-            curr_pano_ang_feats=curr_pano_ang_feats,
-            hist_pano_img_feats=hist_pano_img_feats,
-            hist_pano_ang_feats=hist_pano_ang_feats,
-            hist_actions=hist_actions,
-            hist_masks=hist_masks,
-            compute_hist_embed=False
-        )
+        """
+        Evaluate actions: 根据 use_history 参数选择不同的模型调用方式
+        """
+        if self.use_history:
+            # 历史模型
+            result = self.network.forward_with_history(
+                curr_pano_img_feats=curr_pano_img_feats,
+                curr_pano_ang_feats=curr_pano_ang_feats,
+                hist_pano_img_feats=hist_pano_img_feats,
+                hist_pano_ang_feats=hist_pano_ang_feats,
+                hist_actions=hist_actions,
+                hist_masks=hist_masks,
+                compute_hist_embed=False
+            )
+            
+            value, actor_features = result
+        else:
+            # 非历史模型: 使用当前全景图像与角度特征
+            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            value, actor_features = result
         
-        value, actor_features = result
         dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
@@ -618,17 +648,27 @@ class RL_Policy2(nn.Module):
                                        curr_pano_img_feats=None, curr_pano_ang_feats=None,
                                        hist_pano_img_feats=None, hist_pano_ang_feats=None,
                                        hist_actions=None, hist_masks=None):
-        result = self.network.forward_with_history(
-            curr_pano_img_feats=curr_pano_img_feats,
-            curr_pano_ang_feats=curr_pano_ang_feats,
-            hist_pano_img_feats=hist_pano_img_feats,
-            hist_pano_ang_feats=hist_pano_ang_feats,
-            hist_actions=hist_actions,
-            hist_masks=hist_masks,
-            compute_hist_embed=False
-        )
+        """
+        Evaluate actions with supervise: 根据 use_history 参数选择不同的模型调用方式
+        """
+        if self.use_history:
+            # 历史模型
+            result = self.network.forward_with_history(
+                curr_pano_img_feats=curr_pano_img_feats,
+                curr_pano_ang_feats=curr_pano_ang_feats,
+                hist_pano_img_feats=hist_pano_img_feats,
+                hist_pano_ang_feats=hist_pano_ang_feats,
+                hist_actions=hist_actions,
+                hist_masks=hist_masks,
+                compute_hist_embed=False
+            )
+            
+            value, actor_features = result
+        else:
+            # 非历史模型: 使用当前全景图像与角度特征
+            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            value, actor_features = result
         
-        value, actor_features = result
         dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()

@@ -144,6 +144,7 @@ def main():
         # Local policy: TODO
         policy = RL_Policy2(observation_space.shape, action_space,
                             device = device,
+                            use_history=args.use_history_policy
                             ).to(device)
         
         agent = algo.PPO(policy, args.clip_param, args.ppo_epoch,
@@ -364,8 +365,8 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            sequence_r =  torch.tensor([infos[e]['sequence_reward'] for e in range(num_scenes)]).to(last_reward.device)
-            cls_entropy_r =   torch.tensor([infos[e]['cls_etp'] for e in range(num_scenes)]).to(last_reward.device)
+            sequence_r =  args.reward_coeff_seq * torch.tensor([infos[e]['sequence_reward'] for e in range(num_scenes)]).to(last_reward.device)
+            cls_entropy_r = args.reward_coeff_ce *  torch.tensor([infos[e]['cls_etp'] for e in range(num_scenes)]).to(last_reward.device)
             # l_reward = last_reward + sequence_reward  #  + cls_entropy_r
             # l_reward = args.reward_coeff* 30 *maps.sum_of_orient_semantic_map()
             # l_reward = args.reward_coeff* maps.sum_of_explore_map()
