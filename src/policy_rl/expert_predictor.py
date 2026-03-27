@@ -26,15 +26,17 @@ class ExpertPredictor:
     Supports batch inference for multiple scenes.
     """
     
-    def __init__(self, device="cuda:3", checkpoint_path="data_scene/wp_pred/check_cwp_bestdist_hfov90"):
+    def __init__(self, device="cuda:3", checkpoint_path="data_scene/wp_pred/check_cwp_bestdist_hfov90", use_semantic_score=True):
         """
         Initialize the expert predictor.
         
         Args:
             device: torch device for model
             checkpoint_path: path to waypoint predictor checkpoint
+            use_semantic_score: whether to use CLIP semantic scores for prediction
         """
         self.device = device
+        self.use_semantic_score = use_semantic_score
         
         # Constants
         self.NUM_ANGLES = 120    # 360度划分为120个扇区，每个3度
@@ -42,25 +44,31 @@ class ExpertPredictor:
         self.NUM_CLASSES = 12     # 每个扇区预测12个距离等级 (0.25m - 3.0m)
         self.angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
         
-        # CLIP model for semantic scoring
-        print("Loading CLIP model...")
-        self.clip_model, self.clip_preprocess = clip.load("ViT-L/14", device=self.device)
-        print("CLIP model loaded.")
-        self.clip_model.eval()
-        
-        # Target category names from target_coco_categories
-        self.target_category_names = list(target_coco_categories.keys())
-        
-        # Tokenize text for target categories
-        self.clip_text_tokens = self._tokenize_text()
-        
-        # CLIP preprocess (same as sequence.py)
-        self.clip_preprocess = Compose([
-            Resize(224, interpolation=Image.BICUBIC),
-            CenterCrop(224),
-            ToTensor(),
-            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-        ])
+        # CLIP model for semantic scoring (only when use_semantic_score=True)
+        if self.use_semantic_score:
+            print("Loading CLIP model...")
+            self.clip_model, self.clip_preprocess = clip.load("ViT-L/14", device=self.device)
+            print("CLIP model loaded.")
+            self.clip_model.eval()
+            
+            # Target category names from target_coco_categories
+            self.target_category_names = list(target_coco_categories.keys())
+            
+            # Tokenize text for target categories
+            self.clip_text_tokens = self._tokenize_text()
+            
+            # CLIP preprocess (same as sequence.py)
+            self.clip_preprocess = Compose([
+                Resize(224, interpolation=Image.BICUBIC),
+                CenterCrop(224),
+                ToTensor(),
+                Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+            ])
+        else:
+            self.clip_model = None
+            self.clip_preprocess = None
+            self.clip_text_tokens = None
+            print("CLIP model disabled (use_semantic_score=False).")
         
         # Initialize models
         self._init_models(checkpoint_path)
@@ -319,10 +327,10 @@ class ExpertPredictor:
                 self.NUM_CLASSES
             )
             
-            # Compute CLIP semantic scores for ALL scenes in batch BEFORE the loop
-            # This is more efficient than computing individually in the loop
-            semantic_scores_batch = self.clip_score_panorama_batch(panorama_obs_list)  # [batch_size, 12]
-            semantic_scores_batch = semantic_scores_batch.to(self.device)
+            # Compute CLIP semantic scores for ALL scenes in batch BEFORE the loop (only if use_semantic_score=True)
+            if self.use_semantic_score:
+                semantic_scores_batch = self.clip_score_panorama_batch(panorama_obs_list)  # [batch_size, 12]
+                semantic_scores_batch = semantic_scores_batch.to(self.device)
             
             # Apply NMS for each scene in batch
             expert_probs_list = []
@@ -350,17 +358,19 @@ class ExpertPredictor:
                 batch_output_map = scene_prob.view(1, 12, 10, 12)
                 batch_output_map = batch_output_map.sum(dim=3).sum(dim=2)
                 
-                # 7.5 Add semantic_scores to batch_output_map before softmax (CLIP score fusion)
-                # Extract semantic scores for the current scene from the batch
-                semantic_scores = semantic_scores_batch[b]  # [12]
-                
-                # Normalize semantic_scores first (L2 normalization)
-                semantic_scores_normalized = F.normalize(semantic_scores.unsqueeze(0), p=1, dim=1).squeeze(0)
-                semantic_scores_normalized = torch.softmax(semantic_scores_normalized / 0.03, dim=0)
-                # semantic_scores_normalized = semantic_scores_normalized.flip(dims=[0])
-                # semantic_weight controls the influence of CLIP scores
-                semantic_weight = 1.0  # Can be adjusted
-                batch_output_map = batch_output_map + semantic_scores_normalized.unsqueeze(0) * semantic_weight
+                # Add semantic_scores to batch_output_map before softmax (CLIP score fusion)
+                # Only if use_semantic_score is True
+                if self.use_semantic_score:
+                    # Extract semantic scores for the current scene from the batch
+                    semantic_scores = semantic_scores_batch[b]  # [12]
+                    
+                    # Normalize semantic_scores first (L2 normalization)
+                    semantic_scores_normalized = F.normalize(semantic_scores.unsqueeze(0), p=1, dim=1).squeeze(0)
+                    semantic_scores_normalized = torch.softmax(semantic_scores_normalized / 0.03, dim=0)
+                    # semantic_scores_normalized = semantic_scores_normalized.flip(dims=[0])
+                    # semantic_weight controls the influence of CLIP scores
+                    semantic_weight = 1.0  # Can be adjusted
+                    batch_output_map = batch_output_map + semantic_scores_normalized.unsqueeze(0) * semantic_weight
                 
                 # Final normalization over 12 directions
                 batch_output_map = F.normalize(batch_output_map, p=1, dim=1)

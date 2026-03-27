@@ -248,6 +248,10 @@ def get_args():
         "--use_supervised", action="store_true", default=False,
         help="Enable supervised training with expert predictions"
     )
+    parser.add_argument(
+        "--use_semantic_score", type=int, default=0,
+        help="Whether to use semantic (CLIP) scores in expert predictor (default: 0)"
+    )
     # parse arguments
     args = parser.parse_args()
 
