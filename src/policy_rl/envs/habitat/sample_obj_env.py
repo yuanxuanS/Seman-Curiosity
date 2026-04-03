@@ -83,7 +83,7 @@ class Sample_Obj_Env(habitat.RLEnv):
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
         
         # save dir
-        output_path = "/data1/wpp_data/data/object_visibles/"
+        output_path = "/data/wpp_data/data/rand_test/"
         os.makedirs(output_path, exist_ok=True)
         data_pth = output_path+"/data/"
         os.makedirs(data_pth, exist_ok=True)
@@ -96,6 +96,7 @@ class Sample_Obj_Env(habitat.RLEnv):
         self.nav_pts = self.get_navigable_points()
         if self.split == "val":
             obs = self.sample_possible_loc(data_pth, img_pth, info_path)       
+            obs = self.sample_possible_loc_rand(data_pth, img_pth, info_path)       
         else:
             obs = self.sample_possible_loc(data_pth, img_pth, info_path)       
 
@@ -382,6 +383,236 @@ class Sample_Obj_Env(habitat.RLEnv):
         
         with open(info_path+"/"+scene_name+"_objects.pkl", 'wb') as f:
             pickle.dump(objects_info, f)
+        return obs
+
+    def sample_possible_loc_rand(self, data_pth, img_pth, info_path, max_samples_per_object=100):
+        """
+        随机选择一个可见位置和方向的简化版本.
+        
+        与 sample_possible_loc 不同的是，这个函数:
+        1. 不按距离和角度区间划分，直接从所有可见点中随机选择
+        2. 随机选择朝向(可以是朝向物体，也可以是随机方向)
+        
+        Args:
+            data_pth: 数据保存路径
+            img_pth: 图像保存路径
+            info_path: 信息保存路径
+            max_samples_per_object: 每个物体最多采样的数量
+            
+        Returns:
+            obs: 最后一个有效的观测
+        """
+        args = self.args
+        self.scene_objs = [obj_id for obj_id in range(len(self.habitat_env.sim.semantic_scene.objects))]
+        
+        self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
+        if self.scene_path != self.last_scene_path:
+            self.scene_count += 1
+            self.last_scene_path = self.scene_path
+        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        
+        scene_info = self.dataset_info[scene_name]
+        print(f"scene_{scene_name} has floor: {scene_info.keys()}")
+        map_resolution = args.map_resolution
+
+        episode_id = 0
+        step_id = 0
+        objects_info = {}
+        
+        for floor_idx in list(scene_info.keys()):
+            objects_info[(self.scene_count, episode_id)] = {}
+            step_id = 0
+
+            floor_height = scene_info[floor_idx]['floor_height']
+            sem_map = scene_info[floor_idx]['sem_map']
+            self.map_obj_origin = scene_info[floor_idx]['origin']
+
+            cat_counts = sem_map.sum(2).sum(1)
+            possible_cats = target_cls_id_in_scene
+            possible_cats_ = target_cls_id_in_scene.copy()
+            
+            for i in possible_cats_:
+                if cat_counts[i + 1] == 0:
+                    possible_cats.remove(i)
+
+            object_boundary = args.success_dist
+            assert len(possible_cats) > 0, "No valid objects for {}".format(floor_height)
+        
+            for pcat in possible_cats:
+                goal_idx = pcat
+                goal_name = None
+                for key, value in target_coco_categories.items():
+                    if value == goal_idx:
+                        goal_name = key
+                        break
+
+                selem = skimage.morphology.disk(2)
+                traversible = skimage.morphology.binary_dilation(
+                    sem_map[0], selem) != True
+                traversible = 1 - traversible
+                
+                planner = FMMPlanner(traversible)
+            
+                goal_map_ = sem_map[goal_idx + 1]
+                connected_region, num = skimage.morphology.label(goal_map_, connectivity=1, return_num=True)
+                object_ids = list(np.unique(connected_region[connected_region > 0]))
+
+                if len(object_ids) > 0:
+                    objects_info[(self.scene_count, episode_id)][pcat] = {}
+                
+                for object_id in object_ids:
+                    goal_map_one = np.zeros_like(goal_map_)
+                    goal_map_one[connected_region == object_id] = 1
+                
+                    rows, cols = np.where(goal_map_one > 0)
+                    obj_center = (rows.min() + rows.max()) / 2, (cols.min() + cols.max()) / 2
+                    obj_center_y, obj_center_x = self.map_coord_to_real(obj_center)
+                    obj_center_real = obj_center_y, floor_height, obj_center_x
+
+                    selem = skimage.morphology.disk(
+                        int(object_boundary * 100. / map_resolution))
+                    goal_map = goal_map_one
+                
+                    planner.set_multi_goal(goal_map)
+                    m1 = sem_map[0] > 0
+                    m2 = planner.fmm_dist > (object_boundary - object_boundary) * 20.0
+                    m3 = planner.fmm_dist < (20 - object_boundary) * 20.0
+
+                    possible_starting_locs = np.logical_and(m1, m2)
+                    possible_starting_locs = np.logical_and(
+                        possible_starting_locs, m3) * 1.
+                    if possible_starting_locs.sum() == 0:
+                        print("Invalid object: {} / {} / {} / {}".format(
+                            scene_name, floor_height, goal_name, object_id))
+                        continue
+            
+                    # 收集所有可见点
+                    loc_found = False
+                    visible_pts = []
+                    map_obs = 1 - sem_map[0]
+                    goal_map_one_dil = skimage.morphology.binary_dilation(
+                            goal_map_one, selem)
+                    map_obs[goal_map_one_dil > 0] = 0
+                    
+                    for i in range(len(self.nav_pts)):
+                        point_real = self.nav_pts[i]
+                        point = self.real_coord_to_map(point_real)
+                        
+                        if abs(point_real[1] - floor_height) < args.floor_thr / 100.0 and \
+                             possible_starting_locs[point[0], point[1]] == 1:
+                            pass
+                        else:
+                            continue
+                        
+                        object_pixels = np.where(goal_map_one > 0)
+                        visible = Sample_Obj_Env.is_visible_raycasting(goal_map_one, map_obs, point, object_pixels)
+                        if visible:
+                            visible_pts.append([point, point_real])
+                    
+                    if len(visible_pts) == 0:
+                        print(f"no valid visible points")
+                        continue
+                    else:
+                        objects_info[(self.scene_count, episode_id)][pcat][object_id] = None
+                        
+                    # 随机采样: 从所有可见点中随机选择
+                    visible_pts_real = np.concatenate([p[1][None, ...] for p in visible_pts], axis=0)
+                    
+                    # 计算每个点到物体的距离和角度(用于朝向物体)
+                    visible_pts_shift = visible_pts_real - obj_center_real
+                    dz = visible_pts_shift[:, 2]
+                    dx = visible_pts_shift[:, 0]
+                    distances = np.sqrt((dx * dx) + (dz * dz))
+                    yaw_to_obj = np.degrees(np.arctan2(dz, dx))
+                    
+                    # 随机选择若干个样本
+                    num_samples = min(max_samples_per_object, len(visible_pts_real))
+                    if num_samples == 0:
+                        continue
+                    
+                    # 随机选择要采样的索引
+                    selected_indices = random.sample(range(len(visible_pts_real)), num_samples)
+                    
+                    object_samples = {}
+                    object_scene_id = None
+                    object_scene_cnt = 0
+                    
+                    for idx in selected_indices:
+                        start_loc = visible_pts_real[idx]
+                        
+                        # 移动agent到采样点
+                        agent_state = self._env.sim.get_agent_state(0)
+                        agent_state.position = start_loc
+                        
+                        # 随机选择朝向策略
+                        rand_dir = random.random()
+                        
+                        # if rand_dir < 0.5:  # 50%概率朝向物体
+                        #     # YAW calculation - rotate to object
+                        #     agent_to_obj = np.array(obj_center_real) - agent_state.position
+                        #     agent_local_forward = np.array([0, 0, -1.0])
+                        #     flat_to_obj = np.array([agent_to_obj[0], 0.0, agent_to_obj[2]])
+                        #     flat_dist_to_obj = np.linalg.norm(flat_to_obj)
+                        #     flat_to_obj /= flat_dist_to_obj
+
+                        #     det = (flat_to_obj[0] * agent_local_forward[2] - agent_local_forward[0] * flat_to_obj[2])
+                        #     turn_angle = math.atan2(det, np.dot(agent_local_forward, flat_to_obj))
+                        #     quat_yaw = quat_from_angle_axis(turn_angle, np.array([0, 1.0, 0]))
+                        # else:  # 50%概率随机朝向
+                        #     # 随机生成一个朝向角
+                        random_yaw = random.uniform(0, 2 * np.pi)
+                        quat_yaw = quat_from_angle_axis(random_yaw, np.array([0, 1.0, 0]))
+                        
+                        # 设置agent朝向
+                        agent_state.rotation = quat_yaw
+                        
+                        # 获取观测
+                        obs = self._env.sim.get_observations_at(start_loc, quat_yaw)
+                        if scene_name in self.filtered_scene_obj:
+                            obs = self.filter_object(obs, self.filtered_scene_obj[scene_name])
+                        obs.update(
+                            self._env.task.sensor_suite.get_observations(
+                                observations=obs,
+                                episode=self._env.current_episode,
+                                action={'action': 0, 'action_args': {}},
+                                task=self._env.task,
+                        ))
+                        
+                        if object_scene_cnt == 0:
+                            valid, scene_obj_id = self.is_valid_datapoint(obs, goal_name)
+                        else:
+                            valid = self.id_in_view(obs, scene_obj_id)
+                            
+                        if valid:
+                            if object_scene_cnt == 0:
+                                object_scene_id = scene_obj_id
+                                self.scene_objs.remove(object_scene_id)
+                                object_scene_cnt += 1
+                            
+                            step_id += 1
+                            self.save_sample(obs,
+                                        data_pth + "/" + scene_name + "/",
+                                        img_pth + "/" + scene_name + "/",
+                                        episode_id,
+                                        step_id,
+                                        goal_name,
+                                        object_id,
+                                        )
+                            
+                            # 保存样本信息
+                            dist = distances[idx]
+                            yaw_idx = int(yaw_to_obj[idx] / 10)  # 简化的区间索引
+                            dis_key = (int(dist / 0.5) * 0.5, int(dist / 0.5) * 0.5 + 0.5)
+                            if dis_key not in object_samples:
+                                object_samples[dis_key] = {}
+                            object_samples[dis_key][yaw_idx] = step_id
+                    
+                    objects_info[(self.scene_count, episode_id)][pcat][object_id] = [object_scene_id, object_samples]
+                
+            episode_id += 1
+        
+        # with open(info_path + "/" + scene_name + "_objects.pkl", 'wb') as f:
+        #     pickle.dump(objects_info, f)
         return obs
 
     def filter_object(self, observations, target_obj_ids):
