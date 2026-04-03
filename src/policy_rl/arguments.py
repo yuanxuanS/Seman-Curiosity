@@ -258,7 +258,7 @@ def get_args():
     )
     # for history policy
     parser.add_argument(
-        "--use_history_policy", action="store_true", default=True,
+        "--use_history_policy", action="store_true", default=False,
         help="Use history-based policy (default: True)"
     )
     # parse arguments

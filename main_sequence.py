@@ -166,6 +166,7 @@ def main():
                                         es,
                                         hidden_size=768,
                                         # hist_len=args.num_local_steps
+                                        use_history=args.use_history_policy
                                         ).to(device)
         
         # load weights
@@ -178,71 +179,62 @@ def main():
 
         if args.eval:
             policy.eval()
-    
-        # Get local policy input - 使用 ViT 编码当前全景图
-        # 获取 panorama_obs_all 并编码为特征
-        with torch.no_grad():
-            panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
-            # panorama_obs_list[i] 是 dict，包含 'rgb', 'rgb_30', ... 等
-            # 转换为 tensor 并编码
-            # 获取角度特征
-            from src.policy_rl.panorama_model import get_all_point_angle_feature
-            ang_feats = get_all_point_angle_feature(policy.network.config.angle_feat_size, )
-            
-            # 编码每个环境的全景图
-            curr_pano_img_feats_list = []
-            curr_pano_ang_feats_list = []
-            for e in range(num_scenes):
-                # 获取当前环境的全景图
-                obs_dict = panorama_obs_list[e]
-                # 提取 rgb 图像 (12 views)
-                rgb_types = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
-                             'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
-                             'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
-                images = []
-                for rgb_type in rgb_types:
-                    img = obs_dict[rgb_type]
-                    images.append(img)
-                # 转换为 tensor (12, H, W, 3)
-                images = np.stack(images, axis=0)
-                images = torch.from_numpy(images).float() / 255.0
-                # 编码
-                img_feats = policy.network.encoding(images.unsqueeze(0).to(device))
-                curr_pano_img_feats_list.append(img_feats.squeeze(0))  # (12, 768)
-                # 角度特征
-                curr_pano_ang_feats_list.append(ang_feats.to(device))  # (12, 2)
-            
-            # 合并所有环境的特征
-            curr_pano_img_feats = torch.stack(curr_pano_img_feats_list, dim=0)  # (num_scenes, 12, 768)
-            curr_pano_ang_feats = torch.stack(curr_pano_ang_feats_list, dim=0)  # (num_scenes, 12, 2)
-            
-            # 将当前观测的特征存储到 rollouts (step 0)
-            rollouts.pano_img_feats[0] = curr_pano_img_feats
-            rollouts.pano_ang_feats[0] = curr_pano_ang_feats
-            # # 使用 insert 方法存储当前特征到 rollouts
-            # rollouts.insert(
-            #     local_input, rec_states,
-            #     torch.zeros(num_scenes, dtype=torch.long).to(device),
-            #     torch.zeros(num_scenes).to(device),
-            #     torch.zeros(num_scenes).to(device),
-            #     torch.zeros(num_scenes).to(device),
-            #     l_masks, extras,
-            #     expert_probs=None,
-            #     pano_img_feats=curr_pano_img_feats,
-            #     pano_ang_feats=curr_pano_ang_feats
-            # )
-            # TODO 改为，copy pano_img_feats, pano_ang_feats
-        
+
         rec_states = torch.zeros( num_scenes, 1)
         extras = torch.zeros(num_scenes, es)
-
-        # 初始化历史动作（全为0，因为初始时没有历史动作）
-        # rollouts.actions[0] = torch.zeros(num_scenes, dtype=torch.long).to(device)
-
-        # Run Local policy (初始时没有历史，compute_hist_embed=True获取当前特征用于历史存储)
+        
+        if args.use_history_policy:
+            # Get local policy input - 使用 ViT 编码当前全景图
+            # 获取 panorama_obs_all 并编码为特征
+            with torch.no_grad():
+                panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+                # panorama_obs_list[i] 是 dict，包含 'rgb', 'rgb_30', ... 等
+                # 转换为 tensor 并编码
+                # 获取角度特征
+                from src.policy_rl.panorama_model import get_all_point_angle_feature
+                ang_feats = get_all_point_angle_feature(policy.network.config.angle_feat_size, )
+                
+                # 编码每个环境的全景图
+                curr_pano_img_feats_list = []
+                curr_pano_ang_feats_list = []
+                for e in range(num_scenes):
+                    # 获取当前环境的全景图
+                    obs_dict = panorama_obs_list[e]
+                    # 提取 rgb 图像 (12 views)
+                    rgb_types = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
+                                'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
+                                'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
+                    images = []
+                    for rgb_type in rgb_types:
+                        img = obs_dict[rgb_type]
+                        images.append(img)
+                    # 转换为 tensor (12, H, W, 3)
+                    images = np.stack(images, axis=0)
+                    images = torch.from_numpy(images).float() / 255.0
+                    # 编码
+                    img_feats = policy.network.encoding(images.unsqueeze(0).to(device))
+                    curr_pano_img_feats_list.append(img_feats.squeeze(0))  # (12, 768)
+                    # 角度特征
+                    curr_pano_ang_feats_list.append(ang_feats.to(device))  # (12, 2)
+                
+                # 合并所有环境的特征
+                curr_pano_img_feats = torch.stack(curr_pano_img_feats_list, dim=0)  # (num_scenes, 12, 768)
+                curr_pano_ang_feats = torch.stack(curr_pano_ang_feats_list, dim=0)  # (num_scenes, 12, 2)
+                
+                # 将当前观测的特征存储到 rollouts (step 0)
+                rollouts.pano_img_feats[0] = curr_pano_img_feats
+                rollouts.pano_ang_feats[0] = curr_pano_ang_feats
+        else:
+            curr_pano_img_feats = None
+            curr_pano_ang_feats = None
+            local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
+            local_input = torch.concat(local_input, axis=0)
+            rollouts.obs[0].copy_(local_input)   # 
+            rollouts.extras[0].copy_(extras)
+        
         value, action, action_log_prob = \
             policy.act(
-                None,  # 不再使用 inputs
+                rollouts.obs[0] if not args.use_history_policy else None,  # 如果使用历史模型，初始时不使用当前观测作为输入
                 extras=extras,
                 deterministic=False,
                 curr_pano_img_feats=curr_pano_img_feats,
@@ -275,10 +267,6 @@ def main():
     expert_probs_batch = None
     if args.use_supervised:
         panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
-        
-        # Test: set the 3rd rgb (rgb_60, index 2 in angles list) of the first environment to all zeros
-        # panorama_obs_list[0]['rgb_60'] = np.zeros_like(panorama_obs_list[0]['rgb_60'])
-        # panorama_obs_list[0]['depth_60'] = np.zeros_like(panorama_obs_list[0]['depth_60'])
         
         expert_probs_batch = expert_predictor.predict(panorama_obs_list)
             
@@ -387,35 +375,40 @@ def main():
             #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
             #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
             
-            
-            # 获取当前观测的全景特征
-            with torch.no_grad():
-                panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
-                from src.policy_rl.panorama_model import get_all_point_angle_feature
-                ang_feats = get_all_point_angle_feature(policy.network.config.angle_feat_size, )
+            if args.use_history_policy:
+                # 获取当前观测的全景特征
+                with torch.no_grad():
+                    panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+                    from src.policy_rl.panorama_model import get_all_point_angle_feature
+                    ang_feats = get_all_point_angle_feature(policy.network.config.angle_feat_size, )
+                    
+                    curr_pano_img_feats_list = []
+                    curr_pano_ang_feats_list = []
+                    for e in range(num_scenes):
+                        obs_dict = panorama_obs_list[e]
+                        rgb_types = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
+                                    'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
+                                    'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
+                        images = []
+                        for rgb_type in rgb_types:
+                            img = obs_dict[rgb_type]
+                            images.append(img)
+                        images = np.stack(images, axis=0)
+                        images = torch.from_numpy(images).float() / 255.0
+                        img_feats = policy.network.encoding(images.unsqueeze(0).to(device))
+                        curr_pano_img_feats_list.append(img_feats.squeeze(0))
+                        curr_pano_ang_feats_list.append(ang_feats.to(device))
+                    
+                    curr_pano_img_feats = torch.stack(curr_pano_img_feats_list, dim=0)
+                    curr_pano_ang_feats = torch.stack(curr_pano_ang_feats_list, dim=0)
                 
-                curr_pano_img_feats_list = []
-                curr_pano_ang_feats_list = []
-                for e in range(num_scenes):
-                    obs_dict = panorama_obs_list[e]
-                    rgb_types = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
-                                 'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
-                                 'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
-                    images = []
-                    for rgb_type in rgb_types:
-                        img = obs_dict[rgb_type]
-                        images.append(img)
-                    images = np.stack(images, axis=0)
-                    images = torch.from_numpy(images).float() / 255.0
-                    img_feats = policy.network.encoding(images.unsqueeze(0).to(device))
-                    curr_pano_img_feats_list.append(img_feats.squeeze(0))
-                    curr_pano_ang_feats_list.append(ang_feats.to(device))
-                
-                curr_pano_img_feats = torch.stack(curr_pano_img_feats_list, dim=0)
-                curr_pano_ang_feats = torch.stack(curr_pano_ang_feats_list, dim=0)
-            
-            local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
-            local_input = torch.concat(local_input, axis=0)
+                local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
+                local_input = torch.concat(local_input, axis=0)
+            else:
+                curr_pano_img_feats = None
+                curr_pano_ang_feats = None
+                local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
+                local_input = torch.concat(local_input, axis=0)
             # extras[:, 0] = local_orientation[:, 0]
             # extras[:, :2] = local_xy[:]
             # print(f"input sxtras: {extras}")
@@ -467,9 +460,9 @@ def main():
         # Sample next action
         if args.agent == "rl":
             
-            # 调用 act() 时传入历史特征
-            # 获取当前步之前的所有全景特征作为历史特征
-            if rollouts.step > 0:
+            if args.use_history_policy and rollouts.step > 0:
+                # 调用 act() 时传入历史特征
+                # 获取当前步之前的所有全景特征作为历史特征
                 hist_pano_img_feats, hist_pano_ang_feats = rollouts.get_all_pano_feats()
                 hist_pano_img_feats = hist_pano_img_feats.detach().transpose(1,0)  # (num_scenes, his_len, views, image_feat_size)
                 hist_pano_ang_feats = hist_pano_ang_feats.detach().transpose(1,0) 
@@ -487,7 +480,7 @@ def main():
             # 这样会返回当前观测的特征，用于下一步
             value, action, action_log_prob  = \
                 policy.act(
-                    None,  # 不再使用 inputs
+                    rollouts.obs[l_step + 1] if not args.use_history_policy else None, 
                     extras=None,
                     deterministic=False,
                     curr_pano_img_feats=curr_pano_img_feats,

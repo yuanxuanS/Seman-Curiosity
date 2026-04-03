@@ -467,24 +467,24 @@ class RL_Policy2(nn.Module):
 
         super(RL_Policy2, self).__init__()
         
-        if action_space.__class__.__name__ == "Discrete":
-            # num_outputs = action_space.n
-            num_outputs = 1
-        elif action_space.__class__.__name__ == "Box":
-            num_outputs = action_space.shape[0]
+        self.use_history = use_history
+        self.device = device
         
         model_config = ModelConfig(**self.model_config)
         
-        # 根据 use_history 参数选择不同的模型
-        if use_history:
-            # 使用有历史信息的模型
-            self.network = panorama_model(model_config, device)
-        else:
-            # 使用无历史信息的模型
-            self.network = NonHistoryPanoramaModel(model_config, device)
-        
-        self.use_history = use_history
-        self.device = device
+        if action_space.__class__.__name__ == "Discrete":
+            # num_outputs = action_space.n
+            # 根据 use_history 参数选择不同的模型
+            if use_history:
+                # 使用有历史信息的模型
+                self.network = panorama_model(model_config, device)
+                num_outputs = 1
+            else:
+                # 使用无历史信息的模型
+                self.network = NonHistoryPanoramaModel(model_config, device)
+                num_outputs = 12
+        elif action_space.__class__.__name__ == "Box":
+            num_outputs = action_space.shape[0]
 
         if action_space.__class__.__name__ == "Discrete":
             self.dist = Categorical(self.network.output_size, num_outputs)
@@ -546,7 +546,7 @@ class RL_Policy2(nn.Module):
                 )
         else:
             # 非历史模型: 使用当前全景图像与角度特征
-            return self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            return self.network(inputs)
     
     def act(self, inputs, extras=None, deterministic=False, 
             curr_pano_img_feats=None, curr_pano_ang_feats=None,
@@ -573,8 +573,8 @@ class RL_Policy2(nn.Module):
             else:
                 value, act_feature = result
         else:
-            # 非历史模型: 使用当前全景图像与角度特征
-            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            # 非历史模型: 
+            result = self(inputs)
             value, act_feature = result
         
         dist = self.dist(act_feature)
@@ -610,7 +610,7 @@ class RL_Policy2(nn.Module):
             value, _ = result
         else:
             # 非历史模型: 使用当前全景图像与角度特征
-            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            result = self(inputs)
             value = result[0]
         return value
 
@@ -636,7 +636,7 @@ class RL_Policy2(nn.Module):
             value, actor_features = result
         else:
             # 非历史模型: 使用当前全景图像与角度特征
-            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            result = self(inputs)
             value, actor_features = result
         
         dist = self.dist(actor_features)
@@ -666,7 +666,7 @@ class RL_Policy2(nn.Module):
             value, actor_features = result
         else:
             # 非历史模型: 使用当前全景图像与角度特征
-            result = self.network(curr_pano_img_feats, curr_pano_ang_feats)
+            result = self(inputs)
             value, actor_features = result
         
         dist = self.dist(actor_features)
