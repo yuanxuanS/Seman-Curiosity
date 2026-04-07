@@ -64,7 +64,7 @@ def init_vis_image(goal_name, legend, mode=2):
     color = (20, 20, 20)  # BGR
     thickness = 2
 
-    text = "Observations (Goal: {})".format(goal_name)
+    text = "Observations "
     textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
     textX = (480 - textsize[0]) // 2 + 15
     textY = (50 + textsize[1]) // 2
@@ -72,7 +72,7 @@ def init_vis_image(goal_name, legend, mode=2):
                             font, fontScale, color, thickness,
                             cv2.LINE_AA)
 
-    text = "Predicted Semantic Map"
+    text = "Semantic Map"
     textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
     textX = 480 + (480 - textsize[0]) // 2 + 30
     textY = (50 + textsize[1]) // 2

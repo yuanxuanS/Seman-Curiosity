@@ -12,6 +12,7 @@ from src.policy_rl.envs import make_vec_envs
 from src.policy_rl.maps import Maps_Env
 from src.policy_rl.utils.storage import GlobalRolloutStorage
 from src.policy_rl.model import RL_Policy, RL_Policy2
+from src.policy_rl.expert_predictor import ExpertPredictor
 from  src.policy_rl import algo 
 from src.policy_rl.baseline_frontier import Frontier
 import cv2
@@ -72,6 +73,7 @@ def main():
     value_losses = deque(maxlen=1000)
     action_losses = deque(maxlen=1000)
     dist_entropies = deque(maxlen=1000)
+    distill_losses = deque(maxlen=1000)
 
     # Starting environments
     torch.set_num_threads(1)
@@ -142,71 +144,119 @@ def main():
         # Local policy: TODO
         policy = RL_Policy2(observation_space.shape, action_space,
                             device = device,
-                            # model_type=1,
-                            # base_kwargs={'recurrent': args.use_recurrent_local,
-                            #             'hidden_size': l_hidden_size,
-                            #             'num_sem_categories': args.num_sem_categories
-                            #             }
+                            use_history=args.use_history_policy
                             ).to(device)
+
+        def _load_checkpoint_into_policy(checkpoint_path):
+            print("Loading model {}".format(checkpoint_path))
+            logging.info("Loading model {}".format(checkpoint_path))
+            checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage)
+            if isinstance(checkpoint, dict):
+                if 'policy_state_dict' in checkpoint:
+                    policy.load_state_dict(checkpoint['policy_state_dict'])
+                else:
+                    policy.load_state_dict(checkpoint)
+            else:
+                policy.load_state_dict(checkpoint)
+
+        if args.load_pretrain != "0":
+            _load_checkpoint_into_policy(args.load_pretrain)
         
         agent = algo.PPO(policy, args.clip_param, args.ppo_epoch,
                         args.num_mini_batch, args.value_loss_coef,
                         args.entropy_coef, lr=args.lr, eps=args.eps,
                         max_grad_norm=args.max_grad_norm)
+        
+        # Initialize Expert Predictor for knowledge distillation
+        expert_predictor = None
+        if args.use_supervised:
+            expert_predictor = ExpertPredictor(device=device, use_semantic_score=args.use_semantic_score)
 
         
     
         # Storage: 
         rollouts = GlobalRolloutStorage(args.num_local_steps,
-        # rollouts = GlobalRolloutStorage(50,
                                         num_scenes, observation_space.shape,
                                         action_space, 1,
-                                        es).to(device)
+                                        es,
+                                        hidden_size=768,
+                                        # hist_len=args.num_local_steps
+                                        use_history=args.use_history_policy
+                                        ).to(device)
         
         # load weights
         if args.load != "0":
-            print("Loading model {}".format(args.load))
-            logging.info("Loading model {}".format(args.load))
-            state_dict = torch.load(args.load,
-                                    map_location=lambda storage, loc: storage)
-            policy.load_state_dict(state_dict)
+            _load_checkpoint_into_policy(args.load)
 
         if args.eval:
             policy.eval()
-    
-        # Get local policy input
-        # local_input = np.concatenate((obs[:, :3, ...], obs[:, 4, ...][:, np.newaxis, ...]), axis=1)
-        # local_input = obs[:, :3, ...]
-        local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
-        local_input = torch.concat(local_input, axis=0)
-        rec_states = torch.zeros( num_scenes,
-                                      1)
-        # local_orientation = torch.zeros(num_scenes, 1).long()
-        # local_xy = torch.zeros(num_scenes, 2)
-        
-        # locs = local_pose.cpu().numpy()
-        # locs = full_pose.cpu().numpy()      # 使用全局pose
-        # for e in range(num_scenes):
-        #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)
-        #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
-            
+
+        rec_states = torch.zeros( num_scenes, 1)
         extras = torch.zeros(num_scenes, es)
-        # extras[:, 0] = local_orientation[:, 0]
-        # extras[:, 2] = local_orientation[:, 0]
-        # extras[:, :2] = local_xy[:]
-
-        rollouts.obs[0].copy_(local_input)   # 
-        rollouts.extras[0].copy_(extras)
-
-        # Run Local policy
+        
+        if args.use_history_policy:
+            # Get local policy input - 使用 ViT 编码当前全景图
+            # 获取 panorama_obs_all 并编码为特征
+            with torch.no_grad():
+                panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+                # panorama_obs_list[i] 是 dict，包含 'rgb', 'rgb_30', ... 等
+                # 转换为 tensor 并编码
+                # 获取角度特征
+                from src.policy_rl.panorama_model import get_all_point_angle_feature
+                ang_feats = get_all_point_angle_feature(policy.network.config.angle_feat_size, )
+                
+                # 编码每个环境的全景图
+                curr_pano_img_feats_list = []
+                curr_pano_ang_feats_list = []
+                for e in range(num_scenes):
+                    # 获取当前环境的全景图
+                    obs_dict = panorama_obs_list[e]
+                    # 提取 rgb 图像 (12 views)
+                    rgb_types = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
+                                'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
+                                'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
+                    images = []
+                    for rgb_type in rgb_types:
+                        img = obs_dict[rgb_type]
+                        images.append(img)
+                    # 转换为 tensor (12, H, W, 3)
+                    images = np.stack(images, axis=0)
+                    images = torch.from_numpy(images).float() / 255.0
+                    # 编码
+                    img_feats = policy.network.encoding(images.unsqueeze(0).to(device))
+                    curr_pano_img_feats_list.append(img_feats.squeeze(0))  # (12, 768)
+                    # 角度特征
+                    curr_pano_ang_feats_list.append(ang_feats.to(device))  # (12, 2)
+                
+                # 合并所有环境的特征
+                curr_pano_img_feats = torch.stack(curr_pano_img_feats_list, dim=0)  # (num_scenes, 12, 768)
+                curr_pano_ang_feats = torch.stack(curr_pano_ang_feats_list, dim=0)  # (num_scenes, 12, 2)
+                
+                # 将当前观测的特征存储到 rollouts (step 0)
+                rollouts.pano_img_feats[0] = curr_pano_img_feats
+                rollouts.pano_ang_feats[0] = curr_pano_ang_feats
+        else:
+            curr_pano_img_feats = None
+            curr_pano_ang_feats = None
+            local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
+            local_input = torch.concat(local_input, axis=0)
+            rollouts.obs[0].copy_(local_input)   # 
+            rollouts.extras[0].copy_(extras)
+        
         value, action, action_log_prob = \
             policy.act(
-                rollouts.obs[0],
-                # rollouts.rec_states[0],
-                # rollouts.masks[0],
-                extras=rollouts.extras[0],
-                deterministic=False
+                rollouts.obs[0] if not args.use_history_policy else None,  # 如果使用历史模型，初始时不使用当前观测作为输入
+                extras=extras,
+                deterministic=False,
+                curr_pano_img_feats=curr_pano_img_feats,
+                curr_pano_ang_feats=curr_pano_ang_feats,
+                hist_pano_img_feats=None,
+                hist_pano_ang_feats=None,
+                hist_actions=None,
+                hist_masks=None,
+                compute_hist_embed=False
             )
+        
         action = action.cpu().numpy()
     
     elif args.agent == "random":
@@ -219,10 +269,18 @@ def main():
             if args.visualize or args.print_images:
                 p_input["frontier_goal"] = goals[e]
                 p_input["short_time_goal"] = short_time_goals[e]
-    # transition:
+                
+    ## Env transition:
     # pred instance, get semantic masks and step env: 
     actions = []
     actions.append(action)
+    # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
+    expert_probs_batch = None
+    if args.use_supervised:
+        panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+        
+        expert_probs_batch = expert_predictor.predict(panorama_obs_list)
+            
     # print(f"action is {l_action}")
     obs_all, _, done, infos = envs.step_and_preprocess(action, vis_inputs_frames)
     action = torch.tensor(action)
@@ -306,14 +364,14 @@ def main():
         if done[0]:     # maps are new obs, sum of map will be small, and get negative reward
             l_reward = last_reward
         else:
-            # sequence_r =  torch.tensor([infos[e]['sequence_reward'] for e in range(num_scenes)]).to(last_reward.device)
-            cls_entropy_r =   torch.tensor([infos[e]['cls_etp'] for e in range(num_scenes)]).to(last_reward.device)
+            sequence_r =  args.reward_coeff_seq * torch.tensor([infos[e]['sequence_reward'] for e in range(num_scenes)]).to(last_reward.device)
+            cls_entropy_r = args.reward_coeff_ce *  torch.tensor([infos[e]['cls_etp'] for e in range(num_scenes)]).to(last_reward.device)
             # l_reward = last_reward + sequence_reward  #  + cls_entropy_r
             # l_reward = args.reward_coeff* 30 *maps.sum_of_orient_semantic_map()
             # l_reward = args.reward_coeff* maps.sum_of_explore_map()
             # l_reward = args.reward_coeff* maps.sum_of_orient_map()
             l_reward = args.reward_coeff* maps.sum_of_semantic_map()
-            step_other_reward += cls_entropy_r #  + sequence_r
+            step_other_reward += cls_entropy_r  + sequence_r
             
         # divesity reward
         # if args.use_diversity_reward:
@@ -327,20 +385,56 @@ def main():
             # for e in range(num_scenes):
             #     local_orientation[e] = int((locs[e, 2] + 180.0) / 5.)   # 
             #     local_xy[e] = torch.from_numpy(locs[e, :2][np.newaxis, :])
+            
+            if args.use_history_policy:
+                # 获取当前观测的全景特征
+                with torch.no_grad():
+                    panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+                    from src.policy_rl.panorama_model import get_all_point_angle_feature
+                    ang_feats = get_all_point_angle_feature(policy.network.config.angle_feat_size, )
+                    
+                    curr_pano_img_feats_list = []
+                    curr_pano_ang_feats_list = []
+                    for e in range(num_scenes):
+                        obs_dict = panorama_obs_list[e]
+                        rgb_types = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
+                                    'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
+                                    'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
+                        images = []
+                        for rgb_type in rgb_types:
+                            img = obs_dict[rgb_type]
+                            images.append(img)
+                        images = np.stack(images, axis=0)
+                        images = torch.from_numpy(images).float() / 255.0
+                        img_feats = policy.network.encoding(images.unsqueeze(0).to(device))
+                        curr_pano_img_feats_list.append(img_feats.squeeze(0))
+                        curr_pano_ang_feats_list.append(ang_feats.to(device))
+                    
+                    curr_pano_img_feats = torch.stack(curr_pano_img_feats_list, dim=0)
+                    curr_pano_ang_feats = torch.stack(curr_pano_ang_feats_list, dim=0)
                 
-            local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
-            local_input = torch.concat(local_input, axis=0)
+                local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
+                local_input = torch.concat(local_input, axis=0)
+            else:
+                curr_pano_img_feats = None
+                curr_pano_ang_feats = None
+                local_input = [torch.from_numpy(info['panorama_obs']).unsqueeze(0) for info in infos]
+                local_input = torch.concat(local_input, axis=0)
             # extras[:, 0] = local_orientation[:, 0]
             # extras[:, :2] = local_xy[:]
             # print(f"input sxtras: {extras}")
         # Add samples to local policy storage
-        reward = l_reward - last_reward + cls_entropy_r #+ sequence_r
+        reward = l_reward - last_reward + cls_entropy_r + sequence_r
         
         if args.agent == "rl":
+            
             rollouts.insert(
                     local_input, rec_states,      # state_t+1
                     action, action_log_prob, value,   # action, reward_t
-                    reward, l_masks, extras
+                    reward, l_masks, extras,
+                    expert_probs=expert_probs_batch,
+                    pano_img_feats=curr_pano_img_feats,
+                    pano_ang_feats=curr_pano_ang_feats
                 )
         last_reward = l_reward
 
@@ -376,39 +470,43 @@ def main():
                 
         # Sample next action
         if args.agent == "rl":
-            value, action, action_log_prob = \
-                policy.act(
-                    rollouts.obs[l_step + 1],
-                    # rollouts.rec_states[l_step + 1],
-                    # rollouts.masks[l_step + 1],
-                    # extras=rollouts.extras[l_step + 1],
-                    deterministic=False
-                )
-            action = action.cpu().numpy()
-        elif args.agent == "random":
-            action = np.random.randint(0, 12, num_scenes)
-
-        # full_map = maps.full_map
-        # vis_inputs = [{} for e in range(num_scenes)]
-        # for e, p_input in enumerate(vis_inputs):
-                
-        #     p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
-        #     p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
-        #     p_input['pose_pred'] = maps.get_all_pose()[e]
-
-        #     p_input['map_pred_full'] = full_map[e, 0, :, :].cpu().numpy()
-        #     p_input['exp_pred_full'] = full_map[e, 1, :, :].cpu().numpy()
-        #     p_input['pose_pred'] = maps.get_all_pose()[e]
             
-
-        #     if args.visualize or args.print_images:
-        #         local_map[e, -1, :, :] = 1e-5
-        #         p_input['sem_map_pred'] = local_map[e, 4:, :, :
-        #                                             ].argmax(0).cpu().numpy()
-        #         full_map[e, -1, :, :] = 1e-5
-        #         p_input['sem_map_pred_full'] = full_map[e, 4:, :, :
-        #                                                 ].argmax(0).cpu().numpy()                    
-        
+            if args.use_history_policy and rollouts.step > 0:
+                # 调用 act() 时传入历史特征
+                # 获取当前步之前的所有全景特征作为历史特征
+                hist_pano_img_feats, hist_pano_ang_feats = rollouts.get_all_pano_feats()
+                hist_pano_img_feats = hist_pano_img_feats.detach().transpose(1,0)  # (num_scenes, his_len, views, image_feat_size)
+                hist_pano_ang_feats = hist_pano_ang_feats.detach().transpose(1,0) 
+            
+                # 获取历史动作
+                hist_actions = rollouts.actions[:rollouts.step].transpose(1,0).squeeze(-1)  # (num_scenes, his_len)
+                
+                # 历史掩码（所有历史位置都是有效的）
+                hist_masks = torch.ones(num_scenes, rollouts.step, dtype=torch.bool, device=device)
+            else:
+                hist_pano_img_feats = None
+                hist_pano_ang_feats = None
+                hist_actions = None
+                hist_masks = None
+            # 这样会返回当前观测的特征，用于下一步
+            value, action, action_log_prob  = \
+                policy.act(
+                    rollouts.obs[l_step + 1] if not args.use_history_policy else None, 
+                    extras=None,
+                    deterministic=False,
+                    curr_pano_img_feats=curr_pano_img_feats,
+                    curr_pano_ang_feats=curr_pano_ang_feats,
+                    hist_pano_img_feats=hist_pano_img_feats,
+                    hist_pano_ang_feats=hist_pano_ang_feats,
+                    hist_actions=hist_actions,
+                    hist_masks=hist_masks,
+                    compute_hist_embed=False
+                )
+            
+            action = action.cpu().numpy()
+            
+        elif args.agent == "random":
+            action = np.random.randint(0, 12, num_scenes)        
         if args.agent == "frontier":  # must be after updating vis_inputs
             action, goals, short_time_goals = policy.get_actions(vis_inputs)        
             if args.visualize or args.print_images:
@@ -420,6 +518,17 @@ def main():
         # transition: next state
         # pred instance, get semantic masks and step env
         actions.append(action)
+        # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
+        expert_probs_batch = None
+        if args.use_supervised:
+            panorama_obs_list = [infos[i]['panorama_obs_all'] for i in range(num_scenes)]
+            
+            # Test: set the 3rd rgb (rgb_60, index 2 in angles list) of the first environment to all zeros
+            # panorama_obs_list[0]['rgb_60'] = np.zeros_like(panorama_obs_list[0]['rgb_60'])
+            # panorama_obs_list[0]['depth_60'] = np.zeros_like(panorama_obs_list[0]['depth_60'])
+            
+            expert_probs_batch = expert_predictor.predict(panorama_obs_list)
+            
         # print(f"action is {l_action}")
         obs_all, _, done, infos = envs.step_and_preprocess(action, vis_inputs_frames)    # if done ,envs.reset, obs are ones after reset
         action = torch.tensor(action)
@@ -504,19 +613,27 @@ def main():
         # if l_step == 100 - 1:
             if not args.eval and args.agent == "rl":
                 next_value = policy.get_value(
-                    rollouts.obs[-1],
+                    None,
                     # rollouts.rec_states[-1],
                     # rollouts.masks[-1],
-                    extras=None
+                    extras=None,
+                    curr_pano_img_feats=rollouts.pano_img_feats[-1],
+                    curr_pano_ang_feats=rollouts.pano_ang_feats[-1],
                 ).detach()
                 rollouts.compute_returns(next_value, args.use_gae,
                                            args.gamma, args.tau)
                 
-                value_loss, action_loss, dist_entropy = \
-                    agent.update(rollouts)
+                if args.use_supervised:
+                    value_loss, action_loss, dist_entropy, distill_loss = \
+                        agent.update_with_supervise(rollouts)
+                    distill_losses.append(distill_loss)
+                else:
+                    value_loss, action_loss, dist_entropy = \
+                        agent.update(rollouts)
                 value_losses.append(value_loss)
                 action_losses.append(action_loss)
                 dist_entropies.append(dist_entropy)
+                
             if args.agent == "rl":
                 rollouts.after_update()       # rollout的最后一个state是下一次initial state
             elif args.agent == "random":
@@ -557,6 +674,8 @@ def main():
                         np.mean(action_losses),
                         np.mean(dist_entropies))
                 ])
+                if args.use_supervised:
+                    log += " Distill Loss: {:.3f},".format(np.mean(distill_losses))
                 
             if done[0]:
                 if len(episode_rewards) > 0:

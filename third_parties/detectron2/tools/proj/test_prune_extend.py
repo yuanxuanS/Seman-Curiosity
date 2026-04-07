@@ -205,7 +205,11 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
-
+    
+    cfg.defrost()
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
+    cfg.freeze()
+    
     model = build_model(cfg)
     
     keep_class = { 
@@ -254,7 +258,6 @@ def main(args):
             model.extend_head_list(len(extend_class))
         else:
             model.extend_head(len(extend_class))
-    
     
     if args.eval_only:
         return do_test(cfg, model)

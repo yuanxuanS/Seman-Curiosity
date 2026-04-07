@@ -13,9 +13,6 @@ from ..utils.fmm_planner import FMMPlanner
 import json
 import gzip
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
-from PIL import Image
-import cv2
-
 
 class Sequence_Env(habitat.RLEnv):
     """The Semantic Curiosity environment class. The class is responsible
@@ -99,180 +96,10 @@ class Sequence_Env(habitat.RLEnv):
                     'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
         panorama_obs = [obs[obt][:,:, ::-1][None, ...] for obt in obs_type]
         self.info['panorama_obs'] = np.concatenate(panorama_obs, axis=0)
-
-
-        # self.get_navigable_map()
-        # 随机采集30个点，测试每个点的周围可行度
-        # type=  ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210', 'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
-        # save_dir = "./test_imgs"
-        # cnt = 0
-        # for i in range(10000):
-        #     if cnt >30:
-        #         break
-        #     loc = self._env.sim.pathfinder.get_random_navigable_point()
-        #     loc[1] = 0.03
-        #     if not self._env.sim.pathfinder.is_navigable(loc):
-        #         print(f"un navigable {i}")
-        #         continue
-        #     cnt += 1
-        #     nav_bool, rotation = self.is_direction_navigable(True)
-            
-        #     if sum(nav_bool) < 12:
-        #         print(f"has un navigable dir {i}")
-                
-        #     # else:
-        #     #     continue
-        #     # img
-        #     obs = self._env.sim.get_observations_at(loc, rotation)
-        #     obs.update(
-        #             self._env.task.sensor_suite.get_observations(
-        #                 observations=obs,
-        #                 episode=self._env.current_episode,
-        #                 action={'action': 0, 'action_args':{}},
-        #                 task=self._env.task,
-        #         ))
-        #     # 
-        #     processed_imgs = []
-        #     for e,t in enumerate(type):
-        #         # 转换颜色通道 RGB -> BGR
-        #         img = cv2.cvtColor(obs[t], cv2.COLOR_RGB2BGR)
-                
-        #         # 确定颜色：可行绿色，不可行红色
-        #         is_nav = nav_bool[e]
-        #         color = (0, 255, 0) if is_nav else (0, 0, 255)
-                
-        #         # 在子图上绘制文字标注：方向和结果
-        #         angle_text = t.replace('rgb_', '') if 'rgb_' in t else '0'
-        #         cv2.putText(img, f"Deg: {angle_text}", (10, 30), 
-        #                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        #         cv2.putText(img, f"Nav: {is_nav}", (10, 60), 
-        #                     cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-                
-        #         # 绘制边框以区分每张图
-        #         cv2.rectangle(img, (0, 0), (img.shape[1]-1, img.shape[0]-1), color, 4)
-                
-        #         processed_imgs.append(img)
-            
-        #     if len(processed_imgs) == 12:
-        #         # 每行 4 张图拼接
-        #         row1 = np.hstack(processed_imgs[0:4])
-        #         row2 = np.hstack(processed_imgs[4:8])
-        #         row3 = np.hstack(processed_imgs[8:12])
-                
-        #         # 垂直堆叠三行
-        #         combined_img = np.vstack([row1, row2, row3])
-                
-        #         # 在大图上方添加点位信息
-        #         final_img = cv2.copyMakeBorder(combined_img, 50, 0, 0, 0, cv2.BORDER_CONSTANT, value=[0,0,0])
-        #         cv2.putText(final_img, f"Point ID: {i}  Pos: {np.round(loc, 2)}", (20, 35), 
-        #                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-
-        #         # 保存大图
-        #         file_name = f"{save_dir}/point_{i}_all_directions.jpg"
-        #         cv2.imwrite(file_name, final_img)
-            
+        self.info['panorama_obs_all'] = obs
+        
         return [obs], self.info
     
-    def is_direction_navigable(self, get_rot=False):
-        '''
-        return:list, navigable bool of 12 direction
-        '''
-        # 1. 获取 Agent 当前状态
-        agent_state = self._env.sim.get_agent_state(0)
-        agent_pos = agent_state.position
-        # 将四元数转换为欧拉角，获取当前的偏航角 (Yaw)
-        # Habitat 使用的是右手法则，y轴向上
-        rot = quaternion.as_euler_angles(agent_state.rotation)
-        current_yaw = rot[1]  # 通常索引1是围绕y轴的旋转
-
-        navigable_list = []
-        img_list = []
-        radius = 0.25  # 检测半径
-        
-        # 2. 遍历 12 个方向 (360度 / 12 = 30度步长)
-        for i in range(12):
-            # 计算当前探测方向的角度 (弧度)
-            # 向左转意味着角度增加
-            angle = current_yaw + np.deg2rad(i * 30)
-            
-            # 计算在 XZ 平面上的偏移量
-            # 注意：Habitat 中 z 是向前/后，x 是左/右
-            dx = radius * np.sin(angle)
-            dz = radius * np.cos(angle)
-            
-            direction_navigable = True
-            
-            # 3. 在高度上下 0.3m 范围内进行检测
-            # 可以根据需要增加采样点，这里检测 [原高度-0.3, 原高度, 原高度+0.3]
-            for y_offset in np.arange(agent_pos[1]- 0.3, agent_pos[1] + 0.3, 0.1):
-                check_pos = np.array([
-                    agent_pos[0] + dx,
-                    agent_pos[1] + y_offset,
-                    agent_pos[2] + dz
-                ], dtype=np.float32)
-                
-                # 只要有一个高度不可通行，该方向即视为不可导航
-                if not self._env.sim.pathfinder.is_navigable(check_pos):
-                    direction_navigable = False
-                    break
-                
-            
-                
-            navigable_list.append(direction_navigable)
-        
-        if get_rot:
-            return navigable_list, agent_state.rotation
-        return navigable_list
-        
-    def get_navigable_map(self):
-        '''
-        agent_pos: array([x,y,z])
-        
-        '''
-        agent_pos = self._env.sim.get_agent_state(0).position
-        agent_height = agent_pos[1]
-        bounds_start, bounds_end = self._env.sim.pathfinder.get_bounds()     # same structure as agnet_pos
-        bds_x, bds_y, bds_z = bounds_start
-        bde_x, bde_y, bde_z = bounds_end
-        
-        # 定义网格步长
-        grid_size = 0.25
-        
-        # 2. 确定 X 和 Z 方向的采样点个数
-        x_range = np.arange(bds_x, bde_x, grid_size)
-        z_range = np.arange(bds_z, bde_z, grid_size)
-        
-        # 3. 遍历高度（从 agent 当前高度开始，按 0.1m 步长向上，这里演示 1.0m 范围）
-        # 注意：range 不支持浮点步长，需使用 np.arange
-        for agenth in np.arange(agent_pos[1]- 1.1, agent_pos[1] + 1.1, 0.1):
-            # 创建一个空白图像 (RGB)
-            # 宽度对应 X 轴，高度对应 Z 轴
-            img_w, img_h = len(x_range), len(z_range)
-            map_img = np.zeros((img_h, img_w, 3), dtype=np.uint8)
-                
-            for i, z in enumerate(z_range):
-                for j, x in enumerate(x_range):
-                    # 构造当前检测点
-                    pos = np.array([x, agenth, z], dtype=np.float32)
-                    
-                    # 4. 检查是否可导航
-                    is_nav = self._env.sim.pathfinder.is_navigable(pos)
-                    
-                    if is_nav:
-                        # 可行区域：蓝色 (R=0, G=0, B=255)
-                        map_img[i, j] = [0, 0, 255]
-                    else:
-                        # 不可行区域：红色 (R=255, G=0, B=0)
-                        map_img[i, j] = [255, 0, 0]
-            
-            # 5. 保存地图
-            # 将 numpy 数组转为 Image 对象
-            img = Image.fromarray(map_img)
-            # 文件命名包含高度，保留两位小数防止文件名非法
-            save_path = f"./nav_map_height_{agenth:.2f}.png"
-            img.save(save_path)
-            print(f"Saved: {save_path}")
-        
     def load_episode_loc(self):
         args = self.args
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
@@ -533,9 +360,10 @@ class Sequence_Env(habitat.RLEnv):
                     'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
                     'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
         panorama_obs = [obs_all[-1][obt][:,:,::-1][None, ...] for obt in obs_type]
+        self.info['panorama_obs_all'] = obs_all[-1]
         self.info['panorama_obs'] = np.concatenate(panorama_obs, axis=0)
         
-        self.pred_wp_heatmap(obs_all[-1])
+        # self.pred_wp_heatmap(obs_all[-1])
         # rgb = obs['rgb'].astype(np.uint8)
         # depth = obs['depth']
         # state = np.concatenate((rgb, depth), axis=2).transpose(2, 0, 1)

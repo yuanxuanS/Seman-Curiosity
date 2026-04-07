@@ -270,6 +270,20 @@ _MY_PROJ_SPLIT['proj'] = {
     "proj_al": ('proj/train', 'proj/annotations/labeled.json')
 }
 
+_MY_PROJ_SPLIT['embodied'] = {
+    'embodied_rand': ('embodied/train_rand', 'embodied/annotations/instances_train_rand.json'),
+    'embodied_heuristic': ('embodied/train_heuristic', 'embodied/annotations/instances_train_heuristic.json'),
+    'embodied_m3_rs': ('embodied_rs/train', 'embodied_rs/annotations/instances_train.json'),
+    'embodied_m3_rs2': ('embodied_rs2/train', 'embodied_rs2/annotations/instances_train.json'),
+    'embodied_m4_w8': ('embodied_m4_w8/train', 'embodied_m4_w8/annotations/instances_train.json'),
+    'embodied_val': ('embodied/val', 'embodied/annotations/instances_val.json'),
+    'embodied_m4_w8_woema': ('embodied_m4_w8_woema/train', 'embodied_m4_w8_woema/annotations/instances_train.json'),
+    'embodied_m4_w8_thr2_woema': ('embodied_m4_w8_thr2_woema/train', 'embodied_m4_w8_thr2_woema/annotations/instances_train.json'),
+    'embodied_m5_woema': ('embodied_m5_woema/train', 'embodied_m5_woema/annotations/instances_train.json'),
+    'embodied_m5_woema_thr6': ('embodied_m5_woema_thr6/train', 'embodied_m5_woema_thr6/annotations/instances_train.json'),
+    'embodied_scene': ('embodied_scene/train', 'embodied_scene/annotations/instances_train.json'),
+}
+
 _MY_PROJ_SPLIT['proj_clsag'] = {
     'proj_clsag_test': ('proj/test', 'proj/annotations_clsag/instances_test_clsag.json'),
     # 'proj_val': ('proj/val', 'proj/annotations/instances_val.json'),

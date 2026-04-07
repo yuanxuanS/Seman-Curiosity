@@ -4,8 +4,8 @@ import pickle
 from typing import Any, List, Union
 
 import numpy as np
-from dtw import dtw
-from fastdtw import fastdtw
+# from dtw import dtw
+# from fastdtw import fastdtw
 from habitat.config import Config
 from habitat.core.embodied_task import EmbodiedTask, Measure
 from habitat.core.registry import registry

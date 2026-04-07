@@ -1617,10 +1617,10 @@ Woodbine_best_loc = {
 }
 
 
-scene_name = "Woodbine"
+scene_name = "Wiconisco"
 save_json = f"./data_scene/visibles/{scene_name}_tploc.json"
 with open(save_json, "w") as f:
-    json.dump(Woodbine_best_loc, f)
+    json.dump(Wiconisco_best_loc, f)
     
 
 
@@ -1638,5 +1638,5 @@ with open(save_json, "w") as f:
 #         # print(step_num)  # 输出: 125
 #         rgb_input_info[step_num] = img_info
 
-# # print(rgb_input_info[1001])
+print(rgb_input_info[1001])
 

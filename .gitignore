@@ -13,6 +13,7 @@ third_parties/detectron2/logs
 third_parties/detectron2/output_al_proj
 
 third_parties/pyntcloud/
+models/vit_base/
 outputs/
 outputs_asample/
 images/
