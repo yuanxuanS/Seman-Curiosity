@@ -18,6 +18,14 @@ from src.policy_rl.baseline_frontier import Frontier
 import cv2
 import json
 
+try:
+    from memory_profiler import profile
+except Exception:
+    # Keep runtime behavior unchanged when memory_profiler is not installed.
+    def profile(func):
+        return func
+
+@profile
 def main():
     args = get_args()
     
@@ -242,6 +250,7 @@ def main():
             local_input = torch.concat(local_input, axis=0)
             rollouts.obs[0].copy_(local_input)   # 
             rollouts.extras[0].copy_(extras)
+            del local_input
         
         value, action, action_log_prob = \
             policy.act(
@@ -272,8 +281,6 @@ def main():
                 
     ## Env transition:
     # pred instance, get semantic masks and step env: 
-    actions = []
-    actions.append(action)
     # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
     expert_probs_batch = None
     if args.use_supervised:
@@ -436,6 +443,7 @@ def main():
                     pano_img_feats=curr_pano_img_feats,
                     pano_ang_feats=curr_pano_ang_feats
                 )
+            del local_input
         last_reward = l_reward
 
         # 
@@ -517,7 +525,6 @@ def main():
         
         # transition: next state
         # pred instance, get semantic masks and step env
-        actions.append(action)
         # Get expert_probs from ExpertPredictor using panorama_obs_all (batch inference)
         expert_probs_batch = None
         if args.use_supervised:
@@ -613,12 +620,12 @@ def main():
         # if l_step == 100 - 1:
             if not args.eval and args.agent == "rl":
                 next_value = policy.get_value(
-                    None,
+                    None if args.use_history_policy else rollouts.obs[-1],
                     # rollouts.rec_states[-1],
                     # rollouts.masks[-1],
                     extras=None,
-                    curr_pano_img_feats=rollouts.pano_img_feats[-1],
-                    curr_pano_ang_feats=rollouts.pano_ang_feats[-1],
+                    curr_pano_img_feats=rollouts.pano_img_feats[-1] if args.use_history_policy else None,
+                    curr_pano_ang_feats=rollouts.pano_ang_feats[-1] if args.use_history_policy else None,
                 ).detach()
                 rollouts.compute_returns(next_value, args.use_gae,
                                            args.gamma, args.tau)
@@ -721,7 +728,6 @@ def main():
     np.savez('{}/{}_episode_rewards.npz'.format(
             dump_dir, args.split), episode_reward=episode_rewards)
     
-    np.savez('actions.npz', actions=np.array(actions))
     if args.eval:
         print("Dumping eval details...")
         
