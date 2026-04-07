@@ -146,6 +146,21 @@ def main():
                             device = device,
                             use_history=args.use_history_policy
                             ).to(device)
+
+        def _load_checkpoint_into_policy(checkpoint_path):
+            print("Loading model {}".format(checkpoint_path))
+            logging.info("Loading model {}".format(checkpoint_path))
+            checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage)
+            if isinstance(checkpoint, dict):
+                if 'policy_state_dict' in checkpoint:
+                    policy.load_state_dict(checkpoint['policy_state_dict'])
+                else:
+                    policy.load_state_dict(checkpoint)
+            else:
+                policy.load_state_dict(checkpoint)
+
+        if args.load_pretrain != "0":
+            _load_checkpoint_into_policy(args.load_pretrain)
         
         agent = algo.PPO(policy, args.clip_param, args.ppo_epoch,
                         args.num_mini_batch, args.value_loss_coef,
@@ -171,11 +186,7 @@ def main():
         
         # load weights
         if args.load != "0":
-            print("Loading model {}".format(args.load))
-            logging.info("Loading model {}".format(args.load))
-            state_dict = torch.load(args.load,
-                                    map_location=lambda storage, loc: storage)
-            policy.load_state_dict(state_dict)
+            _load_checkpoint_into_policy(args.load)
 
         if args.eval:
             policy.eval()

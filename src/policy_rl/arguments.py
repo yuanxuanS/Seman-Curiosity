@@ -45,6 +45,9 @@ def get_args():
     parser.add_argument('--load', type=str, default="0",
                         help="""model path to load,
                                 0 to not reload (default: 0)""")
+    parser.add_argument('--load_pretrain', type=str, default="0",
+                help="""pretrained panorama_model checkpoint path from train_panorama_model.py,
+                    0 to not reload (default: 0)""")
     parser.add_argument('-v', '--visualize', type=int, default=0,
                         help="""1: Render the observation and
                                    the predicted semantic map,
