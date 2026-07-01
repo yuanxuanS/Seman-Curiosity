@@ -304,6 +304,17 @@ _MY_PROJ_SPLIT['embodied'] = {
     'embodied_testtrain': ('embodied_testtrain/train', 'embodied_testtrain/annotations/instances_train.json'),
     'embodied_testtrain_dl': ('embodied_testtrain/train', 'embodied_testtrain/annotations/instances_train_dl.json')
 }
+
+_MY_PROJ_SPLIT['sequence_real'] = {
+    'real_test': ('real/real_test', 'real/annotations/real_test.json'),
+    'real_train': ('real/real_train', 'real/annotations/real_train.json'),
+    'real_train_1': ('real/real_train', 'real/annotations/real_train_al.json'),
+    'real_train_2': ('real/real_train', 'real/annotations/real_train_al2.json'),
+    'real_train_frontier': ('real/real_train_frontier', 'real/annotations/real_train_frontier.json'),
+    'real_train_frontier_dl': ('real/real_train_frontier', 'real/annotations/real_train_frontier2.json'),
+    'real_train_frontier_dl2': ('real/real_train_frontier', 'real/annotations/real_train_frontier3.json'),
+}
+
 def register_proj(root):
     for dataset_name, splits_per_dataset in _MY_PROJ_SPLIT.items():
         for key, (image_root, json_file) in splits_per_dataset.items():
@@ -315,9 +326,11 @@ def register_proj(root):
                 os.path.join(root, image_root),     # img文件路径
             )
             
+            
 # True for open source;
-# Internally at fb, we register them elsewhere
-if __name__.endswith(".builtin"):
+# Internally at fb, we register them elsewhere.
+# Also allow running this file directly for local debugging.
+if __name__.endswith(".builtin") or __name__ == "__main__":
     # Assume pre-defined datasets live in `./datasets`.
     _root = os.getenv("DETECTRON2_DATASETS", "datasets")
     register_all_coco(_root)

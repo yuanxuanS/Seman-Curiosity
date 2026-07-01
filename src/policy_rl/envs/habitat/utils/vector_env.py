@@ -39,7 +39,7 @@ try:
 except ImportError:
     import multiprocessing as mp
     
-IS_SEQUENCE = True
+IS_SEQUENCE = False
 
 STEP_COMMAND = "step"
 RESET_COMMAND = "reset"

@@ -10,10 +10,29 @@ def merge_coco_and_reset_ann_ids(file_list, output_path):
     with open(file_list[0], 'r', encoding='utf-8') as f:
         merged_data = json.load(f)
     
+    # 统一处理 image id，避免不同文件之间发生冲突
+    used_image_ids = set()
+    image_id_map = {}
+
+    for image in merged_data.get('images', []):
+        old_image_id = image.get('id')
+        if old_image_id in used_image_ids:
+            new_image_id = max(used_image_ids) + 1 if used_image_ids else 0
+            while new_image_id in used_image_ids:
+                new_image_id += 1
+            image['id'] = new_image_id
+            image_id_map[old_image_id] = new_image_id
+            used_image_ids.add(new_image_id)
+        else:
+            used_image_ids.add(old_image_id)
+
     # 初始化全局标注计数器
     # 注意：我们先处理第一个文件已有的标注，重置它们的ID
     global_ann_id = 0
     for ann in merged_data.get('annotations', []):
+        old_image_id = ann.get('image_id')
+        if old_image_id in image_id_map:
+            ann['image_id'] = image_id_map[old_image_id]
         ann['id'] = global_ann_id
         global_ann_id += 1
 
@@ -32,12 +51,28 @@ def merge_coco_and_reset_ann_ids(file_list, output_path):
             print(f"警告: 跳过文件 {file_path}，原因: categories 不一致")
             continue
         
-        # 合并 images (假设图像ID已提前解决，不冲突)
-        merged_data['images'].extend(current_data.get('images', []))
+        # 合并 images，若 image id 冲突则重映射到新的全局 id
+        for image in current_data.get('images', []):
+            old_image_id = image.get('id')
+            if old_image_id in used_image_ids:
+                new_image_id = max(used_image_ids) + 1 if used_image_ids else 0
+                while new_image_id in used_image_ids:
+                    new_image_id += 1
+                image_id_map[old_image_id] = new_image_id
+                image = image.copy()
+                image['id'] = new_image_id
+                merged_data['images'].append(image)
+                used_image_ids.add(new_image_id)
+            else:
+                merged_data['images'].append(image)
+                used_image_ids.add(old_image_id)
         
         # 合并并重置 annotations 的 ID
         for ann in current_data.get('annotations', []):
             new_ann = ann.copy()
+            old_image_id = new_ann.get('image_id')
+            if old_image_id in image_id_map:
+                new_ann['image_id'] = image_id_map[old_image_id]
             new_ann['id'] = global_ann_id  # 分配全局唯一且连续的ID
             merged_data['annotations'].append(new_ann)
             global_ann_id += 1
@@ -52,6 +87,6 @@ def merge_coco_and_reset_ann_ids(file_list, output_path):
     print(f"最终标注总数 (Max ID): {global_ann_id}")
     print(f"结果已保存至: {output_path}")
 # 获取目录下所有 json 文件并排序
-json_dir = "/home/wpp/Seman-Curiosity/third_parties/detectron2/anno3"
+json_dir = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/real_data/frontier/annos"
 json_files = sorted([os.path.join(json_dir, f) for f in os.listdir(json_dir) if f.endswith('.json')])
-merge_coco_and_reset_ann_ids(json_files, 'final_merged_dataset4.json')
+merge_coco_and_reset_ann_ids(json_files, 'real_train_frontier.json')

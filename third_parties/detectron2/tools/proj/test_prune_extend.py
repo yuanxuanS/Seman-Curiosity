@@ -207,11 +207,15 @@ def main(args):
     cfg = setup(args)
     
     cfg.defrost()
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
+    # cfg.MODEL.ROI_HEADS.NUM_CLASSES = 11
     cfg.freeze()
     
     model = build_model(cfg)
-    
+    checkpointer = DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR)
+    checkpointer.resume_or_load(
+        cfg.MODEL.WEIGHTS, resume=args.resume
+    )
+
     keep_class = { 
     
     # 2: "car",       # key为COCO原数据类别中的id, 顺序对应类别的顺序
@@ -220,10 +224,22 @@ def main(args):
     # 10: "fire hydrant",
     
     
-    56: "chair",
+    # 56: "chair",
+    # 57: "couch",
+    # 59: "bed",
+    # 61: "toilet",
+    # 72: "refrigerator",
+
+    39: "bottle",
+    40: "wine glass",
+    41: "cup",
     57: "couch",
-    59: "bed",
+    58: "potted plant",
+    60: "dining table",
     61: "toilet",
+    62: "tv",
+    68: "microwave",
+    71: "sink",
     72: "refrigerator",
 }   
     extend_class = {    #把旧的n个类放在最前面，中间插入m 个新类，最后把旧的背景权重挪到第 n+m的位置。
@@ -241,10 +257,7 @@ def main(args):
         
     logger.info("Model:\n{}".format(model))
     # if args.eval_only:
-    checkpointer = DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR)
-    checkpointer.resume_or_load(
-        cfg.MODEL.WEIGHTS, resume=args.resume
-    )
+    
         
     if args.prune:
         if cfg.MODEL.ROI_HEADS.NAME == "CascadeROIHeads":

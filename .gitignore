@@ -11,6 +11,7 @@ third_parties/detectron2/output
 third_parties/detectron2/output_al
 third_parties/detectron2/logs
 third_parties/detectron2/output_al_proj
+third_parties/detectron2/test*
 
 third_parties/pyntcloud/
 models/vit_base/
@@ -39,5 +40,6 @@ __pycache__
 *.npz
 *.pkl
 *.cpython-38.pyc
+*.pt
 
 heatmap.py

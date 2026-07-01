@@ -14,6 +14,13 @@ import json
 import gzip
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 
+# try:
+#     from memory_profiler import profile
+# except Exception:
+#     # Keep runtime behavior unchanged when memory_profiler is not installed.
+#     def profile(func):
+#         return func
+
 class Sequence_Env(habitat.RLEnv):
     """The Semantic Curiosity environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
@@ -56,6 +63,7 @@ class Sequence_Env(habitat.RLEnv):
         self.frameid=0
 
         
+    # @profile
     def reset(self):
         """Resets the environment to a new episode.
                 reset traversible initial location
@@ -100,6 +108,7 @@ class Sequence_Env(habitat.RLEnv):
         
         return [obs], self.info
     
+    # @profile
     def load_episode_loc(self):
         args = self.args
         self.scene_path = self.habitat_env.sim.config.sim_cfg.scene_id
@@ -135,6 +144,7 @@ class Sequence_Env(habitat.RLEnv):
             ))
         return obs
     
+    # @profile
     def initial_possible_loc(self):
         args = self.args
         
@@ -259,6 +269,7 @@ class Sequence_Env(habitat.RLEnv):
             orients.append(ort)
         return observations, dones, sensor_poses, orients
 
+    # @profile
     def wrap_act(self, act, vis_info, save=False):
         ''' wrap action, get obs if video_option '''
         
@@ -306,6 +317,7 @@ class Sequence_Env(habitat.RLEnv):
             self.frameid += 1
         return obs, done, sensor_pose, orient
 
+    # @profile
     def step(self, action):
         """Function to take an action in the environment.
 
@@ -376,6 +388,7 @@ class Sequence_Env(habitat.RLEnv):
         # return state, 0., done, self.info
         return obs_all, dones_all, self.info
     
+    # @profile
     def save_data(self, observations, frameid=0):
         args = self.args
         dump_dir = "{}/dump/{}/".format(args.dump_location,
@@ -384,8 +397,8 @@ class Sequence_Env(habitat.RLEnv):
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)
             
-        obs_save = {k:v for k,v in observations.items() if k in ['rgb', 'depth', 'semantic', 'gps', 'compass', 'bbsgt', 'position', 'bbspred']}
-        # obs_save = observations
+        # obs_save = {k:v for k,v in observations.items() if k in ['rgb', 'depth', 'semantic', 'gps', 'compass', 'bbsgt', 'position', 'bbspred']}
+        obs_save = observations
         paths = save_obs(data_dir, self.rank, self.episode_no, obs_save, self.timestep, frameid)
         return paths
     

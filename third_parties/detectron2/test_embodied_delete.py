@@ -58,8 +58,8 @@ def delete_random_images_from_coco(input_json, output_json, n_to_delete):
     print(f"随机删除的前 3 张图示例: {removed_names[:3]}")
 
 # --- 配置 ---
-original_json = "./datasets/embodied_testtrain/annotations/instances_train.json" # 输入文件
-new_subset_json = "./datasets/embodied_testtrain/annotations/instances_train_dl.json" # 输出文件
-N = 385 # 想要随机删除 10 张图的标注
+original_json = "./datasets/real/annotations/real_train_frontier2.json" # 输入文件
+new_subset_json = "./datasets/real/annotations/real_train_frontier3.json" # 输出文件
+N = 5 # 想要随机删除 10 张图的标注
 
 delete_random_images_from_coco(original_json, new_subset_json, N)

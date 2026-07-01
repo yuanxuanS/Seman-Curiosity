@@ -395,6 +395,24 @@ EMBODIED_CATEGORIES = [
     {"color": [119, 11, 32], "isthing": 1, "id": 4, "name": "refrigerator"},
 ]
 
+REAL_CATEGORIES = [
+    # {"color": [0, 0, 142], "isthing": 1, "id": 0, "name": "car"}, # proj_prune
+    
+    {"color": [220, 20, 60], "isthing": 1, "id": 0, "name": "bottle"},
+    {"color": [0, 0, 230], "isthing": 1, "id": 1, "name": "wine glass"},
+    {"color": [142, 108, 45], "isthing": 1, "id": 2, "name": "cup"},
+    {"color": [100, 170, 30], "isthing": 1, "id": 3, "name": "chair"},
+    {"color": [119, 11, 32], "isthing": 1, "id": 4, "name": "couch"},
+    {"color": [0, 0, 142], "isthing": 1, "id": 5, "name": "potted plant"},
+    {"color": [106, 0, 228], "isthing": 1, "id": 6, "name": "dining table"},
+    {"color": [0, 60, 100], "isthing": 1, "id": 7, "name": "toilet"},
+    {"color": [120, 166, 157], "isthing": 1, "id": 8, "name": "tv"},
+    {"color": [110, 76, 0], "isthing": 1, "id": 9, "name": "microwave"},
+    {"color": [174, 57, 255], "isthing": 1, "id": 10, "name": "sink"},
+    {"color": [199, 100, 0], "isthing": 1, "id": 11, "name": "refrigerator"},
+
+]
+
 def get_custom_metadata(dataset_name):
     if dataset_name == "proj":
         thing_ids = [k["id"] for k in PROJ_CATEGORIES]
@@ -420,6 +438,15 @@ def get_custom_metadata(dataset_name):
         thing_ids = [k["id"] for k in EMBODIED_CATEGORIES]
         thing_colors = [k["color"] for k in EMBODIED_CATEGORIES]
         thing_classes = [k["name"] for k in EMBODIED_CATEGORIES]
+        ret = {
+            # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
+            "thing_classes": thing_classes,
+            "thing_colors": thing_colors,
+        }
+    elif dataset_name == "sequence_real":
+        thing_ids = [k["id"] for k in REAL_CATEGORIES]
+        thing_colors = [k["color"] for k in REAL_CATEGORIES]
+        thing_classes = [k["name"] for k in REAL_CATEGORIES]
         ret = {
             # "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
             "thing_classes": thing_classes,

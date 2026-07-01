@@ -26,7 +26,7 @@ import os
 coco_categories_mapping = {
     56: 0,  # chair
     57: 1,  # couch
-    58: 2,  # potted plant
+    # 58: 2,  # potted plant
     59: 3,  # bed
     61: 4,  # toilet
     72: 9,  # refrigerator
@@ -149,13 +149,16 @@ if __name__ == "__main__":
 
     
     save_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/images/gibson/Forkland_pred"
-    base_dir = f"/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_env5/"
+    base_dir = f"/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/sequence6-6-1_vis/"
+    save_pth = base_dir + "pred_imgs"
+    os.makedirs(save_pth, exist_ok=True)
     data_pth = base_dir + "episodes_data"
 
-    sampler = SampleLoader(data_pth)
-    inputs = sampler.get_env_episode_and_steps_dense_list()     
+    sampler = SampleLoader(data_pth, glbstep=True)
+    # inputs = sampler.get_env_episode_and_steps_dense_list() 
+    inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)      
 
-    detector =  "maskrcnn-segany"       # "segany"     # "maskrcnn"       #
+    detector =  "maskrcnn"       # "segany"     # "maskrcnn"       #
     if "maskrcnn" in detector:
         args = get_args()
         sem_pred = SemanticPredMaskRCNN(args)
@@ -170,172 +173,178 @@ if __name__ == "__main__":
         
         
     
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    dino, val_preprocess = OriAny_pred(device)
-    augment = True
-    mask_and_center = False
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # dino, val_preprocess = OriAny_pred(device)
+    # augment = True
+    # mask_and_center = False
     
-    from env_orients.Cosmos_epi2 import gt_orients, No, ambig, toilet
+    # from env_orients.Cosmos_epi2 import gt_orients, No, ambig, toilet
 
-    env = 0  # 每个环境都是 0
-    eps = [2, 3, 4, 5]
+    # env = 0  # 每个环境都是 0
+    # eps = [2, 3, 4, 5]
     preds = []
-    for ep in eps:
-        for step in range(500):      # need long time
-            rgb = sampler.get_sample(env, ep, step, "rgb").data
-            instances_gt = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
+    
+    
+
+    for env, ep, glbstep, step in zip(inputs[0], inputs[1], inputs[2], inputs[3]):
+    # for ep in eps:
+    #     for step in range(500):      # need long time
+        rgb = sampler.get_sample(env, ep,step, "rgb", glbstep ).data
+        # instances_gt = sampler.get_sample(env, ep, step, "bbsgt").get_bbs_as_gt()
+        
+        # rgb_small = cv2.resize(rgb, (256, 256), interpolation=cv2.INTER_LINEAR)
+        rgb_small = rgb
+        
+        # predict and segment by detector
+        if detector == "maskrcnn":
+            _, _, instance = sem_pred.get_prediction(rgb_small, return_instance=True)
+            instance = filter_instance(instance)
+        elif detector == "segany":
+            masks, boxes_filt, pred_phrases = pred_segment(seg_args, rgb_small, model, predictor, (env, ep, step), return_anno=False, return_per=True)
+            instance = convert_to_instance(rgb_small, masks, boxes_filt, pred_phrases)
+        elif detector == "maskrcnn-segany":
+            _, _, instance = sem_pred.get_prediction(rgb_small, return_score=False, return_instance=True)
+            instance = filter_instance(instance)
+            instance = segment_by_segany(instance, seg_args, rgb_small, model, predictor, (env, ep, step), return_anno=False, return_per=True)
+        
+        
+        
+        if len(instance) > 0:
+            preds.append([ep, env, step])
             
-            rgb_small = cv2.resize(rgb, (256, 256), interpolation=cv2.INTER_LINEAR)
+            visualizer = Visualizer(
+                                deepcopy(rgb_small),
+                                metadata,
+                                instance_mode=ColorMode.IMAGE,
+                            )
+            frame = visualizer.draw_instance_predictions(
+                                predictions=instance.to("cpu"),
+                            ).get_image()
+            cv2.imwrite(save_pth+f"/env_{env}_ep{ep}_gl{glbstep}_step{step}.png", frame)
+            continue
             
-            # predict and segment by detector
-            if detector == "maskrcnn":
-                _, _, instance = sem_pred.get_prediction(rgb_small, return_score=False, return_instance=True)
-                instance = filter_instance(instance)
-            elif detector == "segany":
-                masks, boxes_filt, pred_phrases = pred_segment(seg_args, rgb_small, model, predictor, (env, ep, step), return_anno=False, return_per=True)
-                instance = convert_to_instance(rgb_small, masks, boxes_filt, pred_phrases)
-            elif detector == "maskrcnn-segany":
-                _, _, instance = sem_pred.get_prediction(rgb_small, return_score=False, return_instance=True)
-                instance = filter_instance(instance)
-                instance = segment_by_segany(instance, seg_args, rgb_small, model, predictor, (env, ep, step), return_anno=False, return_per=True)
-            
-            
-            
-            if len(instance) > 0:
-                preds.append([ep, env, step])
+            pred_cls = instance.pred_classes
+            pred_masks = instance.pred_masks
+            pred_boxes = instance.pred_boxes
+            gt_orient = gt_orients[step]
+            # 
+            for i, cls_id in enumerate(pred_cls):
                 
-                visualizer = Visualizer(
-                                    deepcopy(rgb_small),
-                                    metadata,
-                                    instance_mode=ColorMode.IMAGE,
-                                )
-                frame = visualizer.draw_instance_predictions(
-                                    predictions=instance.to("cpu"),
-                                ).get_image()
-                # cv2.imwrite(save_pth+f"/maskrcnn/ep{ep}_{step}.png", frame)
-                
-                pred_cls = instance.pred_classes
-                pred_masks = instance.pred_masks
-                pred_boxes = instance.pred_boxes
-                gt_orient = gt_orients[step]
-                # 
-                for i, cls_id in enumerate(pred_cls):
+                if augment:     # rembg库抠图， 多物体时可能漏掉？； 原图和抠图后
+                    mask_ = pred_masks[i].cpu().numpy()[:, :, None]
+                    rgb_obj = rgb_small * mask_
                     
-                    if augment:     # rembg库抠图， 多物体时可能漏掉？； 原图和抠图后
-                        mask_ = pred_masks[i].cpu().numpy()[:, :, None]
-                        rgb_obj = rgb_small * mask_
-                        
-                        # rgb_ = Image.fromarray(rgb_obj).convert('RGBA')
-                        rgb_ = np.concatenate([rgb_obj, (mask_*255).astype(np.uint8)],axis=-1)
-                        # new_alpha = np.where(mask_, 0, 1)
-                        # rgb_ = np.array(rgb_)
-                        # rgb_[:, :, 3] = new_alpha[:, :, 0]
-                        rgb_ = Image.fromarray(rgb_)
+                    # rgb_ = Image.fromarray(rgb_obj).convert('RGBA')
+                    rgb_ = np.concatenate([rgb_obj, (mask_*255).astype(np.uint8)],axis=-1)
+                    # new_alpha = np.where(mask_, 0, 1)
+                    # rgb_ = np.array(rgb_)
+                    # rgb_[:, :, 3] = new_alpha[:, :, 0]
+                    rgb_ = Image.fromarray(rgb_)
 
-                        rm_bkg_img = background_preprocess_detector(rgb_, True)  # 
-                        angles = get_3angle_infer_aug(rgb_, rm_bkg_img, dino, val_preprocess, device)  # maskrcnn和SegmentAnything都参与投票
-                        rgb_obj = np.asarray(rm_bkg_img, dtype='float')[:, :, :3]
-                    else:
-                        mask_ = pred_masks[i].cpu().numpy()[:, :, None]
-                        rgb_obj = rgb_small * mask_
-                        # rgb with mask and centerize 
-                        
-                        rgb_img = Image.fromarray(rgb_obj).convert('RGB')
-                        angles = get_3angle(rgb_img, dino, val_preprocess, device)
+                    rm_bkg_img = background_preprocess_detector(rgb_, True)  # 
+                    angles = get_3angle_infer_aug(rgb_, rm_bkg_img, dino, val_preprocess, device)  # maskrcnn和SegmentAnything都参与投票
+                    rgb_obj = np.asarray(rm_bkg_img, dtype='float')[:, :, :3]
+                else:
+                    mask_ = pred_masks[i].cpu().numpy()[:, :, None]
+                    rgb_obj = rgb_small * mask_
+                    # rgb with mask and centerize 
+                    
+                    rgb_img = Image.fromarray(rgb_obj).convert('RGB')
+                    angles = get_3angle(rgb_img, dino, val_preprocess, device)
 
-                    azimuth     = float(angles[0])
-                    polar       = float(angles[1])
-                    rotation    = float(angles[2])
-                    confidence  = float(angles[3])
+                azimuth     = float(angles[0])
+                polar       = float(angles[1])
+                rotation    = float(angles[2])
+                confidence  = float(angles[3])
 
-                    if gt_orient == No:
-                        text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, No instance in {step}"
-                    elif gt_orient == ambig:
-                        text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, Ambiguous instance in step {step}"
-                    elif gt_orient == toilet:
-                        text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, toilet instance in step {step}"
-                    else:
-                        gt_orient = [gt_orient] if not isinstance(gt_orient, list) else gt_orient
-                        if len(gt_orient) >= len(pred_cls):
-                            if gt_orient[i] != ambig and gt_orient[i] != toilet:
-                                error = angle_diff(float(gt_orient[i]), azimuth)
-                                text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, error: {error:.2f} in step {step}"
-                            else:
-                                text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, in step {step}"
+                if gt_orient == No:
+                    text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, No instance in {step}"
+                elif gt_orient == ambig:
+                    text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, Ambiguous instance in step {step}"
+                elif gt_orient == toilet:
+                    text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, toilet instance in step {step}"
+                else:
+                    gt_orient = [gt_orient] if not isinstance(gt_orient, list) else gt_orient
+                    if len(gt_orient) >= len(pred_cls):
+                        if gt_orient[i] != ambig and gt_orient[i] != toilet:
+                            error = angle_diff(float(gt_orient[i]), azimuth)
+                            text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, error: {error:.2f} in step {step}"
                         else:
                             text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, in step {step}"
-                            
-                    position = (10, 50)    # 左下角坐标
-                    font = cv2.FONT_HERSHEY_SIMPLEX  # 字体类型
-                    font_scale = 0.5       # 字体大小
-                    color = (0, 255, 0)    # BGR格式颜色（绿色）
-                    thickness = 2          # 线条粗细
-                    rgb_obj_big = cv2.resize(rgb_obj, (640, 640), interpolation=cv2.INTER_LINEAR)
-                    cv2.putText(rgb_obj_big, text, position, font, font_scale, color, thickness)
-                    pth = save_pth+f"/{detector}"
-                    os.makedirs(pth, exist_ok=True)
-                    cv2.imwrite(pth+f"/ep{ep}_step{step}_obj{i}_cls{int(cls_id)}_oriany_aug2_b.png", rgb_obj_big)
-                    
-                    if mask_and_center:
-                        h, w = rgb_obj.shape[:2]
-                        if mask_.sum() / (h*w) < 1/9:
-                            # resize and center object
-                            boxes_ = pred_boxes.tensor[i].cpu().numpy()
-                            x1, y1, x2, y2 = boxes_
-                            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                            object_region = rgb_obj[y1:y2, x1:x2]
-                            bw, bh = x2 - x1, y2 - y1
-                            
-                            # 计算放大比例 (放大至图像高度的一半)
-                            scale_factor = min(0.5 * h / bh, 0.5 * w / bw)
-                            new_h = int(bh * scale_factor)
-                            new_w = int(bw * scale_factor)
-                            
-                            # 
-                            object_mask = mask_[y1:y2, x1:x2].astype('float')[:, :, 0]
-                            object_mask_resized = cv2.resize(object_mask, (new_w, new_h)).astype('bool')
-                            #  放大物体
-                            
-                            resized_object = cv2.resize(object_region, (new_w, new_h), 
-                                                        interpolation=cv2.INTER_CUBIC)
-                            #  创建居中位置
-                            result = np.ones_like(rgb_obj)*255  # 纯黑背景
-                            center_x = (w - new_w) // 2
-                            center_y = (h - new_h) // 2
-                            # 合成图像
-                            result[center_y:center_y+new_h, center_x:center_x+new_w][object_mask_resized] =  resized_object[object_mask_resized]
-                            
-                            rgb_resized_img = Image.fromarray(result).convert('RGB')
-                            angles_resized = get_3angle(rgb_resized_img, dino, val_preprocess, device)
+                    else:
+                        text = f"azimuth:{azimuth:.2f}, score:{confidence:.2f}, in step {step}"
+                        
+                position = (10, 50)    # 左下角坐标
+                font = cv2.FONT_HERSHEY_SIMPLEX  # 字体类型
+                font_scale = 0.5       # 字体大小
+                color = (0, 255, 0)    # BGR格式颜色（绿色）
+                thickness = 2          # 线条粗细
+                rgb_obj_big = cv2.resize(rgb_obj, (640, 640), interpolation=cv2.INTER_LINEAR)
+                cv2.putText(rgb_obj_big, text, position, font, font_scale, color, thickness)
+                pth = save_pth+f"/{detector}"
+                os.makedirs(pth, exist_ok=True)
+                cv2.imwrite(pth+f"/ep{ep}_step{step}_obj{i}_cls{int(cls_id)}_oriany_aug2_b.png", rgb_obj_big)
+                
+                if mask_and_center:
+                    h, w = rgb_obj.shape[:2]
+                    if mask_.sum() / (h*w) < 1/9:
+                        # resize and center object
+                        boxes_ = pred_boxes.tensor[i].cpu().numpy()
+                        x1, y1, x2, y2 = boxes_
+                        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                        object_region = rgb_obj[y1:y2, x1:x2]
+                        bw, bh = x2 - x1, y2 - y1
+                        
+                        # 计算放大比例 (放大至图像高度的一半)
+                        scale_factor = min(0.5 * h / bh, 0.5 * w / bw)
+                        new_h = int(bh * scale_factor)
+                        new_w = int(bw * scale_factor)
+                        
+                        # 
+                        object_mask = mask_[y1:y2, x1:x2].astype('float')[:, :, 0]
+                        object_mask_resized = cv2.resize(object_mask, (new_w, new_h)).astype('bool')
+                        #  放大物体
+                        
+                        resized_object = cv2.resize(object_region, (new_w, new_h), 
+                                                    interpolation=cv2.INTER_CUBIC)
+                        #  创建居中位置
+                        result = np.ones_like(rgb_obj)*255  # 纯黑背景
+                        center_x = (w - new_w) // 2
+                        center_y = (h - new_h) // 2
+                        # 合成图像
+                        result[center_y:center_y+new_h, center_x:center_x+new_w][object_mask_resized] =  resized_object[object_mask_resized]
+                        
+                        rgb_resized_img = Image.fromarray(result).convert('RGB')
+                        angles_resized = get_3angle(rgb_resized_img, dino, val_preprocess, device)
 
-                            azimuth_resized     = float(angles_resized[0])
-                            polar_resized       = float(angles_resized[1])
-                            rotation_resized    = float(angles_resized[2])
-                            confidence_resized  = float(angles_resized[3])
+                        azimuth_resized     = float(angles_resized[0])
+                        polar_resized       = float(angles_resized[1])
+                        rotation_resized    = float(angles_resized[2])
+                        confidence_resized  = float(angles_resized[3])
 
-                            if gt_orient == No:
-                                text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, No instance in {step}"
-                            elif gt_orient == ambig:
-                                text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, Ambiguous instance in step {step}"
-                            elif gt_orient == toilet:
-                                text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, toilet instance in step {step}"
-                            else:
-                                gt_orient = [gt_orient] if not isinstance(gt_orient, list) else gt_orient
-                                if len(gt_orient) >= len(pred_cls):
-                                    if gt_orient[i] != ambig and gt_orient[i] != toilet:
-                                        error = angle_diff(float(gt_orient[i]), azimuth_resized)
-                                        text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, error: {error:.2f} in step {step}"
-                                    else:
-                                        text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, in step {step}"
+                        if gt_orient == No:
+                            text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, No instance in {step}"
+                        elif gt_orient == ambig:
+                            text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, Ambiguous instance in step {step}"
+                        elif gt_orient == toilet:
+                            text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, toilet instance in step {step}"
+                        else:
+                            gt_orient = [gt_orient] if not isinstance(gt_orient, list) else gt_orient
+                            if len(gt_orient) >= len(pred_cls):
+                                if gt_orient[i] != ambig and gt_orient[i] != toilet:
+                                    error = angle_diff(float(gt_orient[i]), azimuth_resized)
+                                    text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, error: {error:.2f} in step {step}"
                                 else:
                                     text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, in step {step}"
-                                    
-                            position = (10, 50)    # 左下角坐标
-                            font = cv2.FONT_HERSHEY_SIMPLEX  # 字体类型
-                            font_scale = 0.5       # 字体大小
-                            color = (0, 255, 0)    # BGR格式颜色（绿色）
-                            thickness = 2          # 线条粗细
-                            rgb_obj_resized_big = cv2.resize(result, (640, 640), interpolation=cv2.INTER_LINEAR)
-                            cv2.putText(rgb_obj_resized_big, text_rsz, position, font, font_scale, color, thickness)
-                            cv2.imwrite(save_pth+f"/maskrcnn/ep{ep}_{step}_oriany_resized_white.png", rgb_obj_resized_big)
+                            else:
+                                text_rsz = f"azimuth:{azimuth_resized}, score:{confidence_resized:.2f}, in step {step}"
+                                
+                        position = (10, 50)    # 左下角坐标
+                        font = cv2.FONT_HERSHEY_SIMPLEX  # 字体类型
+                        font_scale = 0.5       # 字体大小
+                        color = (0, 255, 0)    # BGR格式颜色（绿色）
+                        thickness = 2          # 线条粗细
+                        rgb_obj_resized_big = cv2.resize(result, (640, 640), interpolation=cv2.INTER_LINEAR)
+                        cv2.putText(rgb_obj_resized_big, text_rsz, position, font, font_scale, color, thickness)
+                        cv2.imwrite(save_pth+f"/maskrcnn/ep{ep}_{step}_oriany_resized_white.png", rgb_obj_resized_big)
     print(preds)

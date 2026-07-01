@@ -11,10 +11,14 @@ import math
 import time
 from torchvision.transforms import v2
 import torchvision
-def build_feature_extractor(model_name, device, checkpoint_file=None):
+import torchvision.transforms.functional as F
+import torch.nn.functional as F2
+from typing import Callable, Optional
+from torch import Tensor
+def build_feature_extractor(model_name, device, checkpoint_file=''):
     """使用 timm 库加载 ResNet 或 ViT 模型"""
     
-    checkpoint_file = '/home/wpp/Seman-Curiosity/models/vit_base/pytorch_model.bin'
+    checkpoint_file = '/home/wpp/Semantic-Curiosity/Semantic-Curiosity/models/vit_base/pytorch_model.bin'
     # 使用 timm 库创建模型 (支持 ResNet152, ViT 等)
     model = timm.create_model(model_name, pretrained=False).to(device)
     if checkpoint_file is not None:
@@ -27,7 +31,7 @@ def build_feature_extractor(model_name, device, checkpoint_file=None):
     # 图像预处理配置
     config = resolve_data_config({}, model=model)
     img_transforms = create_transform(**config)
-
+    # img_transforms = []
     return model, img_transforms, device
 
 
@@ -37,7 +41,7 @@ def process_features(args, device):
     torch.set_grad_enabled(False)
     model, img_transforms, device = build_feature_extractor(args.model_name, device,args.checkpoint_file)
     
-    data_pth = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test_test/episodes_data"
+    data_pth = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/test_test/episodes_data"
     # "outputs_asample/imgs/test5_env1/rgb_all_data"
     sampler = SampleLoader(data_pth, glbstep=True)
     # inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
@@ -74,34 +78,63 @@ def process_features(args, device):
     fts = torch.concat(fts, 0)
     return fts
 
-def angle_feature(heading, angle_feat_size):
-    return np.array(
+# def angle_feature(heading, angle_feat_size):
+#     return np.array(
+#         [math.sin(heading), math.cos(heading), ] * (angle_feat_size // 2),
+#         dtype=np.float32)
+def angle_feature(heading: float , angle_feat_size: int):
+    return torch.tensor(
         [math.sin(heading), math.cos(heading), ] * (angle_feat_size // 2),
-        dtype=np.float32)
-    
-def get_point_angle_feature(angle_feat_size, baseViewId=0, ):
-    feature = np.empty((12, angle_feat_size), np.float32)
-    
+        dtype=torch.float32)
 
+def get_point_angle_feature(angle_feat_size: int, baseViewId: int = 0) -> torch.Tensor:
+    """ 用 List + stack 的方式重写，彻底杜绝 Unsupported value kind: Tensor 报错 """
+    
+    # 1. 声明一个纯 Python 列表作为临时容器 (TorchScript 会将其识别为 List[Tensor])
+    feature_list = []
     
     angle_interval = math.radians(30)
-    # 3. 基础参考航向（通常是当前agent的朝向） [cite: 180]
     base_heading = (baseViewId % 12) * angle_interval
     
     for ix in range(12):
-
-        # 相对当前状态的偏移量即为 ix * 30度 
         inferred_heading = base_heading + (ix * angle_interval)
-        # 计算相对于基准航向的相对角度 [cite: 178]
         rel_heading = inferred_heading - base_heading
         
-
-        # 5. 调用原始编码函数生成高维特征 [cite: 177]
-        feature[ix, :] = angle_feature(rel_heading, angle_feat_size)
+        # 2. 🌟 核心修改：调用你已经重写为纯 Torch 的 angle_feature 函数
+        # 假设它返回的是一个形状为 (angle_feat_size,) 的 1D Tensor
+        row_feature = angle_feature(rel_heading, angle_feat_size)
         
+        # 3. 直接 append 进列表，这在静态图中是非常安全且高效的
+        feature_list.append(row_feature)
+        
+    # 4. 🌟 完美的终点：在第 0 维（行方向）将 12 个 1D Tensor 堆叠为一个 2D Tensor
+    # 它的效果和 np.empty((12, angle_feat_size)) 配合切片赋值完全一模一样！
+    feature = torch.stack(feature_list, dim=0)
+    
     return feature
 
-def get_all_point_angle_feature(angle_feat_size,):
+# def get_point_angle_feature(angle_feat_size: int, baseViewId: int=0, ):
+#     # feature = np.empty((12, angle_feat_size), np.float32)
+#     feature = torch.empty((12,int(angle_feat_size)), dtype=torch.float32)
+    
+#     angle_interval = math.radians(30)
+#     # 3. 基础参考航向（通常是当前agent的朝向） [cite: 180]
+#     base_heading = (baseViewId % 12) * angle_interval
+    
+#     for ix in range(12):
+
+#         # 相对当前状态的偏移量即为 ix * 30度 
+#         inferred_heading = base_heading + (ix * angle_interval)
+#         # 计算相对于基准航向的相对角度 [cite: 178]
+#         rel_heading = inferred_heading - base_heading
+        
+
+#         # 5. 调用原始编码函数生成高维特征 [cite: 177]
+#         feature[ix, :] = angle_feature(rel_heading, angle_feat_size)
+        
+#     return feature
+
+def get_all_point_angle_feature(angle_feat_size: int):
     baseViewId = 0
     ang_fts = get_point_angle_feature(
         angle_feat_size, baseViewId, 
@@ -162,10 +195,13 @@ class BertSelfAttention(nn.Module):
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
+        batch_size = x.size(0)
+        seq_len = x.size(1)
+        x = x.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_size)
+        # x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+    def forward(self, hidden_states, attention_mask:Optional[Tensor]=None, head_mask:Optional[Tensor]=None):
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -182,7 +218,8 @@ class BertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        # attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = F2.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -196,11 +233,18 @@ class BertSelfAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
+        # context_layer = context_layer.view(*new_context_layer_shape)
+        batch_size = context_layer.size(0)
+        context_layer = context_layer.view(batch_size, -1, self.all_head_size)
         # recurrent vlnbert use attention scores
-        outputs = (context_layer, attention_scores) if self.output_attentions else (context_layer,)
-        return outputs
+        # outputs = (context_layer, attention_scores) if self.output_attentions else (context_layer,)
+        if self.output_attentions:
+            return (context_layer, attention_scores)
+        else:
+            # 💡 技巧：不要返回一元元组 (context_layer,)，直接返回单个 Tensor 
+            # 或者统一返回二元元组（见方案二）
+            return (context_layer, torch.zeros(1))
+        # return outputs
 
 
 class BertSelfOutput(nn.Module):
@@ -223,7 +267,7 @@ class BertAttention(nn.Module):
         self.self = BertSelfAttention(config)
         self.output = BertSelfOutput(config)
 
-    def forward(self, input_tensor, attention_mask=None, head_mask=None):
+    def forward(self, input_tensor, attention_mask:Optional[Tensor]=None, head_mask:Optional[Tensor]=None):
         self_outputs = self.self(input_tensor, attention_mask, head_mask)
         attention_output = self.output(self_outputs[0], input_tensor)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -241,16 +285,40 @@ class NextActionPrediction(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+def process_image_jit_safe(rgb_tensor: torch.Tensor) -> torch.Tensor:
+    """
+    使用 Functional API 重写的图像预处理流水线
+    完全兼容 TorchScript，支持一键打包部署
+    输入 rgb_tensor 形状要求: (3, H, W)，且值范围已经在 [0.0, 1.0] 之间
+    """
+    # 1. Resize: 将短边缩放到 248 像素，保持宽高比
+    # 注：F.resize 如果只传一个整数，会自动按比例缩放短边
+    x = F.resize(rgb_tensor, [248], interpolation=F.InterpolationMode.BICUBIC, antialias=True)
+    
+    # 2. CenterCrop: 中心裁剪出 (224, 224) 的区域
+    x = F.center_crop(x, [224, 224])
+    
+    # 3. Normalize: 标准化中心归一化
+    # 对应原均值 0.5，标准差 0.5 (把 0~1 映射到 -1~1 空间)
+    mean = [0.5, 0.5, 0.5]
+    std = [0.5, 0.5, 0.5]
+    x = F.normalize(x, mean=mean, std=std)
+    
+    return x
+ 
 class panorama_model(nn.Module):
     def __init__(self, config, device):
         super().__init__()
         self.config = config
+        self.angle_feat_size = int(config.angle_feat_size)
         self.device = device
         with torch.no_grad():
             model_name = 'vit_base_patch16_224'
+            # self.vit_model, img_transforms, device = build_feature_extractor(model_name, device, )
             self.vit_model, img_transforms, device = build_feature_extractor(model_name, device, )
-            self.img_transforms = v2.Compose([trans for trans in img_transforms.transforms 
-                                              if not isinstance(trans, torchvision.transforms.transforms.ToTensor) ])
+            # self.img_transforms = v2.Compose([trans for trans in img_transforms.transforms 
+            #                                   if not isinstance(trans, torchvision.transforms.transforms.ToTensor) ])
+            self.img_transforms = process_image_jit_safe
         self.img_embeddings = ImageEmbeddings(config)
         self.attention = BertAttention(config)
         # self.next_action = NextActionPrediction(config.hidden_size, config.pred_head_dropout_prob)
@@ -261,26 +329,30 @@ class panorama_model(nn.Module):
         self.critic_linear = nn.Linear(config.hidden_size // 2, 1)
 
         self.hidden_size = config.hidden_size
+        
+        self.ob_img_feats = None
 
-    def encoder(self, images):
+    def encoder(self, images:Tensor):
         '''
-        images: env*c*w*h
+        images: env*12*w*h*c
         '''
         fts = []
         for e in range(images.shape[0]):
             # t1 = time.time()
             images_ = images[e, ...]
-            # images_l = []
-            # for i in range(images_.shape[0]):
-            #     images_l.append(Image.fromarray(images_[i, ...].cpu().numpy().astype(np.uint8)) )
+
+            images_permuted = images_.permute(0, 3, 1, 2)
             
-            # images_ = torch.stack([self.img_transforms(image).to(self.device) for image in images_l], 0)
-            images_ = self.img_transforms(images_.permute(0,3,1,2))
+            view_list = []
+            for v in range(int(images_permuted.size(0))):
+                single_view_img = images_permuted[v] # 👈 严格切出 (C, W, H)
+                view_list.append(self.img_transforms(single_view_img))
+            # 重新打包回 4D Tensor (12, C, 224, 224) 喂给 ViT
+            images_input = torch.stack(view_list, dim=0)
             
             # print(f"in encoder, type convert{time.time()- t1}")
-            t2 = time.time()
-            b_fts = self.vit_model.forward_features(images_)
-            b_fts = b_fts.data
+            b_fts = self.vit_model.forward_features(images_input)
+            b_fts = b_fts.detach()
             fts.append(b_fts.unsqueeze(0))
             # print(f"in encoder, forward feature {time.time()- t2}")
         
@@ -292,20 +364,23 @@ class panorama_model(nn.Module):
         return self.hidden_size // 2
     
     def forward(self, 
-            obs,
+            obs: Tensor,
             ):
         with torch.no_grad():
             # 特征提取
             env = obs.shape[0]
             ob_img_feats = self.encoder(obs).to(self.device)
-            ang_feats = get_all_point_angle_feature(self.config.angle_feat_size, )
+            ang_feats = get_all_point_angle_feature(self.angle_feat_size, )
             ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(env, 1,1).to(self.device)
+        
+        self.ob_img_feats = ob_img_feats
         # policy
         ob_embeds = self.img_embeddings(ob_img_feats, ob_ang_feats)
         attention_outputs = self.attention(ob_embeds,)[0].sum(-2)
     #  act_logits = self.next_action(attention_outputs).squeeze(-1)
 
-        x = nn.ReLU()(self.policy_linear(attention_outputs))
+        # x = nn.ReLU()(self.policy_linear(attention_outputs))
+        x = F2.relu(self.policy_linear(attention_outputs))
         return self.critic_linear(x).squeeze(-1), x
                                          
 class ModelConfig:

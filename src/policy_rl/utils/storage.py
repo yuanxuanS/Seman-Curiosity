@@ -290,7 +290,6 @@ class GlobalRolloutStorage(RolloutStorage):
             self.num_views = 12
             self.pano_img_feats = torch.zeros((num_steps + 1, num_processes, self.num_views, self.image_feat_size))
             self.pano_ang_feats = torch.zeros((num_steps + 1, num_processes, self.num_views, self.angle_feat_size))
-        
     def reset(self):
         super(GlobalRolloutStorage, self).reset()
         if hasattr(self, 'expert_probs'):

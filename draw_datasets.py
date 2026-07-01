@@ -129,7 +129,7 @@ def play_imgs(path):
         cv2.waitKey(100)
     
 if __name__ == "__main__":   
-    base_dir = "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/vsqf_test_val5/"
+    base_dir = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/sequence6-6-1_vis/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/data/multiSens_test_val5"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/active_val4/"
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/frontier_6_sample/"
@@ -138,17 +138,17 @@ if __name__ == "__main__":
     # "/home/users/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/expv7_eval_best2/"
     
     with_mask = False  # 仅留下物体
-    with_label = False  # 绘制物体mask和类别标签
+    with_label = True  # 绘制物体mask和类别标签
     if with_mask:
         save_pth = base_dir + "/imgs_mask"
     else:
         if with_label:
-            save_pth = base_dir + "/imgs_gt"
+            save_pth = base_dir + "/imgs_label"
         else:
             save_pth = base_dir + "/imgs"
     if not os.path.exists(save_pth):
         os.mkdir(save_pth)
-    dataset_path = base_dir + "/data"# "/episodes_data"
+    dataset_path = base_dir + "/episodes_data"  #"/data"# 
 
     save_data_imgs(dataset_path, save_pth, with_label=with_label, with_mask=with_mask)
     

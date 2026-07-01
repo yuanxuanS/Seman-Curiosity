@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.models as models
+from typing import Callable, Optional
+from torch import Tensor
 
 import numpy as np
 
@@ -12,6 +14,7 @@ import cv2
 from src.policy_rl.panorama_model import panorama_model, model_config, ModelConfig
 from src.policy_rl.panorama_model_non import panorama_model as NonHistoryPanoramaModel
 import time
+from src.policy_rl.panorama_model import get_all_point_angle_feature
 
 class RBFEncoding(nn.Module):
     def __init__(self, centers, sigma=15.0):
@@ -463,7 +466,7 @@ class RL_Policy(nn.Module):
 class RL_Policy2(nn.Module):
     model_config = model_config
     def __init__(self, obs_shape, action_space, device=0,
-                 base_kwargs=None, use_history=True):
+                 base_kwargs=None, use_history=False):
 
         super(RL_Policy2, self).__init__()
         
@@ -492,15 +495,20 @@ class RL_Policy2(nn.Module):
             self.dist = DiagGaussian(self.network.output_size, num_outputs)
         else:
             raise NotImplementedError
-        
+    
     @property
     def is_recurrent(self):
         return False
     
-    def forward(self, inputs, extras=None,
-                curr_pano_img_feats=None, curr_pano_ang_feats=None,
-                hist_pano_img_feats=None, hist_img_feats=None, hist_masks=None,
-                compute_hist_embed=False):
+    @torch.jit.export
+    def forward(self, inputs:Tensor, 
+                extras:Optional[Tensor]=None,
+                curr_pano_img_feats:Optional[Tensor]=None, 
+                curr_pano_ang_feats:Optional[Tensor]=None,
+                hist_pano_img_feats:Optional[Tensor]=None, 
+                hist_img_feats:Optional[Tensor]=None, 
+                hist_masks:Optional[Tensor]=None,
+                compute_hist_embed: bool=False):
         """
         Forward 函数: 根据 use_history 参数选择不同的模型调用方式
         
@@ -513,69 +521,71 @@ class RL_Policy2(nn.Module):
             hist_masks: 历史掩码
             compute_hist_embed: 是否计算并返回当前观测的嵌入用于历史存储
         """
-        if self.use_history:
-            # 历史模型: 使用 forward_with_history 方法
-            # 如果有原始历史特征，使用新的 forward_with_history 方法
-            if hist_pano_img_feats is not None:
-                return self.network.forward_with_history(
-                    curr_pano_img_feats=inputs['pano_img_feats'],
-                    curr_pano_ang_feats=inputs['pano_ang_feats'],
-                    hist_pano_img_feats=hist_pano_img_feats,
-                    hist_pano_ang_feats=hist_img_feats,  # 这里hist_img_feats实际上是hist_pano_ang_feats
-                    hist_actions=hist_masks,  # 这里hist_masks实际上是hist_actions
-                    hist_masks=None,
-                    compute_hist_embed=compute_hist_embed
-                )
-            else:
-                # 无历史时，使用旧的 forward 方法（需要编码 inputs）
-                # inputs 是原始图像，需要先编码
-                with torch.no_grad():
-                    ob_img_feats = self.network.encoding(inputs).to(self.device)
-                    from src.policy_rl.panorama_model import get_all_point_angle_feature
-                    ang_feats = get_all_point_angle_feature(self.network.config.angle_feat_size, )
-                    ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(inputs.shape[0], 1, 1).to(self.device)
+        # if self.use_history:
+        #     # 历史模型: 使用 forward_with_history 方法
+        #     # 如果有原始历史特征，使用新的 forward_with_history 方法
+        #     if hist_pano_img_feats is not None:
+        #         return self.network.forward_with_history(
+        #             curr_pano_img_feats=inputs['pano_img_feats'],
+        #             curr_pano_ang_feats=inputs['pano_ang_feats'],
+        #             hist_pano_img_feats=hist_pano_img_feats,
+        #             hist_pano_ang_feats=hist_img_feats,  # 这里hist_img_feats实际上是hist_pano_ang_feats
+        #             hist_actions=hist_masks,  # 这里hist_masks实际上是hist_actions
+        #             hist_masks=None,
+        #             compute_hist_embed=compute_hist_embed
+        #         )
+        #     else:
+        #         # 无历史时，使用旧的 forward 方法（需要编码 inputs）
+        #         # inputs 是原始图像，需要先编码
+        #         with torch.no_grad():
+        #             ob_img_feats = self.network.encoding(inputs).to(self.device)
+                    
+        #             ang_feats = get_all_point_angle_feature(self.network.config.angle_feat_size, )
+        #             ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(inputs.shape[0], 1, 1).to(self.device)
                 
-                return self.network.forward_with_history(
-                    curr_pano_img_feats=ob_img_feats,
-                    curr_pano_ang_feats=ob_ang_feats,
-                    hist_pano_img_feats=None,
-                    hist_pano_ang_feats=None,
-                    hist_actions=None,
-                    hist_masks=None,
-                    compute_hist_embed=compute_hist_embed
-                )
-        else:
-            # 非历史模型: 使用当前全景图像与角度特征
-            return self.network(inputs)
-    
-    def act(self, inputs, extras=None, deterministic=False, 
-            curr_pano_img_feats=None, curr_pano_ang_feats=None,
-            hist_pano_img_feats=None, hist_pano_ang_feats=None,
-            hist_actions=None, hist_masks=None,
-            compute_hist_embed=False):
+        #         return self.network.forward_with_history(
+        #             curr_pano_img_feats=ob_img_feats,
+        #             curr_pano_ang_feats=ob_ang_feats,
+        #             hist_pano_img_feats=None,
+        #             hist_pano_ang_feats=None,
+        #             hist_actions=None,
+        #             hist_masks=None,
+        #             compute_hist_embed=compute_hist_embed
+        #         )
+        # else:
+        # 非历史模型: 使用当前全景图像与角度特征
+        return self.network(inputs)
+    # @torch.jit.export
+    def act(self, inputs:Tensor,
+            extras:Optional[Tensor]=None, 
+            deterministic: int=False, 
+            curr_pano_img_feats:Optional[Tensor]=None, curr_pano_ang_feats:Optional[Tensor]=None,
+            hist_pano_img_feats:Optional[Tensor]=None, hist_pano_ang_feats:Optional[Tensor]=None,
+            hist_actions:Optional[Tensor]=None, hist_masks:Optional[Tensor]=None,
+            compute_hist_embed: int=False):
         """
         Act 函数: 根据 use_history 参数选择不同的模型调用方式
         """
-        if self.use_history:
-            # 历史模型: 使用 forward_with_history 方法
-            result = self.network.forward_with_history(
-                curr_pano_img_feats=curr_pano_img_feats,
-                curr_pano_ang_feats=curr_pano_ang_feats,
-                hist_pano_img_feats=hist_pano_img_feats,
-                hist_pano_ang_feats=hist_pano_ang_feats,
-                hist_actions=hist_actions,
-                hist_masks=hist_masks,
-                compute_hist_embed=compute_hist_embed
-            )
+        # if self.use_history:
+        #     # 历史模型: 使用 forward_with_history 方法
+        #     result = self.network.forward_with_history(
+        #         curr_pano_img_feats=curr_pano_img_feats,
+        #         curr_pano_ang_feats=curr_pano_ang_feats,
+        #         hist_pano_img_feats=hist_pano_img_feats,
+        #         hist_pano_ang_feats=hist_pano_ang_feats,
+        #         hist_actions=hist_actions,
+        #         hist_masks=hist_masks,
+        #         compute_hist_embed=compute_hist_embed
+        #     )
             
-            if compute_hist_embed:
-                value, act_feature, curr_embed = result     # act_feature: env*12*h/2
-            else:
-                value, act_feature = result
-        else:
-            # 非历史模型: 
-            result = self(inputs)
-            value, act_feature = result
+        #     if compute_hist_embed:
+        #         value, act_feature, curr_embed = result     # act_feature: env*12*h/2
+        #     else:
+        #         value, act_feature = result
+        # else:
+        # 非历史模型: 
+        result = self(inputs, None, None, None, None, None, None, False)
+        value, act_feature = result
         
         dist = self.dist(act_feature)
 
@@ -588,86 +598,96 @@ class RL_Policy2(nn.Module):
         action_log_probs = dist.log_probs(action)
 
         return value, action, action_log_probs
+        # return value, action, action_log_probs, dist.probs
 
-    def get_value(self, inputs, extras=None, 
+    @torch.jit.export
+    def get_value(self, inputs:Tensor,
+                  extras=None, 
                   curr_pano_img_feats=None, curr_pano_ang_feats=None,
                   hist_pano_img_feats=None, hist_pano_ang_feats=None,
                   hist_actions=None, hist_masks=None):
         """
         Get value: 根据 use_history 参数选择不同的模型调用方式
         """
-        if self.use_history:
-            # 历史模型
-            result = self.network.forward_with_history(
-                curr_pano_img_feats=curr_pano_img_feats,
-                curr_pano_ang_feats=curr_pano_ang_feats,
-                hist_pano_img_feats=hist_pano_img_feats,
-                hist_pano_ang_feats=hist_pano_ang_feats,
-                hist_actions=hist_actions,
-                hist_masks=hist_masks,
-                compute_hist_embed=False
-            )
-            value, _ = result
-        else:
-            # 非历史模型: 使用当前全景图像与角度特征
-            result = self(inputs)
-            value = result[0]
+        # if self.use_history:
+        #     # 历史模型
+        #     result = self.network.forward_with_history(
+        #         curr_pano_img_feats=curr_pano_img_feats,
+        #         curr_pano_ang_feats=curr_pano_ang_feats,
+        #         hist_pano_img_feats=hist_pano_img_feats,
+        #         hist_pano_ang_feats=hist_pano_ang_feats,
+        #         hist_actions=hist_actions,
+        #         hist_masks=hist_masks,
+        #         compute_hist_embed=False
+        #     )
+        #     value, _ = result
+        # else:
+        # 非历史模型: 使用当前全景图像与角度特征
+        result = self(inputs, None, None, None, None, None, None, False)
+        value = result[0]
         return value
 
-    def evaluate_actions(self, inputs, action, extras=None, 
+    @torch.jit.export
+    def evaluate_actions(self, inputs:Tensor,
+                         action:Tensor,
+                         extras=None, 
                         curr_pano_img_feats=None, curr_pano_ang_feats=None,
                         hist_pano_img_feats=None, hist_pano_ang_feats=None,
                         hist_actions=None, hist_masks=None):
         """
         Evaluate actions: 根据 use_history 参数选择不同的模型调用方式
         """
-        if self.use_history:
-            # 历史模型
-            result = self.network.forward_with_history(
-                curr_pano_img_feats=curr_pano_img_feats,
-                curr_pano_ang_feats=curr_pano_ang_feats,
-                hist_pano_img_feats=hist_pano_img_feats,
-                hist_pano_ang_feats=hist_pano_ang_feats,
-                hist_actions=hist_actions,
-                hist_masks=hist_masks,
-                compute_hist_embed=False
-            )
+        # if self.use_history:
+        #     # 历史模型
+        #     result = self.network.forward_with_history(
+        #         curr_pano_img_feats=curr_pano_img_feats,
+        #         curr_pano_ang_feats=curr_pano_ang_feats,
+        #         hist_pano_img_feats=hist_pano_img_feats,
+        #         hist_pano_ang_feats=hist_pano_ang_feats,
+        #         hist_actions=hist_actions,
+        #         hist_masks=hist_masks,
+        #         compute_hist_embed=False
+        #     )
             
-            value, actor_features = result
-        else:
+        #     value, actor_features = result
+        # else:
             # 非历史模型: 使用当前全景图像与角度特征
-            result = self(inputs)
-            value, actor_features = result
+        result = self(inputs, None, None, None, None, None, None, False)
+        value, actor_features = result
         
         dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
         return value, action_log_probs, dist_entropy
     
-    def evaluate_actions_with_supervise(self, inputs, action, expert_probs, extras=None, 
+    @torch.jit.export
+    def evaluate_actions_with_supervise(self, inputs:Tensor,
+                                        action:Tensor,
+                                        expert_probs:Optional[Tensor]=None,
+                                        extras=None, 
                                        curr_pano_img_feats=None, curr_pano_ang_feats=None,
                                        hist_pano_img_feats=None, hist_pano_ang_feats=None,
                                        hist_actions=None, hist_masks=None):
         """
         Evaluate actions with supervise: 根据 use_history 参数选择不同的模型调用方式
         """
-        if self.use_history:
-            # 历史模型
-            result = self.network.forward_with_history(
-                curr_pano_img_feats=curr_pano_img_feats,
-                curr_pano_ang_feats=curr_pano_ang_feats,
-                hist_pano_img_feats=hist_pano_img_feats,
-                hist_pano_ang_feats=hist_pano_ang_feats,
-                hist_actions=hist_actions,
-                hist_masks=hist_masks,
-                compute_hist_embed=False
-            )
+        # if self.use_history:
+        #     # 历史模型
+        #     result = self.network.forward_with_history(
+        #         curr_pano_img_feats=curr_pano_img_feats,
+        #         curr_pano_ang_feats=curr_pano_ang_feats,
+        #         hist_pano_img_feats=hist_pano_img_feats,
+        #         hist_pano_ang_feats=hist_pano_ang_feats,
+        #         hist_actions=hist_actions,
+        #         hist_masks=hist_masks,
+        #         compute_hist_embed=False
+        #     )
             
-            value, actor_features = result
-        else:
-            # 非历史模型: 使用当前全景图像与角度特征
-            result = self(inputs)
-            value, actor_features = result
+        #     value, actor_features = result
+        # else:
+        # 非历史模型: 使用当前全景图像与角度特征
+        result = self(inputs, None, None, None, None, None, None, False)
+        value, actor_features = result
         
         dist = self.dist(actor_features)
         action_log_probs = dist.log_probs(action)
@@ -850,43 +870,323 @@ class Semantic_Mapping(nn.Module):
         else:
             return fp_map_pred, map_pred, pose_pred, current_poses
 
+
+def inspect_and_catch_undefined_tensor(model: torch.nn.Module):
+    """
+    无死角扫描模型内部所有的 Parameter 和 Buffer，
+    精准揪出引发 strides() 报错的内鬼张量。
+    """
+    print("🕵️‍♂️ 开始对模型进行全量张量健壮性扫描...")
+    has_error = False
+    
+    # 1. 扫描所有的状态权重 (Parameters 和 Buffers)
+    for name, tensor in model.state_dict().items():
+        if tensor is None:
+            print(f"❌ 发现彻底为 None 的属性: {name}")
+            has_error = True
+            continue
+            
+        try:
+            # 模拟 C++ 序列化时必调用的底层核心属性
+            _ = tensor.stride()
+            _ = tensor.storage()
+            _ = tensor.data_ptr()
+            
+            # 特别检查是否为未定义空壳
+            if not tensor.is_shared() and tensor.numel() == 0 and tensor.dtype == torch.float32:
+                # 有些 0 维张量可能不正常
+                pass
+                
+        except RuntimeError as e:
+            print("\n" + "="*60)
+            print(f"🚨 【重大嫌疑犯锁定！】")
+            print(f"⚠️  张量名称: {name}")
+            print(f"⚠️  张量形状 (Shape): {tensor.shape if hasattr(tensor, 'shape') else 'Unknown'}")
+            print(f"⚠️  底层错误信息: {str(e)}")
+            print("="*60 + "\n")
+            has_error = True
+
+    # 2. 扫描模型中可能挂载的普通 Python 属性（有些库喜欢把隐蔽张量挂在 self 下而不注册为 buffer）
+    for attr_name in dir(model):
+        try:
+            attr = getattr(model, attr_name)
+            if isinstance(attr, torch.Tensor):
+                _ = attr.stride()
+        except Exception:
+            print(f"⚠️ 无法读取模型普通属性的 stride: {attr_name}")
+            
+    if not has_error:
+        print("💡 基础检查未发现异常，嫌疑可能在未被包含进 state_dict 的动态局域变量或 timm 内部复杂子模块中。")
+
 if __name__ == "__main__":
     import gym
+    from src.policy_rl.utils.storage import GlobalRolloutStorage
 
-    observation_space = gym.spaces.Box(0, 255,
-                                                (3, 128,
-                                                 128),
-                                                dtype='uint8')
-    action_space = gym.spaces.Discrete(4)
-    print(f"obs shape:{observation_space.shape}")
+    bs = 1
     
-    device = "cuda:1"
-    policy = RL_Policy(observation_space.shape,
-                action_space, model_type=3,
-                base_kwargs={'recurrent': True,
-                                      'hidden_size': 512,
-                                      'num_sem_categories': 5,
-                                      'max_budget': 5,
-                                      'input_category': True,
-                                      'input_budget': True,
-                                      'input_sslj': True
-                                      })
+    policy_id = 11  # 1: curiosity, 2: panorama, 11: test curiosity model
+    if policy_id == 1:
+        observation_space = gym.spaces.Box(0, 255,
+                                                    (3, 256,
+                                                    256),
+                                                    dtype='uint8')
+        action_space = gym.spaces.Discrete(3)
+        print(f"obs shape:{observation_space.shape}")
+        policy = RL_Policy(observation_space.shape, action_space,
+                            model_type=1,
+                            base_kwargs={'recurrent': 1,
+                                        'hidden_size': 256,
+                                        'num_sem_categories': 6
+                                        })
+        checkpoint_path = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/models/curiosity/model_best.pth"
+        checkpoint = torch.load(checkpoint_path)
+        policy.load_state_dict(checkpoint)
+        policy.eval()
+        
+        es = 3
+        l_rollouts = GlobalRolloutStorage(100,
+                                        bs, observation_space.shape,
+                                        action_space, policy.rec_state_size,
+                                        es)
+        
+        input = torch.rand(bs, 3, 256, 256,)
+        input_rec_state = torch.rand(bs, 256)
+        input_masks = torch.ones(bs, dtype=torch.float32)
+        
+        
+        extras = torch.zeros(bs, es)
+        local_orientation = torch.zeros(bs, 1).long()
+        # locs = full_pose.cpu().numpy()      # 使用全局pose
+        # local_orientation[0] = int((locs[0, 2] + 180.0) / 5.)
+        # local_xy[0] = torch.from_numpy(locs[0, :2][np.newaxis, :])
+        # extras[:, 2] = local_orientation[:, 0]
+        # extras[:, :2] = local_xy[:]
+        extras = torch.randint(low=0, high=10, size=(bs, es))
+        
+        l_rollouts.obs[0].copy_(input) 
+        l_rollouts.extras[0].copy_(extras)
+        
+        
+        value, action, action_log_probs, rec_states = \
+            policy.act(
+                l_rollouts.obs[0],
+                l_rollouts.rec_states[0],
+                l_rollouts.masks[0],
+                extras=l_rollouts.extras[0],
+                deterministic=False
+            )
+        action = action.cpu().numpy()
+        print(f"✅ 预检查成功！act 函数在提供了全套占位输入后正常执行，输出形状如下：",
+          f"value: {value.shape}, action: {action.shape}, action_log_probs: {action_log_probs.shape}")
+        
+        deterministic = torch.tensor(False, dtype=torch.bool)
+        traced_policy_act = torch.jit.trace_module(policy,
+                                      {"act":
+                                       (l_rollouts.obs[0], 
+                                        l_rollouts.rec_states[0],
+                                        l_rollouts.masks[0],
+                                        l_rollouts.extras[0],
+                                        deterministic,
+                                        )},
+                                      check_trace=True)
+        traced_policy_act.save("deployed_rl_policy_curi.pt")
+        print("🎉 策略网络已成功打包！生成了 deployed_rl_policy_curi.pt")
+    elif policy_id == 11:
+        path = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/src/policy_rl/deployed_rl_policy_curi.pt"
+        policy = torch.jit.load(str(path))
+        policy.eval()
+        
+        map_size_cm = 2000
+        full_pose = torch.zeros(bs, 3).float()
+        full_pose[:, :2] = map_size_cm / 100.0 / 2.0     # full pose和local pose单位都是m
 
-    bs = 3
-    rnn_hxs = torch.rand(bs, 512)
-    l_masks = torch.ones(bs)
-    extras = torch.zeros(bs, 7)
-    extras[:, :-2] = torch.randint(low=0, high=10, size=(bs, 5))
-    extras[:, -2] = torch.randint(low=10, high=80, size=(bs, ))
-    extras[:, -1] = torch.randint(low=0, high=5, size=(bs, ))
+        # Helper: apply discrete action to full_pose (in-place)
+        def apply_action_to_pose(full_pose_tensor, action_tensor, turn_angle_deg=30.0, step_size_m=0.25):
+            """
+            full_pose_tensor: Tensor [bs, 3] with columns [x(m), y(m), yaw_deg]
+            action_tensor: Tensor [bs] with discrete actions mapping: 0=forward,1=turn_left,2=turn_right
+            Updates full_pose_tensor in-place and returns it.
+            """
+            if not torch.is_tensor(action_tensor):
+                action_tensor = torch.tensor(action_tensor)
+
+            action_tensor = action_tensor.to(full_pose_tensor.device)
+
+            # forward mask
+            move_mask = (action_tensor == 0)
+            left_mask = (action_tensor == 1)
+            right_mask = (action_tensor == 2)
+
+            # compute forward displacement only for move steps
+            theta_rad = full_pose_tensor[:, 2] * math.pi / 180.0
+            dx = step_size_m * torch.cos(theta_rad)
+            dy = step_size_m * torch.sin(theta_rad)
+
+            full_pose_tensor[:, 0] = full_pose_tensor[:, 0] + dx * move_mask.to(dtype=full_pose_tensor.dtype)
+            full_pose_tensor[:, 1] = full_pose_tensor[:, 1] + dy * move_mask.to(dtype=full_pose_tensor.dtype)
+
+            # update yaw
+            full_pose_tensor[:, 2] = full_pose_tensor[:, 2] + turn_angle_deg * left_mask.to(dtype=full_pose_tensor.dtype)
+            full_pose_tensor[:, 2] = full_pose_tensor[:, 2] - turn_angle_deg * right_mask.to(dtype=full_pose_tensor.dtype)
+
+            # normalize to [-180, 180)
+            full_pose_tensor[:, 2] = torch.fmod(full_pose_tensor[:, 2] + 180.0, 360.0) - 180.0
+
+            return full_pose_tensor
+
+        es = 3
+        observation_space = gym.spaces.Box(0, 255,
+                                                    (3, 256,
+                                                    256),
+                                                    dtype='uint8')
+        action_space = gym.spaces.Discrete(3)
+        l_rollouts = GlobalRolloutStorage(100,
+                                        bs, observation_space.shape,
+                                        action_space, 256,
+                                        es)
+        torch.manual_seed(56)
+        # use float32 random input to match model expectations (avoid uint8/byte dtype issues)
+        input = torch.rand(bs, 3, 256, 256, dtype=torch.float32) * 255.0
+        l_rollouts.obs[0].copy_(input)   
+        
+        extras = torch.zeros(bs, es)
+        local_orientation = torch.zeros(bs, 1).long()
+        locs = full_pose.cpu().numpy()      # 使用全局pose
+        local_orientation[0] = int((locs[0, 2] + 180.0) / 5.)
+        local_xy = torch.zeros(bs, 2)
+        local_xy[0] = torch.from_numpy(locs[0, :2][np.newaxis, :])
+        extras[:, 2] = local_orientation[:, 0]
+        extras[:, :2] = local_xy[:]
+        # extras = torch.randint(low=0, high=10, size=(bs, es))
+        l_rollouts.extras[0].copy_(extras)
+        with torch.no_grad():
+            value, action, action_log_prob, rec_states  = policy.act(
+                l_rollouts.obs[0],
+                l_rollouts.rec_states[0],
+                l_rollouts.masks[0],
+                extras=l_rollouts.extras[0],
+                deterministic=torch.tensor(False, dtype=torch.bool)
+            )
+            print(f"✅ 加载的 JIT 模型 act 函数执行成功，输出如下：",
+                f"value: {value}, action: {action}, action_log_prob: {action_log_prob}")
+        
+        
+        reward = torch.rand(bs)  # placeholder reward
+        l_masks = torch.ones(bs).float()    
+        for step in range(500):
+            l_step = step % 100
+            
+            input = torch.rand(bs, 3, 256, 256, dtype=torch.float32) * 255.0
+            # --- Apply discrete action to our internal full_pose estimate ---
+            try:
+                # action may be a tensor of shape [bs]
+                full_pose = apply_action_to_pose(full_pose, action)
+
+                # build extras for next time-step: [x, y, orientation_index]
+                # orientation index: map yaw_deg in [-180,180) to [0,71] with 5deg bins
+                orient_idx = int((full_pose[0, 2].item() + 180.0) / 5.0)
+                orient_idx = max(0, min(71, orient_idx))
+                extras_tensor = torch.zeros((bs, es), dtype=torch.float32)
+                extras_tensor[:, :2] = full_pose[:, :2]
+                extras_tensor[:, 2] = orient_idx
+
+                # write into rollout extras for the next observation used by policy.act
+                l_rollouts.extras[l_step + 1].copy_(extras_tensor)
+            except Exception:
+                # non-fatal: keep running even if pose update fails
+                pass
+            l_rollouts.insert(
+                    input, rec_states,      # state_t+1
+                    action, action_log_prob, value,   # action, reward_t
+                    reward, l_masks, extras
+                )
+            with torch.no_grad():
+                value, action, action_log_prob, rec_states  = policy.act(
+                    l_rollouts.obs[l_step + 1],
+                    l_rollouts.rec_states[l_step + 1],
+                    l_rollouts.masks[l_step + 1],
+                    extras=l_rollouts.extras[l_step + 1],
+                    deterministic=torch.tensor(False, dtype=torch.bool)
+                )
+                print(f"✅ 输出如下：",
+                    f"value: {value}, action: {action}, action_log_prob: {action_log_prob}")
+
+            
+            reward = torch.rand(bs)
+            l_masks = torch.ones(bs).float()
+            
+            if l_step == 100 - 1:
+                l_rollouts.after_update() 
+                
+                
+    elif policy_id == 2:
+        observation_space = gym.spaces.Box(0, 255,
+                                                    (12, 256,
+                                                    256, 3),
+                                                    dtype='uint8')
+        action_space = gym.spaces.Discrete(12)
+        print(f"obs shape:{observation_space.shape}")
     
-    input = torch.rand(bs, 3, 128, 128)
-    # value, action_feature, rnn_hxs = policy(input, rnn_hxs, l_masks, extras)
-    # print(f"shape: \nvalue:{value.shape}\naction feature:{action_feature.shape}\n")
+        policy = RL_Policy2(observation_space.shape,
+                    action_space, device='cpu',
+                    use_history=False,
+                    )
+        checkpoint_path = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/models/sequence6-6-1/model_best.pth"
+        checkpoint = torch.load(checkpoint_path)
+        policy.load_state_dict(checkpoint)
+        policy.eval()
+    
+    
+        input = torch.rand(bs, 12, 256, 256, 3)
+        dummy_extras = torch.zeros((bs, 1))
 
-    value, action, action_prob, rnn_hxs = policy.act(input, rnn_hxs, l_masks, extras)
-    print(f"value: {value}")
-    print(f"action: {action}")
-    print(f"action_prob: {action_prob}")
-    print(f"rnn_hxs: {rnn_hxs.shape}")
+        # 2. 🌟 核心修改：把原本的布尔值 False/True，改用 0 维标量 Tensor 包装
+        dummy_deterministic = torch.tensor(False, dtype=torch.bool)
+
+        # 3. 核心全景、历史特征
+        dummy_curr_pano_img_feats = torch.randn((bs, 12))
+        dummy_curr_pano_ang_feats = torch.randn((bs, 4))
+
+        # 4. 🌟 核心避坑：原代码在这里或者其他地方可能传了 None。
+        # 记住，在 Trace 的世界里绝对不能有 None！如果某个特征当前不用，
+        # 必须传一个形状对齐、全为 0 的实际 Tensor 进去占位。
+        dummy_hist_pano_img_feats = torch.zeros((bs, 10, 12))
+        dummy_hist_pano_ang_feats = torch.zeros((bs, 10, 4))
+        dummy_hist_actions        = torch.zeros((bs, 10), dtype=torch.long)
+        dummy_hist_masks          = torch.ones((bs, 10))
+
+        # 5. 🌟 核心修改：把最后一个布尔值也用 Tensor 包装
+        dummy_compute_hist_embed  = torch.tensor(False, dtype=torch.bool)
+        
+        value, action, action_log_probs = policy.act(input, 
+                dummy_extras,
+                dummy_deterministic,
+                dummy_curr_pano_img_feats,
+                dummy_curr_pano_ang_feats,
+                dummy_hist_pano_img_feats,
+                dummy_hist_pano_ang_feats,
+                dummy_hist_actions,
+                dummy_hist_masks,
+                dummy_compute_hist_embed)
+        print(f"✅ 预检查成功！act 函数在提供了全套占位输入后正常执行，输出形状如下：",
+            f"value: {value.shape}, action: {action.shape}, action_log_probs: {action_log_probs.shape}")
+        traced_policy_act = torch.jit.trace_module(policy,
+                                        {"act":
+                                        (input, 
+                                            dummy_extras,
+                                            dummy_deterministic,
+                                            dummy_curr_pano_img_feats,
+                                            dummy_curr_pano_ang_feats,
+                                            dummy_hist_pano_img_feats,
+                                            dummy_hist_pano_ang_feats,
+                                            dummy_hist_actions,
+                                            dummy_hist_masks,
+                                            dummy_compute_hist_embed
+                                            )},
+                                        check_trace=True)
+        traced_policy_act.save("deployed_rl_policy.pt")
+        print("🎉 策略网络已成功打包！生成了 deployed_rl_policy.pt")
+        
+        inspect_and_catch_undefined_tensor(policy)
+    
     

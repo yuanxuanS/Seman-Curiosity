@@ -26,9 +26,15 @@ if __name__ == "__main__":
     
     # 2. 配置模型
     cfg = get_cfg()
+    # 新变量直接添加
+    cfg.VIS = False     
+    cfg.SAVE_PTH = ''
+    cfg.DATASET_NAME = ''
+    cfg.MODEL.NUM_CLASSES  = 80
     cfg.merge_from_file(
         args.config
     )
+    
     cfg.MODEL.WEIGHTS = args.model
 
     # 设置模型为评估模式 (不进行训练)
@@ -58,7 +64,7 @@ if __name__ == "__main__":
     out = v.draw_instance_predictions(outputs["instances"].to("cpu"))
 
     # 7. 显示和保存结果
-    output_image_path = args.output_dir + "/img.png"
+    output_image_path = args.output_dir + "_maskpred.png"
     # cv2.imshow("Detected Objects", out.get_image()[:, :, ::-1])
     cv2.imwrite(output_image_path, out.get_image()[:, :, ::-1])
     print(f"Detection result saved to {output_image_path}")

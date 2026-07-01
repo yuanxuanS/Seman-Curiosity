@@ -195,7 +195,7 @@ class Maps_Env:
                     curr_local_map[e]
                 
                 # update orient map
-                if straight[e]:
+                if straight is not None and straight[e]:
                     idx = int(orients[e])
                     original_map = self.orient_full_maps[idx][e, :, self.lmb[e, 0]:self.lmb[e, 1], self.lmb[e, 2]:self.lmb[e, 3]]
                     maps_= torch.cat((original_map.unsqueeze(1), curr_local_map[e][:2, ...].unsqueeze(1)), 1)
