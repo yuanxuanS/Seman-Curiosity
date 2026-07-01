@@ -323,10 +323,33 @@ class panorama_model(nn.Module):
         self.attention = BertAttention(config)
         # self.next_action = NextActionPrediction(config.hidden_size, config.pred_head_dropout_prob)
 
-        # Policy linear layer
-        self.policy_linear = nn.Linear(config.hidden_size, config.hidden_size // 2)
-        # critic linear layer
-        self.critic_linear = nn.Linear(config.hidden_size // 2, 1)
+        self.policy_mlp = nn.Sequential(
+            nn.Linear(config.hidden_size, config.hidden_size // 2),
+            nn.ReLU(),
+            BertLayerNorm(config.hidden_size // 2, eps=config.layer_norm_eps),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(config.hidden_size // 2, config.hidden_size // 4),
+            nn.ReLU(),
+            BertLayerNorm(config.hidden_size // 4, eps=config.layer_norm_eps),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(config.hidden_size // 4, config.hidden_size // 16),
+            nn.ReLU(),
+            nn.Linear(config.hidden_size // 16, 1),
+        )
+
+        self.critic_mlp = nn.Sequential(
+            nn.Linear(config.hidden_size, config.hidden_size // 2),
+            nn.ReLU(),
+            BertLayerNorm(config.hidden_size // 2, eps=config.layer_norm_eps),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(config.hidden_size // 2, config.hidden_size // 4),
+            nn.ReLU(),
+            BertLayerNorm(config.hidden_size // 4, eps=config.layer_norm_eps),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(config.hidden_size // 4, config.hidden_size // 16),
+            nn.ReLU(),
+            nn.Linear(config.hidden_size // 16, 1),
+        )
 
         self.hidden_size = config.hidden_size
         
@@ -361,7 +384,7 @@ class panorama_model(nn.Module):
     
     @property
     def output_size(self):
-        return self.hidden_size // 2
+        return 12
     
     def forward(self, 
             obs: Tensor,
@@ -374,14 +397,14 @@ class panorama_model(nn.Module):
             ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(env, 1,1).to(self.device)
         
         self.ob_img_feats = ob_img_feats
-        # policy
         ob_embeds = self.img_embeddings(ob_img_feats, ob_ang_feats)
-        attention_outputs = self.attention(ob_embeds,)[0].sum(-2)
-    #  act_logits = self.next_action(attention_outputs).squeeze(-1)
+        view_tokens = self.attention(ob_embeds,)[0]
 
-        # x = nn.ReLU()(self.policy_linear(attention_outputs))
-        x = F2.relu(self.policy_linear(attention_outputs))
-        return self.critic_linear(x).squeeze(-1), x
+        action_logits = self.policy_mlp(view_tokens).squeeze(-1)
+
+        state_feature = view_tokens.mean(dim=1)
+        value = self.critic_mlp(state_feature).squeeze(-1)
+        return value, action_logits
                                          
 class ModelConfig:
     def __init__(self, **kwargs):
@@ -421,4 +444,3 @@ model_config = {
     # "vocab_size": 250002,
     # "lang_bert_name": "xlm-roberta-base"
     }
-

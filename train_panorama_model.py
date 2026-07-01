@@ -149,8 +149,8 @@ class PanoramaActionDataset(Dataset):
 
 class PanoramaModelWithActionHead(nn.Module):
     """
-    Uses the full RL_Policy2 model and takes action probabilities from
-    dist = self.dist(act_feature) as supervised predictions.
+    Uses the full RL_Policy2 model and takes action probabilities from the
+    model's direct per-view action logits.
     """
 
     def __init__(self, device, num_actions=12, use_history=False):
@@ -172,9 +172,8 @@ class PanoramaModelWithActionHead(nn.Module):
         Returns:
             action_probs: (batch, num_actions)
         """
-        _, act_feature = self.rl_policy(obs)
-        dist = self.rl_policy.dist(act_feature)
-        return dist.probs
+        _, action_logits = self.rl_policy(obs)
+        return torch.softmax(action_logits, dim=-1)
 
 
 # =============================================================================

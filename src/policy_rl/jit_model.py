@@ -28,17 +28,16 @@ class ExportPolicyActWrapper(nn.Module):
     def __init__(self, policy_module: RL_Policy2, deterministic: bool = True):
         super().__init__()
         self.network = policy_module.network
-        self.dist = policy_module.dist
         self.deterministic = deterministic
 
     def forward(self, obs: Tensor):
-        value, act_feature = self.network(obs)
-        dist = self.dist(act_feature)
+        value, action_logits = self.network(obs)
+        dist = torch.distributions.Categorical(logits=action_logits)
         if self.deterministic:
-            action = dist.mode().reshape(-1)
+            action = action_logits.argmax(dim=-1)
         else:
             action = dist.sample()
-        action_log_probs = dist.log_probs(action)
+        action_log_probs = dist.log_prob(action)
         return value, action, action_log_probs, dist.probs
         # fts = self.network.encoder(obs)
         # return fts

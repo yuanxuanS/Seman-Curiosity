@@ -585,17 +585,16 @@ class RL_Policy2(nn.Module):
         # else:
         # 非历史模型: 
         result = self(inputs, None, None, None, None, None, None, False)
-        value, act_feature = result
+        value, action_logits = result
         
-        dist = self.dist(act_feature)
+        dist = torch.distributions.Categorical(logits=action_logits)
 
         if deterministic:
-            action = dist.mode()
-            action = action.reshape(-1)
+            action = action_logits.argmax(dim=-1)
         else:
             action = dist.sample()
 
-        action_log_probs = dist.log_probs(action)
+        action_log_probs = dist.log_prob(action)
 
         return value, action, action_log_probs
         # return value, action, action_log_probs, dist.probs
@@ -653,10 +652,10 @@ class RL_Policy2(nn.Module):
         # else:
             # 非历史模型: 使用当前全景图像与角度特征
         result = self(inputs, None, None, None, None, None, None, False)
-        value, actor_features = result
+        value, action_logits = result
         
-        dist = self.dist(actor_features)
-        action_log_probs = dist.log_probs(action)
+        dist = torch.distributions.Categorical(logits=action_logits)
+        action_log_probs = dist.log_prob(action.squeeze(-1))
         dist_entropy = dist.entropy().mean()
         return value, action_log_probs, dist_entropy
     
@@ -687,13 +686,13 @@ class RL_Policy2(nn.Module):
         # else:
         # 非历史模型: 使用当前全景图像与角度特征
         result = self(inputs, None, None, None, None, None, None, False)
-        value, actor_features = result
+        value, action_logits = result
         
-        dist = self.dist(actor_features)
-        action_log_probs = dist.log_probs(action)
+        dist = torch.distributions.Categorical(logits=action_logits)
+        action_log_probs = dist.log_prob(action.squeeze(-1))
         dist_entropy = dist.entropy().mean()
         
-        return value, action_log_probs, dist_entropy, actor_features
+        return value, action_log_probs, dist_entropy, action_logits
     
 class Semantic_Mapping(nn.Module):
 

@@ -138,7 +138,7 @@ class PPO():
                 # Reshape to do in a single forward pass for all steps
                 # values, action_log_probs, dist_entropy, _ = \
                     
-                values, action_log_probs, dist_entropy, actor_features  = \
+                values, action_log_probs, dist_entropy, action_logits  = \
                     self.actor_critic.evaluate_actions_with_supervise(
                         sample['obs'], 
                         # sample['rec_states'],
@@ -175,8 +175,7 @@ class PPO():
                     value_loss = 0.5 * (returns - values).pow(2).mean()
                 
                 # 监督损失
-                current_dist = self.actor_critic.dist(actor_features)
-                current_log_probs = torch.log_softmax(current_dist.logits, dim=-1) 
+                current_log_probs = torch.log_softmax(action_logits, dim=-1) 
                 target_expert_probs = sample['expert_probs']
                 distill_loss = F.kl_div(current_log_probs, target_expert_probs, reduction='batchmean')
                 distill_coef = 0.5
