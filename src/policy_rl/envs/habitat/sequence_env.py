@@ -12,6 +12,9 @@ import skimage.morphology
 from ..utils.fmm_planner import FMMPlanner
 import json
 import gzip
+import time
+from collections import defaultdict
+from contextlib import contextmanager
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 
 # try:
@@ -20,6 +23,59 @@ from habitat.sims.habitat_simulator.actions import HabitatSimActions
 #     # Keep runtime behavior unchanged when memory_profiler is not installed.
 #     def profile(func):
 #         return func
+
+class EnvStepProfiler:
+    def __init__(self, args, rank, prefix):
+        self.enabled = bool(
+            getattr(args, "profile_sequence", False)
+            or getattr(args, "profile_env_step", False)
+        )
+        self.interval = max(1, int(getattr(args, "profile_interval", 10)))
+        self.rank = rank
+        self.prefix = prefix
+        self.totals = defaultdict(float)
+        self.counts = defaultdict(int)
+        self.steps = 0
+
+    @contextmanager
+    def time(self, name):
+        if not self.enabled:
+            yield
+            return
+        start = time.time()
+        try:
+            yield
+        finally:
+            self.totals[name] += time.time() - start
+            self.counts[name] += 1
+
+    def tick(self):
+        if not self.enabled:
+            return
+        self.steps += 1
+        if self.steps % self.interval != 0 or not self.totals:
+            return
+        total = sum(self.totals.values())
+        rows = []
+        for name, seconds in sorted(self.totals.items(), key=lambda item: item[1], reverse=True):
+            count = max(1, self.counts[name])
+            rows.append(
+                "{} {:.3f}s avg {:.4f}s count {} pct {:.1f}%".format(
+                    name, seconds, seconds / count, self.counts[name], 100.0 * seconds / max(total, 1e-8)
+                )
+            )
+        print(
+            "[{} env{} step{}]\n  {}".format(
+                self.prefix,
+                self.rank,
+                self.steps,
+                "\n  ".join(rows),
+            ),
+            flush=True,
+        )
+        self.totals.clear()
+        self.counts.clear()
+
 
 class Sequence_Env(habitat.RLEnv):
     """The Semantic Curiosity environment class. The class is responsible
@@ -61,6 +117,7 @@ class Sequence_Env(habitat.RLEnv):
         # episode id 
         self.episode_no = 0
         self.frameid=0
+        self.step_profiler = EnvStepProfiler(args, rank, "sequence_env.step")
 
         
     # @profile
@@ -304,17 +361,20 @@ class Sequence_Env(habitat.RLEnv):
         # self._env._task.measurements.update_measures(
         #     episode=self._env.current_episode, action=act, task=self._env.task 
         # )
-        obs, _, done, _ = super().step({'action': act})
-        dx, dy, do = self.get_pose_change()     # update last_sim_location and this_sim_location
+        with self.step_profiler.time("wrap_act_super_step"):
+            obs, _, done, _ = super().step({'action': act})
+        with self.step_profiler.time("wrap_act_pose"):
+            dx, dy, do = self.get_pose_change()     # update last_sim_location and this_sim_location
         sensor_pose = [dx, dy, do]
         
         
         orient = self.this_sim_location[-1]
         # save samples(before resize)
         if self.args.save_samples:
-            if save:
-                paths = self.save_data(obs, self.frameid)
-            self.frameid += 1
+            with self.step_profiler.time("wrap_act_save_samples"):
+                if save:
+                    paths = self.save_data(obs, self.frameid)
+                self.frameid += 1
         return obs, done, sensor_pose, orient
 
     # @profile
@@ -336,28 +396,32 @@ class Sequence_Env(habitat.RLEnv):
 
         # action: 0-6: 
         
-        obs, dones, sensor_poses, orients = self.turn(action, None)
+        with self.step_profiler.time("turn_total"):
+            obs, dones, sensor_poses, orients = self.turn(action, None)
         obs_all, dones_all, sensor_poses_all, orients_all = obs, dones, sensor_poses, orients
         self.info['no_straight_num'] = len(obs_all) - 1
 
 
         ksteps = 10
         act_f = HabitatSimActions.MOVE_FORWARD      # 1
-        for _ in range(ksteps):
-            obs, done, sensor_pose, orient = self.wrap_act(act_f, None, save=True)
-            obs_all.append(obs)
-            dones_all.append(done)
-            sensor_poses_all.append(sensor_pose)
-            orients_all.append(orient)
-            
-            # check collision
-            collision = False
-            tx, ty, _ = self.this_sim_location
-            lx, ly, _ = self.last_sim_location
-            dist = pu.get_l2_distance(tx, lx, ty, ly)
-            collision = dist < self.args.collision_threshold_real
-            if collision:
-                break
+        with self.step_profiler.time("forward_loop_total"):
+            for _ in range(ksteps):
+                with self.step_profiler.time("forward_wrap_act"):
+                    obs, done, sensor_pose, orient = self.wrap_act(act_f, None, save=True)
+                obs_all.append(obs)
+                dones_all.append(done)
+                sensor_poses_all.append(sensor_pose)
+                orients_all.append(orient)
+                
+                # check collision
+                with self.step_profiler.time("collision_check"):
+                    collision = False
+                    tx, ty, _ = self.this_sim_location
+                    lx, ly, _ = self.last_sim_location
+                    dist = pu.get_l2_distance(tx, lx, ty, ly)
+                    collision = dist < self.args.collision_threshold_real
+                if collision:
+                    break
 
         # self.last_sim_location_z = self.this_sim_location_z
         # self.last_sim_rot = self.this_sim_rot
@@ -365,15 +429,17 @@ class Sequence_Env(habitat.RLEnv):
         
         # dx, dy, do = self.get_pose_change()     # update last_sim_location and this_sim_location
         # self.info['sensor_pose'] = [dx, dy, do]
-        self.info['sensor_pose_all'] = sensor_poses_all
-        self.info['orient_idx'] = self.map_radians_to_intervals(orients_all)
+        with self.step_profiler.time("info_pose_update"):
+            self.info['sensor_pose_all'] = sensor_poses_all
+            self.info['orient_idx'] = self.map_radians_to_intervals(orients_all)
         
-        obs_type = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
-                    'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
-                    'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
-        panorama_obs = [obs_all[-1][obt][:,:,::-1][None, ...] for obt in obs_type]
-        self.info['panorama_obs_all'] = obs_all[-1]
-        self.info['panorama_obs'] = np.concatenate(panorama_obs, axis=0)
+        with self.step_profiler.time("panorama_pack"):
+            obs_type = ['rgb', 'rgb_30', 'rgb_60', 'rgb_90', 
+                        'rgb_120', 'rgb_150', 'rgb_180', 'rgb_210',
+                        'rgb_240', 'rgb_270', 'rgb_300', 'rgb_330']
+            panorama_obs = [obs_all[-1][obt][:,:,::-1][None, ...] for obt in obs_type]
+            self.info['panorama_obs_all'] = obs_all[-1]
+            self.info['panorama_obs'] = np.concatenate(panorama_obs, axis=0)
         
         # self.pred_wp_heatmap(obs_all[-1])
         # rgb = obs['rgb'].astype(np.uint8)
@@ -485,4 +551,3 @@ class Sequence_Env(habitat.RLEnv):
     
     def get_obs_space(self):
         return self.observation_space
-
