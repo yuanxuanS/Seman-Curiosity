@@ -12,7 +12,7 @@ from skimage.segmentation import watershed
 
 
 class TrajectoryFeatureReward:
-    """Penalize trajectory points that are too visually similar to prior same-region points."""
+    """Reward visually distinct trajectory points and penalize overly similar same-region points."""
 
     def __init__(
         self,
@@ -21,7 +21,7 @@ class TrajectoryFeatureReward:
         device,
         coeff=0.05,
         sim_percentile=90.0,
-        min_region_points=5,
+        min_region_points=10,
         sim_window=200,
         max_points=50,
         region_update_interval=5,
@@ -50,6 +50,7 @@ class TrajectoryFeatureReward:
         self.next_point_ids = [0 for _ in range(self.num_envs)]
         self.region_maps = [None for _ in range(self.num_envs)]
         self.region_update_steps = [-1 for _ in range(self.num_envs)]
+        self.last_debug = [None for _ in range(self.num_envs)]
         self.step = 0
 
     def reset_env(self, env_idx):
@@ -58,6 +59,7 @@ class TrajectoryFeatureReward:
         self.next_point_ids[env_idx] = 0
         self.region_maps[env_idx] = None
         self.region_update_steps[env_idx] = -1
+        self.last_debug[env_idx] = None
 
     def get_similarity_stats(self):
         values = [
@@ -187,10 +189,19 @@ class TrajectoryFeatureReward:
             maxlen=self.max_points * self.max_points,
         )
 
-    def _compute_env_penalty(self, env_idx, region_id, point_id, feat):
+    def _compute_env_reward(self, env_idx, region_id, point_id, feat):
         # First restrict comparison to the current local region.
         candidates = [p for p in self.trajs[env_idx] if p["region"] == region_id]
         if len(candidates) == 0:
+            self.last_debug[env_idx] = {
+                "step": self.step,
+                "region": region_id,
+                "point_id": point_id,
+                "num_candidates": 0,
+                "num_hist_sims": 0,
+                "raw_reward": 0.0,
+                "reason": "no_candidates",
+            }
             return 0.0
 
         candidate_ids = [p["id"] for p in candidates]
@@ -205,6 +216,16 @@ class TrajectoryFeatureReward:
         self._record_current_sims(env_idx, point_id, candidates, sims.tolist())
 
         if len(same_region_sims) < self.min_region_points:
+            self.last_debug[env_idx] = {
+                "step": self.step,
+                "region": region_id,
+                "point_id": point_id,
+                "num_candidates": len(candidates),
+                "num_hist_sims": len(same_region_sims),
+                "max_sim": max_sim,
+                "raw_reward": 0.0,
+                "reason": "not_enough_history",
+            }
             return 0.0
 
         sim_values = np.asarray(same_region_sims, dtype=np.float32)
@@ -213,14 +234,43 @@ class TrajectoryFeatureReward:
         sim_low = float(np.min(sim_values))
         sim_high = float(np.max(sim_values))
 
-        if max_sim <= threshold:
-            return 0.0
-
         denom = max(sim_high - sim_low, 1e-6)
+        if max_sim <= threshold:
+            # Positive reward: less-than-usual similarity means this point is visually distinct.
+            normalized_gap = threshold - max_sim
+            raw_reward = 0.1 * min(normalized_gap / denom, 1.0)
+            self.last_debug[env_idx] = {
+                "step": self.step,
+                "region": region_id,
+                "point_id": point_id,
+                "num_candidates": len(candidates),
+                "num_hist_sims": len(same_region_sims),
+                "max_sim": max_sim,
+                "threshold": threshold,
+                "sim_min": sim_low,
+                "sim_max": sim_high,
+                "raw_reward": raw_reward,
+                "reason": "distinct_bonus",
+            }
+            return raw_reward
+
         normalized_excess = max_sim - threshold
         # Negative reward: more-than-usual similarity means stronger repetition penalty.
-        penalty = -min(normalized_excess / denom, 1.0)
-        return penalty
+        raw_reward = -min(normalized_excess / denom, 1.0)
+        self.last_debug[env_idx] = {
+            "step": self.step,
+            "region": region_id,
+            "point_id": point_id,
+            "num_candidates": len(candidates),
+            "num_hist_sims": len(same_region_sims),
+            "max_sim": max_sim,
+            "threshold": threshold,
+            "sim_min": sim_low,
+            "sim_max": sim_high,
+            "raw_reward": raw_reward,
+            "reason": "similarity_penalty",
+        }
+        return raw_reward
 
     def update_and_compute(self, maps, actions, img_feats, done=None):
         rewards = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
@@ -242,6 +292,12 @@ class TrajectoryFeatureReward:
             row, col = self._pose_to_cell(poses[env_idx], region_map.shape)
             region_id = self._region_at_cell(region_map, row, col)
             if region_id == 0:
+                self.last_debug[env_idx] = {
+                    "step": self.step,
+                    "region": 0,
+                    "raw_reward": 0.0,
+                    "reason": "invalid_region",
+                }
                 continue
 
             action_idx = int(actions_np[env_idx])
@@ -252,8 +308,13 @@ class TrajectoryFeatureReward:
             point_id = self.next_point_ids[env_idx]
             self.next_point_ids[env_idx] += 1
 
-            env_penalty = self._compute_env_penalty(env_idx, region_id, point_id, feat)
-            rewards[env_idx] = self.coeff * env_penalty
+            env_reward = self._compute_env_reward(env_idx, region_id, point_id, feat)
+            rewards[env_idx] = self.coeff * env_reward
+            if self.last_debug[env_idx] is not None:
+                self.last_debug[env_idx]["scaled_reward"] = float(rewards[env_idx].item())
+                self.last_debug[env_idx]["coeff"] = self.coeff
+                self.last_debug[env_idx]["action"] = action_idx
+                self.last_debug[env_idx]["cell"] = (row, col)
 
             self.trajs[env_idx].append(
                 {
@@ -269,3 +330,7 @@ class TrajectoryFeatureReward:
 
         self.step += 1
         return rewards
+
+    def get_last_debug(self, env_idx=0):
+        env_idx = int(np.clip(env_idx, 0, self.num_envs - 1))
+        return self.last_debug[env_idx]

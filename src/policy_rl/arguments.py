@@ -143,16 +143,20 @@ def get_args():
                         help='use a recurrent local policy')
     parser.add_argument('--reward_coeff', type=float, default=1.25e-3,      
                         help="Semantic curiosity reward coefficient")
-    parser.add_argument('--reward_coeff_seq', type=float, default=0.002,      
+    parser.add_argument('--reward_coeff_seq', type=float, default=0.1,      
                         help="sequence reward coefficient")
     parser.add_argument('--reward_coeff_ce', type=float, default=0.1,     
                         help="class entropy reward coefficient")
-    parser.add_argument('--distance_reward_coeff', type=float, default=1.,
+    parser.add_argument('--distance_reward_coeff', type=float, default=0.02,
                         help="distance reduce reward coefficient")
     parser.add_argument('--num_sem_categories', type=float, default=6,
                         help="number of semantic plus 1")
     parser.add_argument('--sem_pred_prob_thr', type=float, default=0.9,
                         help="Semantic prediction confidence threshold") 
+    parser.add_argument(
+        '--sem_pred_batch_size', type=int, default=3,
+        help="batch size for per-env sequence semantic prediction; set 1 to disable batching"
+    )
     
     # Mapping
     parser.add_argument('--global_downscaling', type=int, default=2)    # full_map缩放 downscaling倍数，得到local_map实际大小
@@ -216,6 +220,44 @@ def get_args():
     # for diversity reward
     parser.add_argument(
         "--use_diversity_reward", action="store_true", default=False
+    )
+    parser.add_argument(
+        "--use_traj_feature_reward", action="store_true", default=False,
+        help="add adaptive same-region trajectory feature similarity penalty"
+    )
+    parser.add_argument("--reward_coeff_traj", type=float, default=3)
+    parser.add_argument("--traj_sim_percentile", type=float, default=90.0)
+    parser.add_argument("--traj_min_region_points", type=int, default=5)
+    parser.add_argument("--traj_sim_window", type=int, default=200)
+    parser.add_argument("--traj_max_points", type=int, default=50)
+    parser.add_argument("--traj_region_update_interval", type=int, default=5)
+    parser.add_argument("--traj_region_method", type=str, default="watershed",
+                        choices=["watershed", "connected"])
+    parser.add_argument("--traj_watershed_min_distance", type=int, default=20)
+    parser.add_argument(
+        "--log_traj_reward_detail", action="store_true", default=False,
+        help="print per-step trajectory reward debug info for one environment"
+    )
+    parser.add_argument("--log_traj_reward_env", type=int, default=0)
+    parser.add_argument(
+        "--profile_sequence", action="store_true", default=False,
+        help="enable all sequence profiling switches"
+    )
+    parser.add_argument(
+        "--profile_main_sequence", action="store_true", default=False,
+        help="print per-section timing stats in main_sequence.py"
+    )
+    parser.add_argument(
+        "--profile_env_step", action="store_true", default=False,
+        help="print per-env timing stats inside sequence env workers"
+    )
+    parser.add_argument(
+        "--profile_panorama_encoder", action="store_true", default=False,
+        help="print timing stats inside NonHistoryPanoramaModel.encoder"
+    )
+    parser.add_argument(
+        "--profile_interval", type=int, default=10,
+        help="print profiling stats every N steps when a profiler is enabled"
     )
     parser.add_argument(
         "--diversity_only", action="store_true", default=False

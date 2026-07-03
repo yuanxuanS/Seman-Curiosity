@@ -9,6 +9,7 @@ import torch
 from torch import nn
 import math
 import time
+from collections import defaultdict
 from torchvision.transforms import v2
 import torchvision
 import torchvision.transforms.functional as F
@@ -354,6 +355,36 @@ class panorama_model(nn.Module):
         self.hidden_size = config.hidden_size
         
         self.ob_img_feats = None
+        self.profile_encoder = bool(getattr(config, "profile_panorama_encoder", False))
+        self.profile_interval = max(1, int(getattr(config, "profile_interval", 10)))
+        self.profile_step = 0
+        self.profile_totals = defaultdict(float)
+        self.profile_counts = defaultdict(int)
+
+    def _profile_add(self, name: str, seconds: float):
+        if not self.profile_encoder:
+            return
+        self.profile_totals[name] += seconds
+        self.profile_counts[name] += 1
+
+    def _profile_report_encoder(self):
+        if not self.profile_encoder:
+            return
+        self.profile_step += 1
+        if self.profile_step % self.profile_interval != 0 or not self.profile_totals:
+            return
+        total = sum(self.profile_totals.values())
+        rows = []
+        for name, seconds in sorted(self.profile_totals.items(), key=lambda item: item[1], reverse=True):
+            count = max(1, self.profile_counts[name])
+            rows.append(
+                "{} {:.3f}s avg {:.4f}s count {} pct {:.1f}%".format(
+                    name, seconds, seconds / count, self.profile_counts[name], 100.0 * seconds / max(total, 1e-8)
+                )
+            )
+        print("[panorama_encoder step{}]\n  {}".format(self.profile_step, "\n  ".join(rows)), flush=True)
+        self.profile_totals.clear()
+        self.profile_counts.clear()
 
     def encoder(self, images:Tensor):
         '''
@@ -361,25 +392,29 @@ class panorama_model(nn.Module):
         '''
         fts = []
         for e in range(images.shape[0]):
-            # t1 = time.time()
+            t0 = time.time()
             images_ = images[e, ...]
 
             images_permuted = images_.permute(0, 3, 1, 2)
             
             view_list = []
             for v in range(int(images_permuted.size(0))):
-                single_view_img = images_permuted[v] # 👈 严格切出 (C, W, H)
+                single_view_img = images_permuted[v]
                 view_list.append(self.img_transforms(single_view_img))
-            # 重新打包回 4D Tensor (12, C, 224, 224) 喂给 ViT
             images_input = torch.stack(view_list, dim=0)
+            self._profile_add("preprocess", time.time() - t0)
             
-            # print(f"in encoder, type convert{time.time()- t1}")
+            t0 = time.time()
             b_fts = self.vit_model.forward_features(images_input)
             b_fts = b_fts.detach()
+            self._profile_add("vit_forward", time.time() - t0)
+
+            t0 = time.time()
             fts.append(b_fts.unsqueeze(0))
-            # print(f"in encoder, forward feature {time.time()- t2}")
+            self._profile_add("reshape", time.time() - t0)
         
         fts = torch.concat(fts, 0)
+        self._profile_report_encoder()
         return fts
     
     @property

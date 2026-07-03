@@ -406,49 +406,54 @@ class Sequence_Env_Agent(Sequence_Env):
             done (bool): whether the episode has ended
             info (dict): contains timestep
         """
-        for f, inputs_f in enumerate(inputs):
-            if f > len(self.rgb_vis_frames) - 1:
-                continue
-            # visualize 
-            self.last_loc = self.curr_loc
-            # Get Map prediction
-            map_pred = np.rint(inputs_f['map_pred'])  # 四舍五入
-        
-            # Get pose prediction and global policy planning window
-            start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
-                inputs_f['pose_pred']
-            gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
+        with self.step_profiler.time("agent_vis_input_loop"):
+            for f, inputs_f in enumerate(inputs):
+                if f > len(self.rgb_vis_frames) - 1:
+                    continue
+                # visualize 
+                self.last_loc = self.curr_loc
+                # Get Map prediction
+                map_pred = np.rint(inputs_f['map_pred'])  # 四舍五入
             
-            # Get curr loc
-            self.curr_loc = [start_x, start_y, start_o]
-            r, c = start_y, start_x
-            start = [int(r * 100.0 / self.args.map_resolution - gx1),
-                    int(c * 100.0 / self.args.map_resolution - gy1)]
-            start = pu.threshold_poses(start, map_pred.shape)
-            
-            if self.args.visualize or self.args.print_images:
-                # Get last loc
-                last_start_x, last_start_y = self.last_loc[0], self.last_loc[1]
-                r, c = last_start_y, last_start_x
-                last_start = [int(r * 100.0 / self.args.map_resolution - gx1),
-                            int(c * 100.0 / self.args.map_resolution - gy1)]
-                last_start = pu.threshold_poses(last_start, map_pred.shape)
-                self.visited_vis[gx1:gx2, gy1:gy2] = \
-                    vu.draw_line(last_start, start,
-                                self.visited_vis[gx1:gx2, gy1:gy2])
-                self._visualize(inputs_f, frame_id=f)
+                # Get pose prediction and global policy planning window
+                start_x, start_y, start_o, gx1, gx2, gy1, gy2 = \
+                    inputs_f['pose_pred']
+                gx1, gx2, gy1, gy2 = int(gx1), int(gx2), int(gy1), int(gy2)
+                
+                # Get curr loc
+                self.curr_loc = [start_x, start_y, start_o]
+                r, c = start_y, start_x
+                start = [int(r * 100.0 / self.args.map_resolution - gx1),
+                        int(c * 100.0 / self.args.map_resolution - gy1)]
+                start = pu.threshold_poses(start, map_pred.shape)
+                
+                if self.args.visualize or self.args.print_images:
+                    with self.step_profiler.time("agent_visualize"):
+                        # Get last loc
+                        last_start_x, last_start_y = self.last_loc[0], self.last_loc[1]
+                        r, c = last_start_y, last_start_x
+                        last_start = [int(r * 100.0 / self.args.map_resolution - gx1),
+                                    int(c * 100.0 / self.args.map_resolution - gy1)]
+                        last_start = pu.threshold_poses(last_start, map_pred.shape)
+                        self.visited_vis[gx1:gx2, gy1:gy2] = \
+                            vu.draw_line(last_start, start,
+                                        self.visited_vis[gx1:gx2, gy1:gy2])
+                        self._visualize(inputs_f, frame_id=f)
 
         # act and step
         # action = action + np.ones_like(action)   # output: 0-2, add to 1-3
         # action = {'action': action}
-        obs_all, done_all, info = super().step(action)       # 4,256,256
+        with self.step_profiler.time("agent_super_step"):
+            obs_all, done_all, info = super().step(action)       # 4,256,256
 
         
         # preprocess obs
-        obs_all, info = self._preprocess_obs(obs_all, info) # 改为对对个rgb序列的目标检测
+        with self.step_profiler.time("agent_preprocess_obs"):
+            obs_all, info = self._preprocess_obs(obs_all, info) # 改为对对个rgb序列的目标检测
         self.info = info
         self.timestep += 1  # 
         self.frameid = 0
+        self.step_profiler.tick()
 
         return obs_all, 0., done_all[-1], info
     
@@ -496,93 +501,109 @@ class Sequence_Env_Agent(Sequence_Env):
         # for sequence reward
         obs_rgbs = []
         obs_detections = []
-        
-        for f, obs in enumerate(obs_seq):
-            rgb = obs['rgb'].astype(np.uint8)
-            depth = obs['depth']
-            obs = np.concatenate((rgb, depth), axis=2)
 
-            # obs = obs.transpose(1, 2, 0)
-            
-            rgb_ = obs[:, :, :3]     # 256,256,3
-            depth_ = obs[:, :, 3:4]
-        
-        
-            if args.det_frame_height != args.env_frame_height:
-                rgb = cv2.resize(rgb_, (args.det_frame_height, args.det_frame_width))   #, rgb_.shape[-1]))
-                depth = cv2.resize(depth_, (args.det_frame_height, args.det_frame_width))[..., None] #, 1))
-            else:
-                rgb = rgb_
-                depth = depth_
-            del rgb_
-            del depth_
+        frames = []
+        for obs in obs_seq:
+            with self.step_profiler.time("preprocess_frame_prepare"):
+                rgb_raw = obs['rgb'].astype(np.uint8)
+                depth_raw = obs['depth']
+                rgb_ = rgb_raw
+                depth_ = depth_raw
 
-            return_score, return_instance = False, True     # return_score: use pred score as reward; 
-            assert not (return_score and return_instance), \
-                "Cannot return both score and instance at the same time."
-            sem_seg_pred, obj = self._get_sem_pred(
-                rgb.astype(np.uint8), use_seg=use_seg, return_score=return_score, return_instance=return_instance)
-            # for sequence reward
-            target_obj = self.filter_instance(obj)
-            if f > self.info['no_straight_num'] - 1:
-                obs_rgbs.append(obs_seq[f]['rgb'])
-                obs_detections.append(target_obj)
-            obs_detections.append(target_obj)
-            depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
+                with self.step_profiler.time("preprocess_det_resize"):
+                    if args.det_frame_height != args.env_frame_height:
+                        rgb = cv2.resize(rgb_, (args.det_frame_height, args.det_frame_width))
+                        depth = cv2.resize(depth_, (args.det_frame_height, args.det_frame_width))[..., None]
+                    else:
+                        rgb = rgb_
+                        depth = depth_
+                frames.append({"rgb": rgb, "depth": depth})
 
-            ds = args.det_frame_width // args.frame_width  # Downscaling factor
-            if ds != 1:
-                rgb = np.asarray(self.res(rgb.astype(np.uint8)))
-                depth = depth[ds // 2::ds, ds // 2::ds]
-                sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
+        if use_seg:
+            with self.step_profiler.time("preprocess_sem_pred"):
+                sem_seg_preds, rgb_vis_frames, objs = self._get_sem_pred_batch(
+                    [frame["rgb"].astype(np.uint8) for frame in frames],
+                    return_instance=True,
+                )
+            self.rgb_vis_frames.extend(rgb_vis_frames)
+        else:
+            sem_seg_preds = [np.zeros((frame["rgb"].shape[0], frame["rgb"].shape[1], 6)) for frame in frames]
+            objs = [Instances((frame["rgb"].shape[0], frame["rgb"].shape[1])) for frame in frames]
+            self.rgb_vis_frames.extend([frame["rgb"][:, :, ::-1] for frame in frames])
 
-            depth = np.expand_dims(depth, axis=2)
+        for f, frame in enumerate(frames):
+            with self.step_profiler.time("preprocess_frame_total"):
+                rgb = frame["rgb"]
+                depth = frame["depth"]
+                sem_seg_pred = sem_seg_preds[f]
+                obj = objs[f]
 
-            if return_instance:
+                # for sequence reward
+                with self.step_profiler.time("preprocess_filter_instance"):
+                    target_obj = self.filter_instance(obj)
+                    if f > self.info['no_straight_num'] - 1:
+                        obs_rgbs.append(obs_seq[f]['rgb'])
+                        obs_detections.append(target_obj)
+                    obs_detections.append(target_obj)
+                with self.step_profiler.time("preprocess_depth"):
+                    depth = self._preprocess_depth(depth, args.min_depth, args.max_depth)
+
+                with self.step_profiler.time("preprocess_downsample"):
+                    ds = args.det_frame_width // args.frame_width  # Downscaling factor
+                    if ds != 1:
+                        rgb = np.asarray(self.res(rgb.astype(np.uint8)))
+                        depth = depth[ds // 2::ds, ds // 2::ds]
+                        sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
+
+                    depth = np.expand_dims(depth, axis=2)
+
                 save_pred_ins = True if self.args.save_samples else False
                 if save_pred_ins and f > self.info['no_straight_num'] - 1:
-                    self.save_data({'bbspred': {'instances': obj}}, f)
-                # TODO sequence 的相关奖励计算            
-        
-            state = np.concatenate((rgb, depth, sem_seg_pred),
-                                axis=2).transpose(2, 0, 1)
-            state_all.append(state)
+                    with self.step_profiler.time("preprocess_save_pred_instances"):
+                        self.save_data({'bbspred': {'instances': obj}}, f)
+
+                with self.step_profiler.time("preprocess_state_concat"):
+                    state = np.concatenate((rgb, depth, sem_seg_pred),
+                                    axis=2).transpose(2, 0, 1)
+                    state_all.append(state)
         
         # # for sequence reward
-        groups = group_by_object_and_score(obs_detections)
-        num_frames = len(obs_detections)
-        sequence_reward = 0.
-        for g in groups:
-            if g.has_object():
-                g_class = int(list(g.history.values())[0].pred_classes.cpu().numpy())
-                g_coeff = 1 / (self.history_counts.get(g_class, 0.) + 1. )
-                g_r = 0.
-                if g.frames[0] > 0:
-                    g_r += g_coeff
-                if g.frames[-1] < num_frames - 1:
-                    g_r += g_coeff
-                sequence_reward += g_r
-        info['sequence_reward'] = sequence_reward
+        with self.step_profiler.time("preprocess_sequence_reward"):
+            groups = group_by_object_and_score(obs_detections)
+            num_frames = len(obs_detections)
+            sequence_reward = 0.
+            for g in groups:
+                if g.has_object():
+                    g_class = int(list(g.history.values())[0].pred_classes.cpu().numpy())
+                    g_coeff = 1 / (self.history_counts.get(g_class, 0.) + 1. )
+                    g_r = 0.
+                    if g.frames[0] > 0:
+                        g_r += g_coeff
+                    if g.frames[-1] < num_frames - 1:
+                        g_r += g_coeff
+                    sequence_reward += g_r
+            info['sequence_reward'] = sequence_reward
 
         # groups = score_tracks(groups, obs_detections)
         # groups = aggre_score_in_obj_tracks(groups, mode="frame")
         # groups = get_all_sample_score(clip_model, preprocess, text, groups, frame_rgbs)
-        for od in obs_detections:
-            if len(od) == 0:
-                continue
-            for det in range(len(od)):
-                pred_cls = int(od[det].pred_classes.cpu().numpy())
-                # if not pred_cls in list(target_coco_categories_mapping.keys()):
-                #     continue
-                self.history_counts.update([pred_cls])
-                self.total_objects += 1
-        
-        
-        curr_entropy = self._calculate_entropy()
-        cls_etp = curr_entropy - self.prev_entropy
-        info['cls_etp'] = cls_etp 
-        
-        self.prev_entropy = curr_entropy
+        with self.step_profiler.time("preprocess_entropy_update"):
+            for od in obs_detections:
+                if len(od) == 0:
+                    continue
+                for det in range(len(od)):
+                    pred_cls = int(od[det].pred_classes.cpu().numpy())
+                    # if not pred_cls in list(target_coco_categories_mapping.keys()):
+                    #     continue
+                    self.history_counts.update([pred_cls])
+                    self.total_objects += 1
+            
+            
+            curr_entropy = self._calculate_entropy()
+            cls_etp = curr_entropy - self.prev_entropy
+            info['cls_etp'] = cls_etp 
+            
+            self.prev_entropy = curr_entropy
         return state_all, info
     
     def _calculate_entropy(self):
@@ -657,6 +678,28 @@ class Sequence_Env_Agent(Sequence_Env):
             return semantic_pred
         else:
             return semantic_pred, obj
+
+    def _get_sem_pred_batch(self, rgbs, return_instance=False):
+        batch_size = max(1, int(getattr(self.args, "sem_pred_batch_size", 1)))
+        if batch_size <= 1 or self.args.visualize == 2:
+            sem_preds, rgb_vis_frames, objs = [], [], []
+            for rgb in rgbs:
+                sem_pred, rgb_vis, obj = self.sem_pred.get_prediction(
+                    rgb, return_instance=return_instance)
+                sem_preds.append(sem_pred.astype(np.float32))
+                rgb_vis_frames.append(rgb_vis)
+                objs.append(obj)
+            return sem_preds, rgb_vis_frames, objs
+
+        sem_preds, rgb_vis_frames, objs = [], [], []
+        for start in range(0, len(rgbs), batch_size):
+            chunk = rgbs[start:start + batch_size]
+            chunk_sem_preds, chunk_vis, chunk_objs = self.sem_pred.get_predictions_batch(
+                chunk, return_instance=True)
+            sem_preds.extend([sem_pred.astype(np.float32) for sem_pred in chunk_sem_preds])
+            rgb_vis_frames.extend(chunk_vis)
+            objs.extend(chunk_objs)
+        return sem_preds, rgb_vis_frames, objs
     
     
     def _visualize(self, inputs, mode="full", frame_id=0):

@@ -466,7 +466,8 @@ class RL_Policy(nn.Module):
 class RL_Policy2(nn.Module):
     model_config = model_config
     def __init__(self, obs_shape, action_space, device=0,
-                 base_kwargs=None, use_history=False):
+                 base_kwargs=None, use_history=False,
+                 profile_panorama_encoder=False, profile_interval=10):
 
         super(RL_Policy2, self).__init__()
         
@@ -474,6 +475,8 @@ class RL_Policy2(nn.Module):
         self.device = device
         
         model_config = ModelConfig(**self.model_config)
+        model_config.profile_panorama_encoder = profile_panorama_encoder
+        model_config.profile_interval = profile_interval
         
         if action_space.__class__.__name__ == "Discrete":
             # num_outputs = action_space.n

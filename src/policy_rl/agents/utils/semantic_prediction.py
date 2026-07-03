@@ -61,6 +61,45 @@ class SemanticPredMaskRCNN():
                 return semantic_input, img, seg_predictions[0]['instances']
             else:
                 return semantic_input, img, seg_predictions[0]['instances'], features
+
+    def get_predictions_batch(self, imgs, return_instance=False, return_features=False):
+        """Run Mask-RCNN on a list of RGB images and return per-image outputs."""
+        if len(imgs) == 0:
+            if return_instance:
+                return [], [], []
+            return [], []
+        args = self.args
+        image_list = [img[:, :, ::-1] for img in imgs]
+        if return_features:
+            seg_predictions, vis_output, features = self.segmentation_model.get_predictions(
+                image_list, visualize=False, return_features=True)
+        else:
+            seg_predictions, vis_output = self.segmentation_model.get_predictions(
+                image_list, visualize=False)
+
+        semantic_inputs = []
+        vis_images = []
+        instances = []
+        for img_bgr, prediction in zip(image_list, seg_predictions):
+            semantic_input = np.zeros((img_bgr.shape[0], img_bgr.shape[1], 5 + 1))
+            pred_instances = prediction['instances']
+            for j, class_idx in enumerate(pred_instances.pred_classes.cpu().numpy()):
+                if class_idx in list(target_coco_categories_mapping.keys()):
+                    idx = target_coco_categories_mapping[class_idx]
+                    obj_mask = pred_instances.pred_masks[j] * 1.
+                    semantic_input[:, :, idx] += obj_mask.cpu().numpy()
+            semantic_inputs.append(semantic_input)
+            vis_images.append(img_bgr)
+            instances.append(pred_instances)
+
+        if return_instance:
+            if return_features:
+                return semantic_inputs, vis_images, instances, features
+            return semantic_inputs, vis_images, instances
+        if return_features:
+            return semantic_inputs, vis_images, features
+        return semantic_inputs, vis_images
+
 def compress_sem_map(sem_map):
     """
     Compresses a semantic map into a single channel map by assigning each class to a unique integer.
