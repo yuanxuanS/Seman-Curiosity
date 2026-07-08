@@ -1,286 +1,341 @@
 from PIL import Image
-import torch
-from src.policy_rl.agents.utils.detect_utils import box_iou_calc
 import numpy as np
+import torch
 
-iou_threshold=0.4
+from src.policy_rl.agents.utils.detect_utils import box_iou_calc
+
+
+STC_IOU_THRESHOLD = 0.5
+DEFAULT_SAMPLE_BUDGET = 3
+DEFAULT_CLIP_TARGET_THRESHOLD = 0.7
+
 
 class ObjectTrack:
-    """代表一个检出的独立物体轨迹"""
-    def __init__(self, start_frame, obj_data):
-        # history 存储每一帧的数据 {frame_idx: {box, label, score}}
-        self.history = {start_frame: obj_data}
+    """Detection trajectory tau_p for one object in a meta-sequence."""
+
+    def __init__(self, start_frame, detection):
+        self.history = {start_frame: detection}
         self.frames = [start_frame]
-        self.scores = 0.
-        self.score_first = 0.
-        self.score_last = 0.
-        self.aggre_scores = {}      # 聚合所有重叠的frame的分数
-        self.best_frames = {}
+        self.start_frame = start_frame
+        self.end_frame = start_frame
+        self.bd_scores = {}
+        self.cls_scores = {}
+        self.unc_scores = {}
         self.is_active = True
-        
+
+    def add_detection(self, frame_idx, detection):
+        self.history[frame_idx] = detection
+        self.frames.append(frame_idx)
+        self.end_frame = frame_idx
+
     def has_object(self):
-        return list(self.history.values())[0] is not None
-    
-    def get_frame_score(self, f):
-        assert f in self.frames, f"frame {f} not in track"
-        if f == min(self.frames): score = self.scores + self.score_first
-        elif f == max(self.frames): score = self.scores + self.score_last
-        else: score = self.scores
-        return score 
-    
-def group_by_object_and_score(sequence_detections, ):
+        return bool(self.history) and next(iter(self.history.values())) is not None
+
+
+class STCSelectionResult(list):
+    """Object tracks plus frame-level STC scores."""
+
+    def __init__(self, tracks=None, num_frames=0):
+        super().__init__(tracks or [])
+        self.num_frames = num_frames
+        self.frame_scores = {frame_idx: 0.0 for frame_idx in range(num_frames)}
+        self.clip_fallback = False
+        self.clip_candidate_frames = None
+
+
+def _to_numpy(value):
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "numpy"):
+        value = value.numpy()
+    return np.asarray(value)
+
+
+def _detection_box(detection):
+    return _to_numpy(detection.pred_boxes.tensor)
+
+
+def _detection_class(detection):
+    return int(_to_numpy(detection.pred_classes).reshape(-1)[0])
+
+
+def _detection_score(detection):
+    return float(_to_numpy(detection.scores).reshape(-1)[0])
+
+
+def _detection_iou(detection_a, detection_b):
+    return float(box_iou_calc(_detection_box(detection_a), _detection_box(detection_b)).max())
+
+
+def _frame_has_spatial_match(frame_detections, target_detection, iou_threshold):
+    for detection_idx in range(len(frame_detections)):
+        try:
+            iou = _detection_iou(frame_detections[detection_idx], target_detection)
+        except AttributeError:
+            return False
+        if iou > iou_threshold:
+            return True
+    return False
+
+
+def _ensure_stc_result(tracks, num_frames):
+    if isinstance(tracks, STCSelectionResult):
+        tracks.num_frames = num_frames
+        return tracks
+    return STCSelectionResult(tracks, num_frames=num_frames)
+
+
+def extract_object_tracks(sequence_detections, iou_threshold=STC_IOU_THRESHOLD):
     """
-    基于物体的生命周期进行分组评分
-    - 图像中连续无目标
-    - 某个物体（类别不变）连续出现
-    
+    Step 1: extract object trajectories from adjacent-frame spatial consistency.
+
+    Detections in frame k and k+1 are assigned to the same trajectory when
+    IoU(b_k, b_{k+1}) is larger than q. Class labels are deliberately ignored
+    here so that class changes can be scored later.
     """
     num_frames = len(sequence_detections)
-    all_tracks = []
+    tracks = STCSelectionResult(num_frames=num_frames)
     active_tracks = []
 
-    # --- 阶段 1: 轨迹关联 (把框归类到物体) ---
-    for t in range(num_frames):
-        curr_objs = sequence_detections[t]
-        matched_indices = set()
-        matched_curr = False
-        
-        # 将活跃轨迹匹配当前帧的框
+    for frame_idx, frame_detections in enumerate(sequence_detections):
+        matched_detection_indices = set()
+
         for track in active_tracks:
-            last_f = track.frames[-1]
-            last_data = track.history[last_f]
-            
-            if last_data is None:       # 该track无目标
-                if len(curr_objs) == 0:
-                    track.history[t] = None
-                    track.frames.append(t)
-                    matched_curr = True
-                else:       # 但新出现目标
-                    track.is_active = False
-                break       # 如果活跃轨迹有无目标的，则其他
-            else:
-                if len(curr_objs) == 0: # 当前帧无任何目标，均创建新track
-                    track.is_active = False
+            last_frame = track.frames[-1]
+            if last_frame != frame_idx - 1:
+                track.is_active = False
+                continue
+
+            best_iou = 0.0
+            best_detection_idx = -1
+            for detection_idx in range(len(frame_detections)):
+                if detection_idx in matched_detection_indices:
                     continue
-                
-                # 当前帧有目标，track和每个目标，找最匹配
-                best_iou = 0
-                best_idx = -1
-                for i in range(len(curr_objs)):
-                    obj = curr_objs[i]
-                    if i in matched_indices: continue
-                    
-                    curr_box = obj.pred_boxes.tensor.cpu().numpy()
-                    last_box = last_data.pred_boxes.tensor.cpu().numpy()
-                    iou = box_iou_calc(last_box, curr_box)
-                    if iou > iou_threshold and iou > best_iou:
-                        if obj.pred_classes == last_data.pred_classes:
-                            best_iou = iou
-                            best_idx = i
-                
-                if best_idx != -1:
-                    track.history[t] = curr_objs[best_idx]
-                    track.frames.append(t)
-                    matched_indices.add(best_idx)
-                else:
-                    track.is_active = False # 该track未匹配到任一目标，认为轨迹结束
-        
-        if len(curr_objs) == 0:
-            if matched_curr == False:       # 建立无目标帧track
-                new_track = ObjectTrack(t, None)
-                all_tracks.append(new_track)
-                active_tracks.append(new_track)
+                iou = _detection_iou(
+                    track.history[last_frame], frame_detections[detection_idx]
+                )
+                if iou > iou_threshold and iou > best_iou:
+                    best_iou = iou
+                    best_detection_idx = detection_idx
+
+            if best_detection_idx == -1:
+                track.is_active = False
             else:
+                track.add_detection(frame_idx, frame_detections[best_detection_idx])
+                matched_detection_indices.add(best_detection_idx)
+
+        active_tracks = [track for track in active_tracks if track.is_active]
+
+        for detection_idx in range(len(frame_detections)):
+            if detection_idx in matched_detection_indices:
                 continue
-        else:
-            # 为新出现的框创建新轨迹
-            for i in range(len(curr_objs)):
-                obj = curr_objs[i]
-                if i not in matched_indices:
-                    new_track = ObjectTrack(t, obj)
-                    all_tracks.append(new_track)
-                    active_tracks.append(new_track)
-            
-        matched_curr = False
-        # 移除已失效的轨迹
-        active_tracks = [tr for tr in active_tracks if tr.is_active]
-    return all_tracks
+            track = ObjectTrack(frame_idx, frame_detections[detection_idx])
+            tracks.append(track)
+            active_tracks.append(track)
 
-def score_tracks(all_tracks, sequence_detections):
-    '''
-    给每个track打分
-    检查track第一帧的前一帧, track的最后一帧的后一帧：
-        - 类别变化： 相邻帧均+1
-        - 无对应目标： 后一track为目标消失，后一track的score+1; 本track的score+1
-        - 目标消失： 前组中选最高； 后组的第一帧入选
+    return tracks
 
-    '''
-    num_frames = len(sequence_detections)
-    
-    def match_box(tracks, tgt_track,found_bool, check_prev=False, another_frame_idx=None):
-        flip_track = None
-        for pt in tracks:
-            if not pt.has_object():
+
+def score_boundary_missing_detections(
+    tracks,
+    num_frames,
+    sequence_detections=None,
+    iou_threshold=STC_IOU_THRESHOLD,
+):
+    """
+    Step 2: score potential missing detections around trajectory boundaries.
+
+    V_bd(i_k, tau_p) = 1(k < a_p) + 1(k = b_p + 1), where a_p is the first
+    trajectory frame and b_p is the last trajectory frame.
+
+    For non-adjacent predecessor frames, if a detection already exists at the
+    same spatial position as the trajectory start, the frame is not counted as a
+    missing detection.
+    """
+    tracks = _ensure_stc_result(tracks, num_frames)
+    tracks.frame_scores = {frame_idx: 0.0 for frame_idx in range(num_frames)}
+
+    for track in tracks:
+        track.start_frame = min(track.frames)
+        track.end_frame = max(track.frames)
+        track.bd_scores = {}
+        track.cls_scores = {}
+        track.unc_scores = {}
+
+        start_detection = track.history[track.start_frame]
+        adjacent_prev_frame = track.start_frame - 1
+        for frame_idx in range(track.start_frame):  # 前序帧值，漏检+1
+            if (
+                sequence_detections is not None
+                and frame_idx != adjacent_prev_frame
+                and _frame_has_spatial_match(
+                    sequence_detections[frame_idx], start_detection, iou_threshold
+                )
+            ):
                 continue
-            
-            another_box = pt.history[another_frame_idx].pred_boxes.tensor.cpu().numpy()
-            curr_box = tgt_track.history[f1].pred_boxes.tensor.cpu().numpy()
-            if box_iou_calc(another_box, curr_box) > iou_threshold:
-                if pt.history[another_frame_idx].pred_classes != curr_label:
-                    # 规则：类别变化 -> f1相邻前一帧 +1, f1 +1
-                    # frame_values[prev_frame_idx] += 1
-                    if check_prev: 
-                        pt.score_last += 1
-                        tgt_track.score_first += 1
-                    else: 
-                        pt.score_first += 1
-                        tgt_track.score_last += 1
-                    # frame_values[f1] += 1
-                    found_bool = True
-                    flip_track = pt
-                    break # 找到一个匹配的翻转即可
-        return found_bool, flip_track
-        
-    for i, track in enumerate(all_tracks):
-        if not track.has_object():
-            continue
-        
-        f_indices = sorted(track.frames)
-        f1 = f_indices[0]      # 当前 track 的第一帧
-        fn = f_indices[-1]     # 当前 track 的最后一帧
-        curr_label = track.history[f1].pred_classes
-        
-        # --- 1. 检查开头 (目标出现逻辑) ---
-        if f1 > 0:
-            prev_frame_idx = f1 - 1
-            # 查找在 f1 前一帧活跃的其他 track (如果有的话)
-            prev_tracks = [t for t in all_tracks if prev_frame_idx in t.frames]
-            
-            # 逻辑 A: 检查是否存在位置重合但类别不同的 track (类别变化)
-            # 我们通过 IoU 判定 prev_frame 中的某个物体是否就是当前物体的“前身”
-            found_class_flip = False
-            found_class_flip, flip_track = match_box(prev_tracks, track, found_class_flip, 
-                                         check_prev=True,
-                                         another_frame_idx=prev_frame_idx)
-                    
-            # 逻辑 B: 如果没有类别变化的 track，很有可能未检出
-            if not found_class_flip:
-                # 两个track均+1
-                for pt in prev_tracks:
-                    pt.scores += 1
-                track.scores += 1
-            else:   
-                # 找到对应类别变化，上一track最后一帧的score+1， 本track第一帧+1
-                flip_track.score_last += 1
-                track.score_first += 1
-        # --- 2. 检查结尾 (目标消失逻辑) ---
-        if fn < num_frames - 1:
-            next_frame_idx = fn + 1
-            # 查找在 fn 后一帧活跃的其他 track
-            next_tracks = [t for t in all_tracks if next_frame_idx in t.frames]
-            
-            # 逻辑 C: 检查是否存在位置重合但类别不同的 track (类别变化)
-            found_class_flip_end = False
-            found_class_flip_end, flip_track = match_box(next_tracks, track, found_class_flip_end, 
-                                             check_prev=False,
-                                             another_frame_idx=next_frame_idx)
-            
-            # 逻辑 D: 如果后面没有承接的 track，“目标消失” or 未检出
-            if not found_class_flip_end:
-                # 规则：后组第一帧+1， 前组均+1
-                track.scores += 1              
-                for nt in next_tracks:
-                    nt.score_first += 1
-            else:
-                flip_track.score_first += 1
-                track.score_last += 1
-    return all_tracks
+            track.bd_scores[frame_idx] = track.bd_scores.get(frame_idx, 0.0) + 1.0
+            tracks.frame_scores[frame_idx] += 1.0 #
 
-def aggre_score_in_obj_tracks(all_tracks, mode='frame'):
-    '''
-    按照目标track, 给每张图叠加分数
-    '''
-    frames_to_aggre = {}
-    for track in all_tracks:
-        if not track.has_object():
-            continue
-        
-        for f in track.frames:
-            curr_score = track.get_frame_score(f)
-            if not f in frames_to_aggre:
-                frames_to_aggre[f] = curr_score
-            else:
-                frames_to_aggre[f] += curr_score
-    
-    if mode == "frame":
-        return frames_to_aggre
-    # 将图像分数加回track中，用于后续从track中选样本
-    for track in all_tracks:
-        if not track.has_object():
-            continue
-        
-        for f in track.frames:
-            curr_score = track.get_frame_score(f)
-            track.aggre_scores[f] = curr_score + frames_to_aggre[f]
-    return all_tracks
-        
-def get_all_sample_score(clip_model, preprocess, text, all_tracks, all_frames, device):
-    '''
-    得到每个frame的分数，交叉track的分数叠加
-    '''
-    
-    imgs_entropy = []
-    for img in all_frames:
-        pil_img = Image.fromarray(img.astype(np.uint8))
+        next_frame = track.end_frame + 1
+        if next_frame < num_frames:  # 后序的一帧+1
+            track.bd_scores[next_frame] = track.bd_scores.get(next_frame, 0.0) + 1.0
+            tracks.frame_scores[next_frame] += 1.0
+
+    return tracks
+
+
+def score_class_changes_in_tracks(tracks):
+    """
+    Step 3: score class changes between adjacent detections in each trajectory.
+
+    If c_{k,p} != c_{k+1,p}, both frames receive one value point.
+    """
+    for track in tracks:
+        for prev_frame, curr_frame in zip(track.frames[:-1], track.frames[1:]):
+            if curr_frame != prev_frame + 1:
+                continue
+            if _detection_class(track.history[prev_frame]) == _detection_class(
+                track.history[curr_frame]
+            ):
+                continue
+
+            track.cls_scores[prev_frame] = track.cls_scores.get(prev_frame, 0.0) + 1.0
+            track.cls_scores[curr_frame] = track.cls_scores.get(curr_frame, 0.0) + 1.0
+            tracks.frame_scores[prev_frame] += 1.0
+            tracks.frame_scores[curr_frame] += 1.0
+
+    return tracks
+
+
+def score_prediction_uncertainty(tracks):
+    """
+    Step 4: score detection uncertainty inside trajectories.
+
+    V_unc(i_k, tau_p) = 1 - s_{k,p}.
+    """
+    for track in tracks:
+        for frame_idx in track.frames:
+            unc_score = 1.0 - _detection_score(track.history[frame_idx])
+            track.unc_scores[frame_idx] = unc_score
+            tracks.frame_scores[frame_idx] += unc_score
+
+    return tracks
+
+
+def compute_clip_entropy_scores(
+    clip_model,
+    preprocess,
+    text,
+    frames,
+    device,
+    target_threshold=DEFAULT_CLIP_TARGET_THRESHOLD,
+):
+    """Fallback value for frames whose max CLIP class probability is confident."""
+    frame_scores = {}
+    candidate_frames = set()
+    for frame_idx, frame in enumerate(frames):
+        pil_img = Image.fromarray(frame.astype(np.uint8))
         image = preprocess(pil_img).unsqueeze(0).to(device)
-        
+
         with torch.no_grad():
-            logits_per_image, logits_per_text = clip_model(image, text)
-            clip_score_v = logits_per_image
-            clip_prob = torch.softmax(clip_score_v, dim=1)
-            clip_entropy = torch.sum(-torch.log(clip_prob + 1e-8) * clip_prob, dim=1).cpu().numpy()
-            imgs_entropy.append(clip_entropy)
-            
-    for track in all_tracks:
-        if not track.has_object():
-            # 对无目标样本，打分选择熵最大的
-            
-            for f in track.frames:
-                clip_entropy = imgs_entropy[f]
-                curr_score = track.get_frame_score(f)
-                track.aggre_scores[f] = curr_score + float(clip_entropy)
-            
-        else:
-            # 有目标样本，加上预测分数；
-            for f in track.frames:
-                score = track.history[f].scores.cpu().numpy()
-                curr_score = track.get_frame_score(f)
-                track.aggre_scores[f] += curr_score + 1- float(score)
+            logits_per_image, _ = clip_model(image, text)
+            class_probs = torch.softmax(logits_per_image, dim=1)
+            max_prob = torch.max(class_probs, dim=1).values
+            entropy = torch.sum(
+                -torch.log(class_probs + 1e-8) * class_probs, dim=1
+            )
+        if float(max_prob.detach().cpu().numpy().reshape(-1)[0]) > target_threshold:
+            frame_scores[frame_idx] = float(entropy.detach().cpu().numpy().reshape(-1)[0])
+            candidate_frames.add(frame_idx)
+    return frame_scores, candidate_frames
 
-    return all_tracks
 
-def get_specify_samples(all_tracks):
-    
-    # 先在所有frames中采集最多3张图；
-    samples = []
-    samples_score= {}
-    for track in all_tracks:
-        for f in track.frames:
-            if f not in samples_score: samples_score[f] = track.aggre_scores[f]
-            else: samples_score[f] = max(track.aggre_scores[f], samples_score[f])
-    
-    sorted_frames = [k for k,v in sorted(samples_score.items(), key=lambda x:x[1], reverse=True)]
-    samples.extend(sorted_frames[:3])
-    
-    # 如果存在track没有采集到，则每个track增加一张
-    for track in all_tracks:
-        sample_in_track = False
-        for f in samples:
-            if f in track.frames:
-                sample_in_track = True
-                break
-        
-        if not sample_in_track:
-            sorted_frames_ = [k for k,v in sorted(track.aggre_scores.items(), key=lambda x:x[1], reverse=True)]
-            samples.extend(sorted_frames_[:1])
-    return samples
+def add_uncertainty_or_clip_fallback(
+    clip_model,
+    preprocess,
+    text,
+    tracks,
+    frames,
+    device,
+    clip_target_threshold=DEFAULT_CLIP_TARGET_THRESHOLD,
+):
+    """Apply V_unc, or CLIP entropy when the whole meta-sequence has no tracks."""
+    tracks = _ensure_stc_result(tracks, len(frames))
+
+    if len(tracks) == 0:
+        tracks.frame_scores, tracks.clip_candidate_frames = compute_clip_entropy_scores(
+            clip_model,
+            preprocess,
+            text,
+            frames,
+            device,
+            target_threshold=clip_target_threshold,
+        )
+        tracks.clip_fallback = True
+        return tracks
+
+    tracks = score_prediction_uncertainty(tracks)
+    tracks.clip_fallback = False
+    tracks.clip_candidate_frames = None
+    return tracks
+
+
+def select_top_value_samples(tracks, budget=DEFAULT_SAMPLE_BUDGET):
+    """Step 5: select Top-B frames by V(i_k)."""
+    frame_scores = dict(getattr(tracks, "frame_scores", {}))
+    if getattr(tracks, "clip_fallback", False):
+        candidate_frames = getattr(tracks, "clip_candidate_frames", None)
+        if candidate_frames is not None:
+            frame_scores = {
+                frame_idx: frame_scores[frame_idx]
+                for frame_idx in candidate_frames
+                if frame_idx in frame_scores
+            }
+
+    num_frames = getattr(tracks, "num_frames", len(frame_scores))
+    if not getattr(tracks, "clip_fallback", False):
+        for frame_idx in range(num_frames):
+            frame_scores.setdefault(frame_idx, 0.0)
+
+    sorted_frames = [
+        frame_idx
+        for frame_idx, _ in sorted(
+            frame_scores.items(), key=lambda item: (item[1], -item[0]), reverse=True
+        )
+    ]
+    return sorted_frames[: min(budget, len(sorted_frames))]
+
+
+def stc_select_samples(
+    sequence_detections,
+    frames,
+    budget=DEFAULT_SAMPLE_BUDGET,
+    clip_model=None,
+    preprocess=None,
+    text=None,
+    device=None,
+    iou_threshold=STC_IOU_THRESHOLD,
+    clip_target_threshold=DEFAULT_CLIP_TARGET_THRESHOLD,
+):
+    """Run the full STC-selection algorithm on one meta-sequence."""
+    tracks = extract_object_tracks(sequence_detections, iou_threshold=iou_threshold)
+    tracks = score_boundary_missing_detections(
+        tracks,
+        len(sequence_detections),
+        sequence_detections=sequence_detections,
+        iou_threshold=iou_threshold,
+    )
+    tracks = score_class_changes_in_tracks(tracks)
+    tracks = add_uncertainty_or_clip_fallback(
+        clip_model,
+        preprocess,
+        text,
+        tracks,
+        frames,
+        device,
+        clip_target_threshold=clip_target_threshold,
+    )
+    samples = select_top_value_samples(tracks, budget=budget)
+    return tracks, samples

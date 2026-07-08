@@ -17,13 +17,7 @@ from src.vqf_constants import target_coco_categories, \
                             target_coco_categories_mapping, \
                                 clsid_name_maps
 import time
-from src.policy_rl.sequence_utils import (
-    get_all_sample_score,
-    get_specify_samples,
-    aggre_score_in_obj_tracks,
-    score_tracks,
-    group_by_object_and_score,
-)
+from src.policy_rl.sequence_utils import extract_object_tracks
 import math
 from collections import Counter
 from detectron2.structures.instances import Instances
@@ -569,7 +563,7 @@ class Sequence_Env_Agent(Sequence_Env):
         
         # # for sequence reward
         with self.step_profiler.time("preprocess_sequence_reward"):
-            groups = group_by_object_and_score(obs_detections)
+            groups = extract_object_tracks(obs_detections)
             num_frames = len(obs_detections)
             sequence_reward = 0.
             for g in groups:
@@ -584,9 +578,6 @@ class Sequence_Env_Agent(Sequence_Env):
                     sequence_reward += g_r
             info['sequence_reward'] = sequence_reward
 
-        # groups = score_tracks(groups, obs_detections)
-        # groups = aggre_score_in_obj_tracks(groups, mode="frame")
-        # groups = get_all_sample_score(clip_model, preprocess, text, groups, frame_rgbs)
         with self.step_profiler.time("preprocess_entropy_update"):
             for od in obs_detections:
                 if len(od) == 0:

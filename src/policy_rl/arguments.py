@@ -225,7 +225,7 @@ def get_args():
         "--use_traj_feature_reward", action="store_true", default=False,
         help="add adaptive same-region trajectory feature similarity penalty"
     )
-    parser.add_argument("--reward_coeff_traj", type=float, default=3)
+    parser.add_argument("--reward_coeff_traj", type=float, default=5)
     parser.add_argument("--traj_sim_percentile", type=float, default=90.0)
     parser.add_argument("--traj_min_region_points", type=int, default=5)
     parser.add_argument("--traj_sim_window", type=int, default=200)

@@ -463,8 +463,8 @@ class Sequence_Env(habitat.RLEnv):
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)
             
-        # obs_save = {k:v for k,v in observations.items() if k in ['rgb', 'depth', 'semantic', 'gps', 'compass', 'bbsgt', 'position', 'bbspred']}
-        obs_save = observations
+        obs_save = {k:v for k,v in observations.items() if k in ['rgb', 'depth', 'semantic', 'gps', 'compass', 'bbsgt', 'position', 'bbspred']}
+        # obs_save = observations
         paths = save_obs(data_dir, self.rank, self.episode_no, obs_save, self.timestep, frameid)
         return paths
     

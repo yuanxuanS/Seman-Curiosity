@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import DefaultDict, Dict, List, Tuple
 import torch
 from src.policy_rl.sequence_utils import (
-    get_all_sample_score,
-    get_specify_samples,
-    aggre_score_in_obj_tracks,
-    score_tracks,
-    group_by_object_and_score,
+    add_uncertainty_or_clip_fallback,
+    extract_object_tracks,
+    score_boundary_missing_detections,
+    score_class_changes_in_tracks,
+    select_top_value_samples,
 )
 import cv2
 import clip
@@ -207,15 +207,18 @@ def main() -> None:
                 f"Extracted instance -> image={target_instance['image_name']}, "
                 f"n={target_instance['n']}, s={target_instance['s']}"
             )
-        groups = group_by_object_and_score(instances)
-        groups = score_tracks(groups, rgbs)
-        
-        groups = aggre_score_in_obj_tracks(groups, mode="track")
+        groups = extract_object_tracks(instances)
+        groups = score_boundary_missing_detections(
+            groups, len(instances), sequence_detections=instances
+        )
+        groups = score_class_changes_in_tracks(groups)
         
         # 从每个track中提取最高分的图像；
-        groups = get_all_sample_score(clip_model, preprocess, text, groups, rgbs, device)
+        groups = add_uncertainty_or_clip_fallback(
+            clip_model, preprocess, text, groups, rgbs, device
+        )
         
-        sampled_frames = get_specify_samples(groups)
+        sampled_frames = select_top_value_samples(groups)
         
         selected[n] = [sf + 1 for sf in sampled_frames]     # 和名字中的step保持一致，从1开始
         print(f"Selected samples for n={n}: {sampled_frames}")
