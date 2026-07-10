@@ -15,6 +15,7 @@ from src.policy_rl.model import RL_Policy, RL_Policy2
 from src.policy_rl.expert_predictor import ExpertPredictor
 from  src.policy_rl import algo 
 from src.policy_rl.baseline_frontier import Frontier
+from src.policy_rl.trajectory_reward import TrajectoryFeatureReward
 import cv2
 import json
 
@@ -77,6 +78,7 @@ def main():
     episode_rewards = []
     per_step_incre_rewards = deque(maxlen=1000)
     per_step_curr_rewards = deque(maxlen=1000)
+    per_step_traj_rewards = deque(maxlen=1000)
     
     value_losses = deque(maxlen=1000)
     action_losses = deque(maxlen=1000)
@@ -98,6 +100,21 @@ def main():
     # 4. Past Agent Locations
     # 5,6,7,.. : Semantic Categories
     maps = Maps_Env(args)
+    trajectory_reward = None
+    if args.use_traj_feature_reward:
+        trajectory_reward = TrajectoryFeatureReward(
+            num_envs=num_scenes,
+            map_resolution=args.map_resolution,
+            device=device,
+            coeff=args.reward_coeff_traj,
+            sim_percentile=args.traj_sim_percentile,
+            min_region_points=args.traj_min_region_points,
+            sim_window=args.traj_sim_window,
+            max_points=args.traj_max_points,
+            region_update_interval=args.traj_region_update_interval,
+            region_method=args.traj_region_method,
+            watershed_min_distance=args.traj_watershed_min_distance,
+        )
     obs = torch.concat(obs_all, axis=0)
     sensor_pose = [infos[e]['sensor_pose_all'][0] for e in range(num_scenes)]
     orients = [infos[e]['orient_idx'] for e in range(num_scenes)]
@@ -433,6 +450,21 @@ def main():
         # Add samples to local policy storage
         # reward = l_reward - last_reward + cls_entropy_r + sequence_r
         reward = l_reward - last_reward
+        traj_reward = torch.zeros(num_scenes, device=device)
+        if (
+            args.agent == "rl"
+            and trajectory_reward is not None
+            and hasattr(policy.network, "ob_img_feats")
+            and policy.network.ob_img_feats is not None
+        ):
+            traj_reward = trajectory_reward.update_and_compute(
+                maps=maps,
+                actions=action,
+                img_feats=policy.network.ob_img_feats,
+                done=done,
+            )
+            reward = reward + traj_reward
+            step_other_reward += traj_reward
         
         if args.agent == "rl":
             
@@ -452,6 +484,8 @@ def main():
         reward_curr_mean = np.mean(l_reward.cpu().numpy())
         per_step_incre_rewards.append(reward_incre_mean)
         per_step_curr_rewards.append(reward_curr_mean)
+        if args.use_traj_feature_reward:
+            per_step_traj_rewards.append(np.mean(traj_reward.cpu().numpy()))
 
         # print(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
         # logging.info(f"step-{step} local-{l_step} reward:{l_reward_mean}, sum reward:{reward_mean}")
@@ -672,6 +706,15 @@ def main():
                         np.min(per_step_curr_rewards),
                         np.max(per_step_curr_rewards))
                 ])
+            if args.use_traj_feature_reward and len(per_step_traj_rewards) > 0:
+                log += " traj_penalty_mean: {:.4f},".format(
+                    np.mean(per_step_traj_rewards)
+                )
+                sim_stats = trajectory_reward.get_similarity_stats() if trajectory_reward is not None else None
+                if sim_stats is not None:
+                    log += " traj_sim_min/max: {:.4f}/{:.4f},".format(
+                        sim_stats[0], sim_stats[1]
+                    )
 
             log += "\n\tLosses:"
             if len(value_losses) > 0 and not args.eval:

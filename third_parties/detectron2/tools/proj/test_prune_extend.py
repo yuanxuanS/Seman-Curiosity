@@ -211,10 +211,7 @@ def main(args):
     cfg.freeze()
     
     model = build_model(cfg)
-    checkpointer = DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR)
-    checkpointer.resume_or_load(
-        cfg.MODEL.WEIGHTS, resume=args.resume
-    )
+    
 
     keep_class = { 
     
@@ -224,23 +221,23 @@ def main(args):
     # 10: "fire hydrant",
     
     
-    # 56: "chair",
-    # 57: "couch",
-    # 59: "bed",
-    # 61: "toilet",
-    # 72: "refrigerator",
-
-    39: "bottle",
-    40: "wine glass",
-    41: "cup",
+    56: "chair",
     57: "couch",
-    58: "potted plant",
-    60: "dining table",
+    59: "bed",
     61: "toilet",
-    62: "tv",
-    68: "microwave",
-    71: "sink",
     72: "refrigerator",
+
+    # 39: "bottle",
+    # 40: "wine glass",
+    # 41: "cup",
+    # 57: "couch",
+    # 58: "potted plant",
+    # 60: "dining table",
+    # 61: "toilet",
+    # 62: "tv",
+    # 68: "microwave",
+    # 71: "sink",
+    # 72: "refrigerator",
 }   
     extend_class = {    #把旧的n个类放在最前面，中间插入m 个新类，最后把旧的背景权重挪到第 n+m的位置。
     1: "building",
@@ -271,6 +268,11 @@ def main(args):
             model.extend_head_list(len(extend_class))
         else:
             model.extend_head(len(extend_class))
+    
+    checkpointer = DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR)
+    checkpointer.resume_or_load(
+        cfg.MODEL.WEIGHTS, resume=args.resume
+    )
     
     if args.eval_only:
         return do_test(cfg, model)

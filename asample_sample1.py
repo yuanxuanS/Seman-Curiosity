@@ -50,7 +50,7 @@ if stage == 1:
 else:
     glb_frames_tracks = {}
     glb_frames_sampled = []
-    sample_budget = 3
+    sample_budget = 4
     clip_target_threshold = 0.5
     mod = ["bbsgt" , "bbspred", "rgb",]     #  "depth", "position", "semantic", ]
 
@@ -128,9 +128,9 @@ else:
 
         
         
-    with open("./asample_straight_tracks_sequencev2.pkl", "wb") as f:
+    with open(f"./asample_straight_tracks_sequencev2_bg{sample_budget}.pkl", "wb") as f:
         pickle.dump(glb_frames_tracks, f)
         
-    with open("./asample_straight_sampled_sequencev2.pkl", "wb") as f:
+    with open(f"./asample_straight_sampled_sequencev2_bg{sample_budget}.pkl", "wb") as f:
         pickle.dump(glb_frames_sampled, f)
     print(glb_frames_sampled)

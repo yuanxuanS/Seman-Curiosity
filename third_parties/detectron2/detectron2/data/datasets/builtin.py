@@ -293,6 +293,10 @@ _MY_PROJ_SPLIT['proj_clsag'] = {
 
 _MY_PROJ_SPLIT['embodied'] = {
     'embodied_test': ('embodied_test/test', 'embodied_test/annotations/instances_test.json'),
+    'asample_seqv2': ('embodied_sequencev2/train', 'embodied_sequencev2/annotations/instances_train.json'),
+    'asample_seqv2_epi15': ('embodied_sequencev2/train', 'embodied_sequencev2/annotations/instances_train_epi15.json'),
+    'asample_seqv2_bg4': ('embodied_sequencev2_bg4/train', 'embodied_sequencev2_bg4/annotations/instances_train.json'),
+    'asample_seqv2_bg4_epi15': ('embodied_sequencev2_bg4/train', 'embodied_sequencev2_bg4/annotations/instances_train_epi15.json'),
     'asample': ('asample_test/train', 'asample_test/annotations/instances_train.json'),
     'asample_seq': ('asample_test_seq/train', 'asample_test_seq/annotations/instances_train.json'),
     'asample_2': ('asample_test_2/train', 'asample_test_2/annotations/instances_train.json'),
@@ -300,6 +304,8 @@ _MY_PROJ_SPLIT['embodied'] = {
     'asample_seq_2_1': ('asample_test_seq_2/train', 'asample_test_seq_2_1/annotations/instances_train.json'),
     'asample_rand': ('asample_test_rand/train', 'asample_test_rand/annotations/instances_train.json'),
     'embodied_frontier': ('embodied_frontier/train', 'embodied_frontier/annotations/instances_train.json'),
+    'embodied_frontier_epi20': ('embodied_frontier_20epi/train', 'embodied_frontier_20epi/annotations/instances_train.json'),
+    'embodied_frontier_epi20_seq': ('embodied_frontier_20epi/train', 'embodied_frontier_20epi/annotations/instances_train_front_seq.json'),
     'embodied_curiosity': ('embodied_curiosity/train', 'embodied_curiosity/annotations/instances_train.json'),
     'embodied_testtrain': ('embodied_testtrain/train', 'embodied_testtrain/annotations/instances_train.json'),
     'embodied_testtrain_dl': ('embodied_testtrain/train', 'embodied_testtrain/annotations/instances_train_dl.json')

@@ -41,5 +41,6 @@ __pycache__
 *.pkl
 *.cpython-38.pyc
 *.pt
+*.csv
 
 heatmap.py
