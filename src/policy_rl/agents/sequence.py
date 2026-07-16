@@ -17,7 +17,7 @@ from src.vqf_constants import target_coco_categories, \
                             target_coco_categories_mapping, \
                                 clsid_name_maps
 import time
-from src.policy_rl.sequence_utils import extract_object_tracks
+from src.policy_rl.sequence_utils import extract_object_tracks, group_by_object_and_score
 import math
 from collections import Counter
 from detectron2.structures.instances import Instances
@@ -563,7 +563,10 @@ class Sequence_Env_Agent(Sequence_Env):
         
         # # for sequence reward
         with self.step_profiler.time("preprocess_sequence_reward"):
-            groups = extract_object_tracks(obs_detections)
+            if getattr(self.args, "stc_algorithm", "rewrite") == "legacy":
+                groups = group_by_object_and_score(obs_detections)
+            else:
+                groups = extract_object_tracks(obs_detections)
             num_frames = len(obs_detections)
             sequence_reward = 0.
             for g in groups:

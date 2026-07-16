@@ -6,6 +6,7 @@ from src.policy_rl.agents.utils.detect_utils import box_iou_calc
 
 
 STC_IOU_THRESHOLD = 0.5
+LEGACY_STC_IOU_THRESHOLD = 0.4
 DEFAULT_SAMPLE_BUDGET = 3
 DEFAULT_CLIP_TARGET_THRESHOLD = 0.7
 
@@ -21,6 +22,11 @@ class ObjectTrack:
         self.bd_scores = {}
         self.cls_scores = {}
         self.unc_scores = {}
+        self.scores = 0.0
+        self.score_first = 0.0
+        self.score_last = 0.0
+        self.aggre_scores = {}
+        self.best_frames = {}
         self.is_active = True
 
     def add_detection(self, frame_idx, detection):
@@ -30,6 +36,14 @@ class ObjectTrack:
 
     def has_object(self):
         return bool(self.history) and next(iter(self.history.values())) is not None
+
+    def get_frame_score(self, frame_idx):
+        assert frame_idx in self.frames, f"frame {frame_idx} not in track"
+        if frame_idx == min(self.frames):
+            return self.scores + self.score_first
+        if frame_idx == max(self.frames):
+            return self.scores + self.score_last
+        return self.scores
 
 
 class STCSelectionResult(list):
@@ -78,6 +92,253 @@ def _frame_has_spatial_match(frame_detections, target_detection, iou_threshold):
         if iou > iou_threshold:
             return True
     return False
+
+
+def group_by_object_and_score(
+    sequence_detections, iou_threshold=LEGACY_STC_IOU_THRESHOLD
+):
+    """
+    Legacy STC step 1: group frames into object/no-object tracks.
+
+    This is the algorithm used before the STC rewrite. It links detections only
+    when IoU passes the threshold and the predicted class is unchanged, and it
+    also creates tracks for consecutive frames with no detections.
+    """
+    num_frames = len(sequence_detections)
+    all_tracks = []
+    active_tracks = []
+
+    for frame_idx in range(num_frames):
+        curr_objs = sequence_detections[frame_idx]
+        matched_indices = set()
+        matched_curr = False
+
+        for track in active_tracks:
+            last_frame = track.frames[-1]
+            last_data = track.history[last_frame]
+
+            if last_data is None:
+                if len(curr_objs) == 0:
+                    track.history[frame_idx] = None
+                    track.frames.append(frame_idx)
+                    track.end_frame = frame_idx
+                    matched_curr = True
+                else:
+                    track.is_active = False
+                break
+
+            if len(curr_objs) == 0:
+                track.is_active = False
+                continue
+
+            best_iou = 0.0
+            best_idx = -1
+            for detection_idx in range(len(curr_objs)):
+                if detection_idx in matched_indices:
+                    continue
+
+                curr_box = _detection_box(curr_objs[detection_idx])
+                last_box = _detection_box(last_data)
+                iou = float(box_iou_calc(last_box, curr_box).max())
+                if (
+                    iou > iou_threshold
+                    and iou > best_iou
+                    and _detection_class(curr_objs[detection_idx])
+                    == _detection_class(last_data)
+                ):
+                    best_iou = iou
+                    best_idx = detection_idx
+
+            if best_idx != -1:
+                track.add_detection(frame_idx, curr_objs[best_idx])
+                matched_indices.add(best_idx)
+            else:
+                track.is_active = False
+
+        if len(curr_objs) == 0:
+            if not matched_curr:
+                new_track = ObjectTrack(frame_idx, None)
+                all_tracks.append(new_track)
+                active_tracks.append(new_track)
+        else:
+            for detection_idx in range(len(curr_objs)):
+                if detection_idx in matched_indices:
+                    continue
+                new_track = ObjectTrack(frame_idx, curr_objs[detection_idx])
+                all_tracks.append(new_track)
+                active_tracks.append(new_track)
+
+        active_tracks = [track for track in active_tracks if track.is_active]
+
+    return all_tracks
+
+
+def score_tracks(
+    all_tracks, sequence_detections, iou_threshold=LEGACY_STC_IOU_THRESHOLD
+):
+    """
+    Legacy STC step 2: score track starts/ends and class flips.
+
+    Boundary gaps add value to adjacent tracks. If adjacent tracks overlap in
+    space but change class, only the boundary frames receive class-flip value.
+    """
+    num_frames = len(sequence_detections)
+
+    def match_box(tracks, tgt_track, check_prev=False, another_frame_idx=None):
+        curr_frame = min(tgt_track.frames)
+        curr_label = _detection_class(tgt_track.history[curr_frame])
+        curr_box = _detection_box(tgt_track.history[curr_frame])
+
+        for other_track in tracks:
+            if not other_track.has_object():
+                continue
+            other_det = other_track.history[another_frame_idx]
+            other_box = _detection_box(other_det)
+            if float(box_iou_calc(other_box, curr_box).max()) <= iou_threshold:
+                continue
+            if _detection_class(other_det) == curr_label:
+                continue
+
+            if check_prev:
+                other_track.score_last += 1
+                tgt_track.score_first += 1
+            else:
+                other_track.score_first += 1
+                tgt_track.score_last += 1
+            return True, other_track
+        return False, None
+
+    for track in all_tracks:
+        if not track.has_object():
+            continue
+
+        first_frame = min(track.frames)
+        last_frame = max(track.frames)
+
+        if first_frame > 0:
+            prev_frame = first_frame - 1
+            prev_tracks = [t for t in all_tracks if prev_frame in t.frames]
+            found_class_flip, flip_track = match_box(
+                prev_tracks, track, check_prev=True, another_frame_idx=prev_frame
+            )
+
+            if not found_class_flip:
+                for prev_track in prev_tracks:
+                    prev_track.scores += 1
+                track.scores += 1
+            else:
+                flip_track.score_last += 1
+                track.score_first += 1
+
+        if last_frame < num_frames - 1:
+            next_frame = last_frame + 1
+            next_tracks = [t for t in all_tracks if next_frame in t.frames]
+            found_class_flip, flip_track = match_box(
+                next_tracks, track, check_prev=False, another_frame_idx=next_frame
+            )
+
+            if not found_class_flip:
+                track.scores += 1
+                for next_track in next_tracks:
+                    next_track.score_first += 1
+            else:
+                flip_track.score_first += 1
+                track.score_last += 1
+
+    return all_tracks
+
+
+def aggre_score_in_obj_tracks(all_tracks, mode="frame"):
+    """Legacy STC step 3: aggregate object-track scores to frames."""
+    frames_to_aggre = {}
+    for track in all_tracks:
+        if not track.has_object():
+            continue
+
+        for frame_idx in track.frames:
+            curr_score = track.get_frame_score(frame_idx)
+            frames_to_aggre[frame_idx] = frames_to_aggre.get(frame_idx, 0.0) + curr_score
+
+    if mode == "frame":
+        return frames_to_aggre
+
+    for track in all_tracks:
+        if not track.has_object():
+            continue
+
+        for frame_idx in track.frames:
+            curr_score = track.get_frame_score(frame_idx)
+            track.aggre_scores[frame_idx] = curr_score + frames_to_aggre[frame_idx]
+    return all_tracks
+
+
+def get_all_sample_score(clip_model, preprocess, text, all_tracks, all_frames, device):
+    """Legacy STC step 4: add CLIP entropy for empty tracks and 1-score for objects."""
+    imgs_entropy = []
+    if clip_model is not None and preprocess is not None and text is not None:
+        for frame in all_frames:
+            pil_img = Image.fromarray(frame.astype(np.uint8))
+            image = preprocess(pil_img).unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                logits_per_image, _ = clip_model(image, text)
+                clip_prob = torch.softmax(logits_per_image, dim=1)
+                clip_entropy = torch.sum(
+                    -torch.log(clip_prob + 1e-8) * clip_prob, dim=1
+                )
+                imgs_entropy.append(
+                    float(clip_entropy.detach().cpu().numpy().reshape(-1)[0])
+                )
+    else:
+        imgs_entropy = [0.0 for _ in all_frames]
+
+    for track in all_tracks:
+        if not track.has_object():
+            for frame_idx in track.frames:
+                curr_score = track.get_frame_score(frame_idx)
+                track.aggre_scores[frame_idx] = curr_score + imgs_entropy[frame_idx]
+        else:
+            for frame_idx in track.frames:
+                score = _detection_score(track.history[frame_idx])
+                curr_score = track.get_frame_score(frame_idx)
+                track.aggre_scores[frame_idx] = (
+                    track.aggre_scores.get(frame_idx, 0.0) + curr_score + 1.0 - score
+                )
+
+    return all_tracks
+
+
+def get_specify_samples(all_tracks, budget=DEFAULT_SAMPLE_BUDGET):
+    """Legacy STC step 5: pick top frames, then cover tracks not represented."""
+    samples = []
+    samples_score = {}
+    for track in all_tracks:
+        for frame_idx in track.frames:
+            if frame_idx not in track.aggre_scores:
+                continue
+            samples_score[frame_idx] = max(
+                track.aggre_scores[frame_idx], samples_score.get(frame_idx, float("-inf"))
+            )
+
+    sorted_frames = [
+        frame_idx
+        for frame_idx, _ in sorted(
+            samples_score.items(), key=lambda item: item[1], reverse=True
+        )
+    ]
+    samples.extend(sorted_frames[:budget])
+
+    for track in all_tracks:
+        if any(frame_idx in track.frames for frame_idx in samples):
+            continue
+        sorted_track_frames = [
+            frame_idx
+            for frame_idx, _ in sorted(
+                track.aggre_scores.items(), key=lambda item: item[1], reverse=True
+            )
+        ]
+        samples.extend(sorted_track_frames[:1])
+    return samples
 
 
 def _ensure_stc_result(tracks, num_frames):
@@ -318,8 +579,26 @@ def stc_select_samples(
     device=None,
     iou_threshold=STC_IOU_THRESHOLD,
     clip_target_threshold=DEFAULT_CLIP_TARGET_THRESHOLD,
+    algorithm="rewrite",
 ):
     """Run the full STC-selection algorithm on one meta-sequence."""
+    if algorithm == "legacy":
+        tracks = group_by_object_and_score(
+            sequence_detections, iou_threshold=LEGACY_STC_IOU_THRESHOLD
+        )
+        tracks = score_tracks(
+            tracks, sequence_detections, iou_threshold=LEGACY_STC_IOU_THRESHOLD
+        )
+        tracks = aggre_score_in_obj_tracks(tracks, mode="track")
+        tracks = get_all_sample_score(
+            clip_model, preprocess, text, tracks, frames, device
+        )
+        samples = get_specify_samples(tracks, budget=budget)
+        return tracks, samples
+
+    if algorithm != "rewrite":
+        raise ValueError(f"Unsupported STC algorithm: {algorithm}")
+
     tracks = extract_object_tracks(sequence_detections, iou_threshold=iou_threshold)
     tracks = score_boundary_missing_detections(
         tracks,

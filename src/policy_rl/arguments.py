@@ -177,6 +177,13 @@ def get_args():
     # sample obj data 
     parser.add_argument('--num_sample_pts', type=int, default=50000)
     parser.add_argument('--sample_pt_distance_interval', type=float, default=0.1)
+    parser.add_argument(
+        "--stc_algorithm",
+        type=str,
+        default="rewrite",
+        choices=["rewrite", "legacy"],
+        help="STC algorithm variant: rewrite is the current implementation; legacy restores the pre-rewrite implementation",
+    )
     
     # vsqf
     parser.add_argument('--magnify', default=False,

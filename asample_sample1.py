@@ -1,23 +1,32 @@
-from src.finetune.dataset_utils import get_loader, SampleLoader
-from src.policy_rl.agents.utils.detect_utils import box_iou_calc
-import numpy as np
-from PIL import Image
+from src.finetune.dataset_utils import SampleLoader
 import clip
 import torch
 from asample.constants import target_coco_categories
+import argparse
 import pickle
 import time
-from src.policy_rl.sequence_utils import (
-    add_uncertainty_or_clip_fallback,
-    extract_object_tracks,
-    score_boundary_missing_detections,
-    score_class_changes_in_tracks,
-    select_top_value_samples,
+from src.policy_rl.sequence_utils import stc_select_samples
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--stc_algorithm",
+    type=str,
+    default="rewrite",
+    choices=["rewrite", "legacy"],
+    help="STC algorithm variant for sample selection",
 )
-
-        
-
-
+parser.add_argument(
+    "--gpu_id",
+    type=int,
+    default=3,
+    help="GPU id used for CLIP inference when CUDA is available",
+)
+parser.add_argument(
+    "--cpu",
+    action="store_true",
+    help="Run CLIP inference on CPU even when CUDA is available",
+)
+args = parser.parse_args()
 
 # 加载数据
 stage = 2
@@ -50,14 +59,14 @@ if stage == 1:
 else:
     glb_frames_tracks = {}
     glb_frames_sampled = []
-    sample_budget = 4
+    sample_budget = 5
     clip_target_threshold = 0.5
     mod = ["bbsgt" , "bbspred", "rgb",]     #  "depth", "position", "semantic", ]
 
     with open("./asample_straight_indices_sequencev2.pkl", "rb") as f:
         glb_frames_indices = pickle.load(f)
         
-    device = "cuda:3" if torch.cuda.is_available() else "cpu"
+    device = "cpu" if args.cpu or not torch.cuda.is_available() else f"cuda:{args.gpu_id}"
     clip_model, preprocess = clip.load("ViT-L/14", device=device)
     text_str = [key for key in target_coco_categories.keys()]
     text = clip.tokenize([f"a photo contains a {i}" for i in text_str]).to(device)
@@ -91,35 +100,21 @@ else:
                 frame_rgbs = [data['rgb'].data for data in glb_datas]
                 
                 s = time.time()
-                groups = extract_object_tracks(frame_detections)
-                print(f"1-{time.time() - s} ")
-                
-                s = time.time()
-                groups = score_boundary_missing_detections(
-                    groups, len(frame_detections), sequence_detections=frame_detections
-                )
-                groups = score_class_changes_in_tracks(groups)
-                print(f"2-{time.time() - s} ")
-                
-                s = time.time()
-                # 从每个track中提取最高分的图像；
-                groups = add_uncertainty_or_clip_fallback(
-                    clip_model,
-                    preprocess,
-                    text,
-                    groups,
+                groups, sampled_frames = stc_select_samples(
+                    frame_detections,
                     frame_rgbs,
-                    device,
+                    budget=sample_budget,
+                    clip_model=clip_model,
+                    preprocess=preprocess,
+                    text=text,
+                    device=device,
                     clip_target_threshold=clip_target_threshold,
+                    algorithm=args.stc_algorithm,
                 )
-                print(f"3-{time.time() - s} ")
-                
-                s = time.time()
+                print(f"stc-{args.stc_algorithm}-{time.time() - s} ")
                 
                 glb_frames_tracks[env][episode][glbstep] = groups   # 存储打好分的group
-                
-                sampled_frames = select_top_value_samples(groups, budget=sample_budget)
-                
+
                 for sf in sampled_frames:
                     glb_frames_sampled.append([env, episode, glbstep, sf])
                 
@@ -128,9 +123,9 @@ else:
 
         
         
-    with open(f"./asample_straight_tracks_sequencev2_bg{sample_budget}.pkl", "wb") as f:
+    with open(f"./asample_straight_tracks_sequencev2_bg{sample_budget}_{args.stc_algorithm}.pkl", "wb") as f:
         pickle.dump(glb_frames_tracks, f)
         
-    with open(f"./asample_straight_sampled_sequencev2_bg{sample_budget}.pkl", "wb") as f:
+    with open(f"./asample_straight_sampled_sequencev2_bg{sample_budget}_{args.stc_algorithm}.pkl", "wb") as f:
         pickle.dump(glb_frames_sampled, f)
     print(glb_frames_sampled)
