@@ -544,7 +544,7 @@ def add_uncertainty_or_clip_fallback(
 
 
 def select_top_value_samples(tracks, budget=DEFAULT_SAMPLE_BUDGET):
-    """Step 5: select Top-B frames by V(i_k)."""
+    """Step 5: select Top-B frames, then cover every unrepresented track."""
     frame_scores = dict(getattr(tracks, "frame_scores", {}))
     if getattr(tracks, "clip_fallback", False):
         candidate_frames = getattr(tracks, "clip_candidate_frames", None)
@@ -566,7 +566,25 @@ def select_top_value_samples(tracks, budget=DEFAULT_SAMPLE_BUDGET):
             frame_scores.items(), key=lambda item: (item[1], -item[0]), reverse=True
         )
     ]
-    return sorted_frames[: min(budget, len(sorted_frames))]
+    samples = sorted_frames[: min(budget, len(sorted_frames))]
+    selected_frames = set(samples)
+
+    # Top-B selection can leave an object trajectory entirely unrepresented.
+    # Add the highest-value frame from each such track so every trajectory
+    # contributes at least one frame to the sampled dataset.
+    for track in tracks:
+        if selected_frames.intersection(track.frames):
+            continue
+
+        best_frame = max(
+            track.frames,
+            key=lambda frame_idx: (frame_scores.get(frame_idx, 0.0), -frame_idx),
+        )
+        if best_frame not in selected_frames:
+            samples.append(best_frame)
+            selected_frames.add(best_frame)
+
+    return samples
 
 
 def stc_select_samples(
