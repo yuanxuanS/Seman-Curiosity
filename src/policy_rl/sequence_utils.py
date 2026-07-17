@@ -348,20 +348,35 @@ def _ensure_stc_result(tracks, num_frames):
     return STCSelectionResult(tracks, num_frames=num_frames)
 
 
-def extract_object_tracks(sequence_detections, iou_threshold=STC_IOU_THRESHOLD):
+def extract_object_tracks(
+    sequence_detections,
+    iou_threshold=STC_IOU_THRESHOLD,
+    group_empty_tracks=False,
+):
     """
     Step 1: extract object trajectories from adjacent-frame spatial consistency.
 
     Detections in frame k and k+1 are assigned to the same trajectory when
     IoU(b_k, b_{k+1}) is larger than q. Class labels are deliberately ignored
-    here so that class changes can be scored later.
+    here so that class changes can be scored later. When ``group_empty_tracks``
+    is enabled, consecutive frames without detections form one empty trajectory.
     """
     num_frames = len(sequence_detections)
     tracks = STCSelectionResult(num_frames=num_frames)
     active_tracks = []
+    empty_track = None
 
     for frame_idx, frame_detections in enumerate(sequence_detections):
         matched_detection_indices = set()
+
+        if group_empty_tracks and len(frame_detections) == 0:
+            if empty_track is None:
+                empty_track = ObjectTrack(frame_idx, None)
+                tracks.append(empty_track)
+            else:
+                empty_track.add_detection(frame_idx, None)
+        else:
+            empty_track = None
 
         for track in active_tracks:
             last_frame = track.frames[-1]
@@ -425,6 +440,9 @@ def score_boundary_missing_detections(
         track.cls_scores = {}
         track.unc_scores = {}
 
+        if not track.has_object():
+            continue
+
         start_detection = track.history[track.start_frame]
         adjacent_prev_frame = track.start_frame - 1
         for frame_idx in range(track.start_frame):  # 前序帧值，漏检+1
@@ -454,6 +472,8 @@ def score_class_changes_in_tracks(tracks):
     If c_{k,p} != c_{k+1,p}, both frames receive one value point.
     """
     for track in tracks:
+        if not track.has_object():
+            continue
         for prev_frame, curr_frame in zip(track.frames[:-1], track.frames[1:]):
             if curr_frame != prev_frame + 1:
                 continue
@@ -477,6 +497,8 @@ def score_prediction_uncertainty(tracks):
     V_unc(i_k, tau_p) = 1 - s_{k,p}.
     """
     for track in tracks:
+        if not track.has_object():
+            continue
         for frame_idx in track.frames:
             unc_score = 1.0 - _detection_score(track.history[frame_idx])
             track.unc_scores[frame_idx] = unc_score
@@ -522,10 +544,10 @@ def add_uncertainty_or_clip_fallback(
     device,
     clip_target_threshold=DEFAULT_CLIP_TARGET_THRESHOLD,
 ):
-    """Apply V_unc, or CLIP entropy when the whole meta-sequence has no tracks."""
+    """Apply V_unc, or CLIP entropy when there are no object tracks."""
     tracks = _ensure_stc_result(tracks, len(frames))
 
-    if len(tracks) == 0:
+    if not any(track.has_object() for track in tracks):
         tracks.frame_scores, tracks.clip_candidate_frames = compute_clip_entropy_scores(
             clip_model,
             preprocess,
@@ -598,6 +620,7 @@ def stc_select_samples(
     iou_threshold=STC_IOU_THRESHOLD,
     clip_target_threshold=DEFAULT_CLIP_TARGET_THRESHOLD,
     algorithm="rewrite",
+    group_empty_tracks=False,
 ):
     """Run the full STC-selection algorithm on one meta-sequence."""
     if algorithm == "legacy":
@@ -617,7 +640,11 @@ def stc_select_samples(
     if algorithm != "rewrite":
         raise ValueError(f"Unsupported STC algorithm: {algorithm}")
 
-    tracks = extract_object_tracks(sequence_detections, iou_threshold=iou_threshold)
+    tracks = extract_object_tracks(
+        sequence_detections,
+        iou_threshold=iou_threshold,
+        group_empty_tracks=group_empty_tracks,
+    )
     tracks = score_boundary_missing_detections(
         tracks,
         len(sequence_detections),

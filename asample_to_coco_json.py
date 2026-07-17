@@ -20,7 +20,7 @@ def mask_to_rle(binary_mask):
     
     return rle
 
-json_dir = "./third_parties/detectron2/datasets/embodied_sequencev2_wotrajR_bg5_rewrite/"
+json_dir = "./third_parties/detectron2/datasets/embodied_sequencev2_wotrajR_bg5_r3/"
 if not os.path.exists(json_dir):
     os.mkdir(json_dir)
 
@@ -58,7 +58,7 @@ coco_dict = {"info": {},
 sampler = SampleLoader(data_pth, glbstep=True)
 inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
 
-with open("./asample_straight_sampled_sequencev2_wotrajR_bg5_rewrite.pkl", "rb") as f:
+with open("./asample_straight_sampled_sequencev2_wotrajR_bg5_r3_rewrite.pkl", "rb") as f:
     glb_frames_indices = pickle.load(f)
 print(f"采样到{len(glb_frames_indices)}张")
 # print(glb_frames_indices)

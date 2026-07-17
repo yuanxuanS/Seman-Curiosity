@@ -26,11 +26,16 @@ parser.add_argument(
     action="store_true",
     help="Run CLIP inference on CPU even when CUDA is available",
 )
+parser.add_argument(
+    "--group_empty_tracks",
+    action="store_true",
+    help="Group consecutive frames without detections into tracks in rewrite STC",
+)
 args = parser.parse_args()
 
 # 加载数据
 stage = 2
-data_pth = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/sequencev2_eval/episodes_data"
+data_pth = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/sequencev2_wotrjR_eval/episodes_data"
 # "outputs_asample/imgs/test5_env1/rgb_all_data"
 sampler = SampleLoader(data_pth, glbstep=True)
 inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
@@ -51,7 +56,7 @@ if stage == 1:
             glb_frames[env][episode][glbstep].append(step)
 
     print(glb_frames)
-    with open("./asample_straight_indices_sequencev2.pkl", "wb") as f:
+    with open("./asample_straight_indices_sequencev2_wotrajR.pkl", "wb") as f:
         pickle.dump(glb_frames, f)
     raise SystemExit
 
@@ -63,7 +68,7 @@ else:
     clip_target_threshold = 0.5
     mod = ["bbsgt" , "bbspred", "rgb",]     #  "depth", "position", "semantic", ]
 
-    with open("./asample_straight_indices_sequencev2.pkl", "rb") as f:
+    with open("./asample_straight_indices_sequencev2_wotrajR.pkl", "rb") as f:
         glb_frames_indices = pickle.load(f)
         
     device = "cpu" if args.cpu or not torch.cuda.is_available() else f"cuda:{args.gpu_id}"
@@ -110,6 +115,7 @@ else:
                     device=device,
                     clip_target_threshold=clip_target_threshold,
                     algorithm=args.stc_algorithm,
+                    group_empty_tracks=args.group_empty_tracks,
                 )
                 print(f"stc-{args.stc_algorithm}-{time.time() - s} ")
                 
@@ -121,11 +127,13 @@ else:
                 print(f"add tracks of env{env} epi{episode} glbstep{glbstep}")
             # 初始化
 
-        
-        
-    with open(f"./asample_straight_tracks_sequencev2_bg{sample_budget}_{args.stc_algorithm}.pkl", "wb") as f:
+    if args.stc_algorithm == "rewrite":
+        rewrite_idx = 3 if args.group_empty_tracks else 2
+    else:
+        rewrite_idx = 0
+    with open(f"./asample_straight_tracks_sequencev2_wotrajR_bg{sample_budget}_r{rewrite_idx}_{args.stc_algorithm}.pkl", "wb") as f:
         pickle.dump(glb_frames_tracks, f)
         
-    with open(f"./asample_straight_sampled_sequencev2_bg{sample_budget}_{args.stc_algorithm}.pkl", "wb") as f:
+    with open(f"./asample_straight_sampled_sequencev2_wotrajR_bg{sample_budget}_r{rewrite_idx}_{args.stc_algorithm}.pkl", "wb") as f:
         pickle.dump(glb_frames_sampled, f)
     print(glb_frames_sampled)
