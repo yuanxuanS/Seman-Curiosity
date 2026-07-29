@@ -171,6 +171,12 @@ def get_args():
         help="YOLOv8 segmentation checkpoint used when --detector_backend=yolov8",
     )
     parser.add_argument(
+        "--yolov8_confidence",
+        type=float,
+        default=0.5,
+        help="YOLOv8 prediction confidence threshold",
+    )
+    parser.add_argument(
         "--yolov8_iou",
         type=float,
         default=0.7,

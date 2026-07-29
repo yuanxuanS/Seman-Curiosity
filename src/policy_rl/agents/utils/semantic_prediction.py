@@ -126,7 +126,7 @@ class SemanticPredYOLOv8:
         self.segmentation_model = YOLOv8SegBackend(
             weights=args.yolov8_weights,
             device=device,
-            confidence=args.sem_pred_prob_thr,
+            confidence=args.yolov8_confidence,
             iou=args.yolov8_iou,
             image_size=args.yolov8_image_size,
             max_detections=args.yolov8_max_detections,
