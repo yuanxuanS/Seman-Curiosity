@@ -1,0 +1,16 @@
+model:
+  weights: outputs/yolov8_seg_train/yolov8n_seg_ours_bs16/weights/last.pt # yolov8n-seg.pt
+  device: "0"
+  confidence: 0.5
+  iou: 0.7
+  image_size: 640
+  max_detections: 300
+
+dataset:
+  annotations: third_parties/detectron2/datasets/embodied_scene_test_rand/annotations/instances_test.json
+  image_root: third_parties/detectron2/datasets/embodied_scene_test_rand/test  # embodied_scene_test_rand
+
+evaluation:
+  batch_size: 8
+  limit: null
+  output: outputs/yolov8n_seg_embodied_test_rand_ours_bs16

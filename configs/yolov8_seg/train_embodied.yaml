@@ -1,0 +1,37 @@
+model:
+  weights: yolov8n-seg.pt
+
+logging:
+  wandb: false
+
+dataset:
+  prepared_root: outputs/yolov8_seg_dataset_ours_bs16
+  image_mode: symlink
+  simplify_fraction: 0.001
+  minimum_polygon_area: 4.0
+  train:
+    annotations: third_parties/detectron2/datasets/embodied_sequencev2_wotrajR_bg4_r3/annotations/instances_train_epi15.json
+    image_root: third_parties/detectron2/datasets/embodied_sequencev2_wotrajR_bg3_legacy/train
+  val:
+    annotations: third_parties/detectron2/datasets/embodied_test/annotations/instances_test.json
+    image_root: third_parties/detectron2/datasets/embodied_test/test
+
+training:
+  epochs: 10
+  imgsz: 640
+  batch: 16
+  device: "1"
+  workers: 8
+  optimizer: SGD
+  lr0: 0.01
+  weight_decay: 0.0005
+  patience: 20
+  seed: 1234
+  deterministic: true
+  amp: true
+  cache: false
+  project: outputs/yolov8_seg_train
+  name: yolov8n_seg_ours_bs16
+  exist_ok: false
+  save_period: 10
+  plots: true
