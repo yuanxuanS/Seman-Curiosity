@@ -50,6 +50,46 @@ class SegmentationDetections:
 class YOLOv8SegBackend:
     """Thin Ultralytics adapter returning stable, repository-native outputs."""
 
+    @staticmethod
+    def _select_existing_cuda_device(
+        device="", batch=0, newline=False, verbose=True
+    ) -> torch.device:
+        """Select a CUDA device without changing CUDA_VISIBLE_DEVICES.
+
+        Ultralytics 8.0.x normally rewrites CUDA_VISIBLE_DEVICES and returns
+        cuda:0. Habitat-Sim has already initialized CUDA in sequence workers,
+        so that late remapping sends every detector to physical GPU 0. Use the
+        already assigned physical CUDA index directly instead.
+        """
+        if isinstance(device, torch.device):
+            return device
+        value = str(device).lower().strip()
+        for token in ("cuda:", "(", ")", "[", "]", "'", " "):
+            value = value.replace(token, "")
+        if value in ("", "none"):
+            return torch.device(
+                "cuda:{}".format(torch.cuda.current_device())
+                if torch.cuda.is_available()
+                else "cpu"
+            )
+        if value in ("cpu", "mps"):
+            return torch.device(value)
+        if "," in value:
+            raise ValueError(
+                "YOLOv8SegBackend expects one GPU per environment worker, "
+                "got device={!r}".format(device)
+            )
+        cuda_index = int(value)
+        if not torch.cuda.is_available():
+            raise ValueError("CUDA device {} requested but CUDA is unavailable".format(cuda_index))
+        if cuda_index >= torch.cuda.device_count():
+            raise ValueError(
+                "CUDA device {} requested, but only {} devices are visible".format(
+                    cuda_index, torch.cuda.device_count()
+                )
+            )
+        return torch.device("cuda:{}".format(cuda_index))
+
     def __init__(
         self,
         weights: Union[str, Path] = "yolov8n-seg.pt",
@@ -59,13 +99,33 @@ class YOLOv8SegBackend:
         image_size: int = 640,
         max_detections: int = 300,
     ):
+        # Habitat workers can already have CUDA initialized while their
+        # process-wide current device is still cuda:0. Ultralytics performs
+        # some CUDA setup without an explicit device during import/predictor
+        # initialization. Select the worker's assigned GPU first so those
+        # allocations do not create an extra context on physical GPU 0.
+        device_value = str(device).lower().replace("cuda:", "").strip()
+        if device_value not in ("", "none", "cpu", "mps"):
+            if "," in device_value:
+                raise ValueError(
+                    "YOLOv8SegBackend expects one GPU per environment worker, "
+                    "got device={!r}".format(device)
+                )
+            torch.cuda.set_device(int(device_value))
+
         try:
             from ultralytics import YOLO
+            from ultralytics.yolo.engine import predictor as yolo_predictor
         except ImportError as exc:
             raise ImportError(
                 "Ultralytics is not installed. Run this repository in the 'explore' "
                 "environment or install the pinned dependency from requirements.txt."
             ) from exc
+
+        # ``BasePredictor.setup_model`` resolves this module-level symbol at
+        # inference time. The override is process-local because every
+        # environment runs in its own worker process.
+        yolo_predictor.select_device = self._select_existing_cuda_device
 
         self.weights = str(weights)
         self.device = device

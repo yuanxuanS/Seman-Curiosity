@@ -157,6 +157,37 @@ def get_args():
         '--sem_pred_batch_size', type=int, default=3,
         help="batch size for per-env sequence semantic prediction; set 1 to disable batching"
     )
+    parser.add_argument(
+        "--detector_backend",
+        type=str,
+        default="mask_rcnn",
+        choices=["mask_rcnn", "yolov8"],
+        help="instance-segmentation backend used by main_sequence.py",
+    )
+    parser.add_argument(
+        "--yolov8_weights",
+        type=str,
+        default="yolov8n-seg.pt",
+        help="YOLOv8 segmentation checkpoint used when --detector_backend=yolov8",
+    )
+    parser.add_argument(
+        "--yolov8_iou",
+        type=float,
+        default=0.7,
+        help="YOLOv8 non-maximum suppression IoU threshold",
+    )
+    parser.add_argument(
+        "--yolov8_image_size",
+        type=int,
+        default=640,
+        help="YOLOv8 inference image size",
+    )
+    parser.add_argument(
+        "--yolov8_max_detections",
+        type=int,
+        default=300,
+        help="maximum YOLOv8 detections per image",
+    )
     
     # Mapping
     parser.add_argument('--global_downscaling', type=int, default=2)    # full_map缩放 downscaling倍数，得到local_map实际大小

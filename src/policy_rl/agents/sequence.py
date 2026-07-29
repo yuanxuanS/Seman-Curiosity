@@ -8,7 +8,7 @@ import os
 import torch
 from ..envs.utils import pose as pu
 from ..envs.habitat.sequence_env import Sequence_Env
-from .utils.semantic_prediction import SemanticPredMaskRCNN as SemanticPredMaskRCNN
+from .utils.semantic_prediction import build_semantic_predictor
 from src.finetune.dataset_utils import save_obs
 import quaternion
 from .utils.detect_utils import box_iou_calc
@@ -59,7 +59,7 @@ class Sequence_Env_Agent(Sequence_Env):
         if args.sem_gpu_id == -1:
             args.sem_gpu_id = config_env.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID
 
-        self.sem_pred = SemanticPredMaskRCNN(args)
+        self.sem_pred = build_semantic_predictor(args)
 
         if args.visualize or args.print_images:
             self.legend = cv2.imread('docs/legend.png')

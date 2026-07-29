@@ -18,7 +18,20 @@ from detectron2.structures.instances import Instances
 import detectron2.data.transforms as T
 
 from src.constants import coco_categories_mapping
-from src.vqf_constants import target_coco_categories_mapping
+from src.vqf_constants import (
+    SIM_TO_COCO_MAPPING,
+    target_coco_categories_mapping,
+)
+
+
+def build_semantic_predictor(args):
+    """Build the detector selected by main_sequence.py's CLI arguments."""
+    backend = getattr(args, "detector_backend", "mask_rcnn")
+    if backend == "mask_rcnn":
+        return SemanticPredMaskRCNN(args)
+    if backend == "yolov8":
+        return SemanticPredYOLOv8(args)
+    raise ValueError("Unsupported detector backend: {}".format(backend))
 
 
 class SemanticPredMaskRCNN():
@@ -99,6 +112,135 @@ class SemanticPredMaskRCNN():
         if return_features:
             return semantic_inputs, vis_images, features
         return semantic_inputs, vis_images
+
+
+class SemanticPredYOLOv8:
+    """YOLOv8-seg adapter matching ``SemanticPredMaskRCNN``'s interface."""
+
+    def __init__(self, args):
+        # Import lazily so the default Mask R-CNN path does not require
+        # Ultralytics and existing environments keep their startup behaviour.
+        from src.detectors import YOLOv8SegBackend
+
+        device = "cpu" if args.sem_gpu_id == -2 else str(args.sem_gpu_id)
+        self.segmentation_model = YOLOv8SegBackend(
+            weights=args.yolov8_weights,
+            device=device,
+            confidence=args.sem_pred_prob_thr,
+            iou=args.yolov8_iou,
+            image_size=args.yolov8_image_size,
+            max_detections=args.yolov8_max_detections,
+        )
+        self.args = args
+        self._model_to_coco = self._build_model_to_coco_mapping(
+            self.segmentation_model.names
+        )
+
+    @staticmethod
+    def _build_model_to_coco_mapping(names):
+        aliases = {"sofa": "couch", "fridge": "refrigerator"}
+        mapping = {}
+        for model_id, raw_name in names.items():
+            name = aliases.get(str(raw_name).strip().lower(), str(raw_name).strip().lower())
+            if name in SIM_TO_COCO_MAPPING:
+                mapping[int(model_id)] = SIM_TO_COCO_MAPPING[name]
+        return mapping
+
+    def _convert_detection(self, detection, image_bgr):
+        from detectron2.structures import Boxes, Instances
+
+        keep = [
+            idx
+            for idx, class_id in enumerate(detection.classes.tolist())
+            if int(class_id) in self._model_to_coco
+        ]
+        if keep:
+            keep_tensor = torch.as_tensor(
+                keep, dtype=torch.long, device=detection.classes.device
+            )
+            boxes = detection.boxes[keep_tensor]
+            scores = detection.scores[keep_tensor]
+            masks = detection.masks[keep_tensor]
+            classes = torch.as_tensor(
+                [
+                    self._model_to_coco[int(detection.classes[idx].item())]
+                    for idx in keep
+                ],
+                dtype=torch.int64,
+                device=detection.classes.device,
+            )
+        else:
+            height, width = detection.image_size
+            device = detection.classes.device
+            boxes = torch.empty((0, 4), dtype=torch.float32, device=device)
+            scores = torch.empty((0,), dtype=torch.float32, device=device)
+            classes = torch.empty((0,), dtype=torch.int64, device=device)
+            masks = torch.empty(
+                (0, height, width), dtype=torch.bool, device=device
+            )
+
+        instances = Instances(
+            detection.image_size,
+            pred_boxes=Boxes(boxes),
+            pred_classes=classes,
+            scores=scores,
+            pred_masks=masks,
+        )
+        semantic_input = np.zeros(
+            (detection.image_size[0], detection.image_size[1], 6),
+            dtype=np.float32,
+        )
+        for idx, class_id in enumerate(classes.detach().cpu().tolist()):
+            channel = target_coco_categories_mapping[class_id]
+            semantic_input[:, :, channel] += masks[idx].float().cpu().numpy()
+
+        vis_image = image_bgr
+        if self.args.visualize == 2 and len(instances):
+            from detectron2.utils.visualizer import Visualizer
+
+            vis_image = Visualizer(image_bgr[:, :, ::-1]).draw_instance_predictions(
+                instances.to("cpu")
+            ).get_image()
+        return semantic_input, vis_image, instances
+
+    def get_predictions_batch(
+        self, imgs, return_instance=False, return_features=False
+    ):
+        if return_features:
+            raise NotImplementedError(
+                "YOLOv8 does not expose Mask R-CNN backbone features"
+            )
+        if not imgs:
+            if return_instance:
+                return [], [], []
+            return [], []
+
+        # Habitat observations are RGB; Ultralytics numpy inputs follow OpenCV
+        # BGR convention, matching the existing Mask R-CNN adapter.
+        images_bgr = [img[:, :, ::-1] for img in imgs]
+        detections = self.segmentation_model.predict(images_bgr)
+        converted = [
+            self._convert_detection(detection, image_bgr)
+            for detection, image_bgr in zip(detections, images_bgr)
+        ]
+        semantic_inputs = [item[0] for item in converted]
+        vis_images = [item[1] for item in converted]
+        instances = [item[2] for item in converted]
+        if return_instance:
+            return semantic_inputs, vis_images, instances
+        return semantic_inputs, vis_images
+
+    def get_prediction(
+        self, img, return_instance=False, return_features=False
+    ):
+        outputs = self.get_predictions_batch(
+            [img],
+            return_instance=return_instance,
+            return_features=return_features,
+        )
+        if return_instance:
+            return outputs[0][0], outputs[1][0], outputs[2][0]
+        return outputs[0][0], outputs[1][0]
 
 def compress_sem_map(sem_map):
     """
