@@ -229,6 +229,7 @@ def main():
             policy = RL_Policy2(observation_space.shape, action_space,
                                 device = device,
                                 use_history=args.use_history_policy,
+                                use_action_history_token=args.use_action_history_token,
                                 profile_panorama_encoder=(
                                     args.profile_sequence or args.profile_panorama_encoder
                                 ),
@@ -241,11 +242,34 @@ def main():
             checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage)
             if isinstance(checkpoint, dict):
                 if 'policy_state_dict' in checkpoint:
-                    policy.load_state_dict(checkpoint['policy_state_dict'])
+                    state_dict = checkpoint['policy_state_dict']
                 else:
-                    policy.load_state_dict(checkpoint)
+                    state_dict = checkpoint
             else:
-                policy.load_state_dict(checkpoint)
+                state_dict = checkpoint
+
+            if args.use_action_history_token:
+                incompatible = policy.load_state_dict(state_dict, strict=False)
+                unexpected = incompatible.unexpected_keys
+                missing_non_history = [
+                    key for key in incompatible.missing_keys
+                    if not key.startswith("action_history.")
+                ]
+                if unexpected or missing_non_history:
+                    raise RuntimeError(
+                        "Checkpoint is incompatible with the base panorama policy: "
+                        "missing={}, unexpected={}".format(
+                            missing_non_history, unexpected
+                        )
+                    )
+                if incompatible.missing_keys:
+                    print(
+                        "Initialized new action-history parameters: {}".format(
+                            incompatible.missing_keys
+                        )
+                    )
+            else:
+                policy.load_state_dict(state_dict)
 
         if args.load_pretrain != "0":
             _load_checkpoint_into_policy(args.load_pretrain)
@@ -264,9 +288,16 @@ def main():
         
     
         # Storage: 
+        if args.use_history_policy and args.use_action_history_token:
+            raise ValueError(
+                "--use_history_policy and --use_action_history_token "
+                "cannot be enabled together"
+            )
+
+        rec_state_size = policy.history_token_size
         rollouts = GlobalRolloutStorage(args.num_local_steps,
                                         num_scenes, observation_space.shape,
-                                        action_space, 1,
+                                        action_space, rec_state_size,
                                         es,
                                         hidden_size=768,
                                         # hist_len=args.num_local_steps
@@ -280,7 +311,7 @@ def main():
         if args.eval:
             policy.eval()
 
-        rec_states = torch.zeros( num_scenes, 1)
+        rec_states = torch.zeros(num_scenes, rec_state_size, device=device)
         extras = torch.zeros(num_scenes, es)
         
         if args.use_history_policy:
@@ -334,8 +365,16 @@ def main():
             del local_input
         
         with profiler.time("initial_policy_act"):
-            value, action, action_log_prob = \
-                policy.act(
+            if args.use_action_history_token:
+                value, action, action_log_prob, rec_states = \
+                    policy.act_with_history_token(
+                        rollouts.obs[0],
+                        rec_states,
+                        rollouts.masks[0],
+                        deterministic=False,
+                    )
+            else:
+                value, action, action_log_prob = policy.act(
                     rollouts.obs[0] if not args.use_history_policy else None,  # 如果使用历史模型，初始时不使用当前观测作为输入
                     extras=extras,
                     deterministic=False,
@@ -346,7 +385,7 @@ def main():
                     hist_actions=None,
                     hist_masks=None,
                     compute_hist_embed=False
-                )
+                    )
         
         action = action.cpu().numpy()
     
@@ -637,8 +676,16 @@ def main():
                     hist_actions = None
                     hist_masks = None
                 # 这样会返回当前观测的特征，用于下一步
-                value, action, action_log_prob  = \
-                    policy.act(
+                if args.use_action_history_token:
+                    value, action, action_log_prob, rec_states = \
+                        policy.act_with_history_token(
+                            rollouts.obs[l_step + 1],
+                            rec_states,
+                            l_masks,
+                            deterministic=False,
+                        )
+                else:
+                    value, action, action_log_prob = policy.act(
                         rollouts.obs[l_step + 1] if not args.use_history_policy else None, 
                         extras=None,
                         deterministic=False,
@@ -649,7 +696,7 @@ def main():
                         hist_actions=hist_actions,
                         hist_masks=hist_masks,
                         compute_hist_embed=False
-                    )
+                        )
             
             action = action.cpu().numpy()
             
@@ -763,14 +810,22 @@ def main():
             if l_step == args.num_local_steps - 1:
             # if l_step == 100 - 1:
                 if not args.eval and args.agent == "rl":
-                    next_value = policy.get_value(
-                        None if args.use_history_policy else rollouts.obs[-1],
-                        # rollouts.rec_states[-1],
-                        # rollouts.masks[-1],
-                        extras=None,
-                        curr_pano_img_feats=rollouts.pano_img_feats[-1] if args.use_history_policy else None,
-                        curr_pano_ang_feats=rollouts.pano_ang_feats[-1] if args.use_history_policy else None,
-                    ).detach()
+                    if args.use_action_history_token:
+                        # obs[-1] and rec_states[-1] describe the same state:
+                        # the final observation and its history before sampling
+                        # an action from that observation.
+                        next_value = policy.get_value(
+                            rollouts.obs[-1],
+                            history_token=rollouts.rec_states[-1],
+                            masks=rollouts.masks[-1],
+                        ).detach()
+                    else:
+                        next_value = policy.get_value(
+                            None if args.use_history_policy else rollouts.obs[-1],
+                            extras=None,
+                            curr_pano_img_feats=rollouts.pano_img_feats[-1] if args.use_history_policy else None,
+                            curr_pano_ang_feats=rollouts.pano_ang_feats[-1] if args.use_history_policy else None,
+                        ).detach()
                     rollouts.compute_returns(next_value, args.use_gae,
                                                args.gamma, args.tau)
                     

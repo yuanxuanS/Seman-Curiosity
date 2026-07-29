@@ -313,6 +313,13 @@ def get_args():
         "--use_history_policy", action="store_true", default=False,
         help="Use history-based policy (default: True)"
     )
+    parser.add_argument(
+        "--use_action_history_token", action="store_true", default=False,
+        help=(
+            "Keep one recurrent token of previously selected panorama views "
+            "and jointly encode it with the 12 current view tokens"
+        ),
+    )
     # parse arguments
     args = parser.parse_args()
 

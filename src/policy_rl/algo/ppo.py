@@ -66,10 +66,16 @@ class PPO():
                 values, action_log_probs, dist_entropy  = \
                     self.actor_critic.evaluate_actions(
                         sample['obs'], 
-                        # sample['rec_states'],
-                        # sample['masks'], 
                         sample['actions'],
-                        extras=sample['extras']
+                        extras=sample['extras'],
+                        history_token=(
+                            sample['rec_states']
+                            if self.actor_critic.is_recurrent else None
+                        ),
+                        masks=(
+                            sample['masks']
+                            if self.actor_critic.is_recurrent else None
+                        ),
                     )
                 
                 ratio = torch.exp(action_log_probs -
@@ -146,12 +152,20 @@ class PPO():
                         sample['actions'],
                         sample['expert_probs'],  # 新增：传入专家概率分布
                         extras=sample['extras'],
-                        curr_pano_img_feats=sample['curr_pano_img_feats'],
-                        curr_pano_ang_feats=sample['curr_pano_ang_feats'],
-                        hist_pano_img_feats=sample['hist_pano_img_feats'],
-                        hist_pano_ang_feats=sample['hist_pano_ang_feats'],
-                        hist_actions=sample['hist_actions'],
-                        hist_masks=sample['hist_masks']
+                        curr_pano_img_feats=sample.get('curr_pano_img_feats'),
+                        curr_pano_ang_feats=sample.get('curr_pano_ang_feats'),
+                        hist_pano_img_feats=sample.get('hist_pano_img_feats'),
+                        hist_pano_ang_feats=sample.get('hist_pano_ang_feats'),
+                        hist_actions=sample.get('hist_actions'),
+                        hist_masks=sample.get('hist_masks'),
+                        history_token=(
+                            sample['rec_states']
+                            if self.actor_critic.is_recurrent else None
+                        ),
+                        masks=(
+                            sample['masks']
+                            if self.actor_critic.is_recurrent else None
+                        ),
                         
                     )
                 

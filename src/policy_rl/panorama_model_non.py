@@ -420,25 +420,61 @@ class panorama_model(nn.Module):
     @property
     def output_size(self):
         return 12
-    
-    def forward(self, 
-            obs: Tensor,
-            ):
+
+    def encode_view_embeddings(self, obs: Tensor):
+        """Encode RGB panoramas into the 12 pre-attention view embeddings."""
         with torch.no_grad():
             # 特征提取
             env = obs.shape[0]
             ob_img_feats = self.encoder(obs).to(self.device)
             ang_feats = get_all_point_angle_feature(self.angle_feat_size, )
             ob_ang_feats = (ang_feats.unsqueeze(0)).repeat(env, 1,1).to(self.device)
-        
+
         self.ob_img_feats = ob_img_feats
         ob_embeds = self.img_embeddings(ob_img_feats, ob_ang_feats)
+        return ob_embeds, ob_ang_feats
+
+    def forward_features(self, obs: Tensor):
+        """Encode a panorama and expose the per-view tokens to policy wrappers."""
+        ob_embeds, ob_ang_feats = self.encode_view_embeddings(obs)
         view_tokens = self.attention(ob_embeds,)[0]
 
         action_logits = self.policy_mlp(view_tokens).squeeze(-1)
 
         state_feature = view_tokens.mean(dim=1)
         value = self.critic_mlp(state_feature).squeeze(-1)
+        return value, action_logits, view_tokens, ob_ang_feats
+
+    def forward_features_with_history(
+        self,
+        obs: Tensor,
+        history_embedding: Tensor,
+    ):
+        """Jointly encode one history token and the 12 current view tokens."""
+        ob_embeds, ob_ang_feats = self.encode_view_embeddings(obs)
+        transformer_input = torch.cat(
+            [history_embedding.unsqueeze(1), ob_embeds], dim=1
+        )
+        fused_tokens = self.attention(transformer_input)[0]
+        history_context = fused_tokens[:, 0]
+        view_tokens = fused_tokens[:, 1:]
+
+        action_logits = self.policy_mlp(view_tokens).squeeze(-1)
+        panorama_summary = view_tokens.mean(dim=1)
+        value = self.critic_mlp(panorama_summary).squeeze(-1)
+        return (
+            value,
+            action_logits,
+            view_tokens,
+            history_context,
+            panorama_summary,
+            ob_ang_feats,
+        )
+
+    def forward(self,
+            obs: Tensor,
+            ):
+        value, action_logits, _, _ = self.forward_features(obs)
         return value, action_logits
                                          
 class ModelConfig:

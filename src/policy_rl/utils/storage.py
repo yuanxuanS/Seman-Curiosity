@@ -212,7 +212,7 @@ class RolloutStorage(object):
                 if start_ind + offset > num_processes - 1:
                     break
                 ind = perm[start_ind + offset]
-                # obs.append(self.obs[:-1, ind])
+                obs.append(self.obs[:-1, ind])
                 rec_states.append(self.rec_states[0:1, ind])
                 actions.append(self.actions[:, ind])
                 value_preds.append(self.value_preds[:-1, ind])
@@ -223,7 +223,9 @@ class RolloutStorage(object):
                 if self.has_extras:
                     extras.append(self.extras[:-1, ind])
                 if hasattr(self, 'expert_probs'):
-                    expert_probs.append(self.expert_probs[:-1, ind])
+                    # expert_probs stores one target per action and therefore
+                    # has T entries (unlike obs/value/masks, which have T+1).
+                    expert_probs.append(self.expert_probs[:, ind])
 
             # These are all tensors of size (T, N, ...)
             obs = torch.stack(obs, 1)

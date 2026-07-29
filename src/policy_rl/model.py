@@ -463,15 +463,99 @@ class RL_Policy(nn.Module):
 
         return value, action_log_probs, dist_entropy, rnn_hxs
 
+class ActionHistoryToken(nn.Module):
+    """Embed and update one recurrent token of past panorama decisions."""
+
+    def __init__(
+        self,
+        view_hidden_size,
+        history_size,
+        num_actions,
+        angle_feat_size,
+    ):
+        super().__init__()
+        action_embed_size = 32
+        self.action_embedding = nn.Embedding(num_actions, action_embed_size)
+        self.history_input = nn.Sequential(
+            nn.Linear(
+                3 * (history_size // 2)
+                + action_embed_size
+                + angle_feat_size,
+                history_size,
+            ),
+            nn.LayerNorm(history_size),
+            nn.ReLU(),
+        )
+        self.history_gru = nn.GRUCell(history_size, history_size)
+        self.history_to_view = nn.Linear(
+            history_size, view_hidden_size
+        )
+        self.history_type_embedding = nn.Parameter(
+            torch.zeros(1, view_hidden_size)
+        )
+        update_feature_size = history_size // 2
+        self.selected_projection = nn.Linear(
+            view_hidden_size, update_feature_size
+        )
+        self.panorama_projection = nn.Linear(
+            view_hidden_size, update_feature_size
+        )
+        self.context_projection = nn.Linear(
+            view_hidden_size, update_feature_size
+        )
+
+    def embed_history(self, history_token):
+        return (
+            self.history_to_view(history_token)
+            + self.history_type_embedding
+        )
+
+    def update(
+        self,
+        view_tokens,
+        panorama_summary,
+        history_context,
+        angle_features,
+        actions,
+        history_token,
+    ):
+        actions = actions.long().view(-1)
+        batch_indices = torch.arange(
+            view_tokens.size(0), device=view_tokens.device
+        )
+        selected_views = view_tokens[batch_indices, actions]
+        selected_angles = angle_features[batch_indices, actions]
+        action_features = self.action_embedding(actions)
+        selected_features = self.selected_projection(selected_views)
+        panorama_features = self.panorama_projection(panorama_summary)
+        context_features = self.context_projection(history_context)
+        history_input = self.history_input(
+            torch.cat(
+                [
+                    selected_features,
+                    panorama_features,
+                    context_features,
+                    action_features,
+                    selected_angles,
+                ],
+                dim=-1,
+            )
+        )
+        return self.history_gru(history_input, history_token)
+
+
 class RL_Policy2(nn.Module):
     model_config = model_config
+    action_history_token_size = 256
     def __init__(self, obs_shape, action_space, device=0,
                  base_kwargs=None, use_history=False,
+                 use_action_history_token=False,
                  profile_panorama_encoder=False, profile_interval=10):
 
         super(RL_Policy2, self).__init__()
         
         self.use_history = use_history
+        self.use_action_history_token = use_action_history_token
         self.device = device
         
         model_config = ModelConfig(**self.model_config)
@@ -498,10 +582,57 @@ class RL_Policy2(nn.Module):
             self.dist = DiagGaussian(self.network.output_size, num_outputs)
         else:
             raise NotImplementedError
+
+        if self.use_action_history_token:
+            if use_history:
+                raise ValueError(
+                    "use_action_history_token and use_history cannot be enabled together"
+                )
+            self.action_history = ActionHistoryToken(
+                view_hidden_size=model_config.hidden_size,
+                history_size=self.action_history_token_size,
+                num_actions=num_outputs,
+                angle_feat_size=model_config.angle_feat_size,
+            )
+            self.history_token_size = self.action_history_token_size
+        else:
+            self.history_token_size = 1
     
     @property
     def is_recurrent(self):
-        return False
+        return self.use_action_history_token
+
+    def initial_history_token(self, batch_size, device=None):
+        if device is None:
+            device = next(self.parameters()).device
+        return torch.zeros(batch_size, self.history_token_size, device=device)
+
+    def _forward_action_history(self, inputs, history_token=None, masks=None):
+        if history_token is None:
+            history_token = self.initial_history_token(inputs.size(0))
+        if masks is not None:
+            # Reset history before scoring the first action of a new episode.
+            history_token = history_token * masks.view(-1, 1)
+        history_embedding = self.action_history.embed_history(history_token)
+        (
+            value,
+            action_logits,
+            view_tokens,
+            history_context,
+            panorama_summary,
+            angle_features,
+        ) = self.network.forward_features_with_history(
+            inputs, history_embedding
+        )
+        return (
+            value,
+            action_logits,
+            view_tokens,
+            history_context,
+            panorama_summary,
+            angle_features,
+            history_token,
+        )
     
     @torch.jit.export
     def forward(self, inputs:Tensor, 
@@ -511,7 +642,8 @@ class RL_Policy2(nn.Module):
                 hist_pano_img_feats:Optional[Tensor]=None, 
                 hist_img_feats:Optional[Tensor]=None, 
                 hist_masks:Optional[Tensor]=None,
-                compute_hist_embed: bool=False):
+                compute_hist_embed: bool=False,
+                history_token:Optional[Tensor]=None):
         """
         Forward 函数: 根据 use_history 参数选择不同的模型调用方式
         
@@ -557,6 +689,11 @@ class RL_Policy2(nn.Module):
         #         )
         # else:
         # 非历史模型: 使用当前全景图像与角度特征
+        if self.use_action_history_token:
+            value, action_logits, _, _, _, _, _ = self._forward_action_history(
+                inputs, history_token
+            )
+            return value, action_logits
         return self.network(inputs)
     # @torch.jit.export
     def act(self, inputs:Tensor,
@@ -602,12 +739,48 @@ class RL_Policy2(nn.Module):
         return value, action, action_log_probs
         # return value, action, action_log_probs, dist.probs
 
+    def act_with_history_token(
+        self,
+        inputs: Tensor,
+        history_token: Tensor,
+        masks: Tensor,
+        deterministic: bool = False,
+    ):
+        """Select an action with h_t, then encode that choice into h_(t+1)."""
+        if not self.use_action_history_token:
+            raise RuntimeError(
+                "act_with_history_token requires use_action_history_token=True"
+            )
+        (
+            value,
+            action_logits,
+            view_tokens,
+            history_context,
+            panorama_summary,
+            angle_features,
+            history_token,
+        ) = \
+            self._forward_action_history(inputs, history_token, masks)
+        dist = torch.distributions.Categorical(logits=action_logits)
+        action = action_logits.argmax(dim=-1) if deterministic else dist.sample()
+        action_log_probs = dist.log_prob(action)
+        next_history_token = self.action_history.update(
+            view_tokens,
+            panorama_summary,
+            history_context,
+            angle_features,
+            action,
+            history_token,
+        )
+        return value, action, action_log_probs, next_history_token
+
     @torch.jit.export
     def get_value(self, inputs:Tensor,
                   extras=None, 
                   curr_pano_img_feats=None, curr_pano_ang_feats=None,
                   hist_pano_img_feats=None, hist_pano_ang_feats=None,
-                  hist_actions=None, hist_masks=None):
+                  hist_actions=None, hist_masks=None,
+                  history_token=None, masks=None):
         """
         Get value: 根据 use_history 参数选择不同的模型调用方式
         """
@@ -624,6 +797,18 @@ class RL_Policy2(nn.Module):
         #     )
         #     value, _ = result
         # else:
+        if self.use_action_history_token:
+            if history_token is None or masks is None:
+                raise ValueError(
+                    "history_token and masks are required for action-history value"
+                )
+            value, _, _, _, _, _, _ = self._forward_action_history(
+                inputs,
+                history_token,
+                masks,
+            )
+            return value
+
         # 非历史模型: 使用当前全景图像与角度特征
         result = self(inputs, None, None, None, None, None, None, False)
         value = result[0]
@@ -635,7 +820,8 @@ class RL_Policy2(nn.Module):
                          extras=None, 
                         curr_pano_img_feats=None, curr_pano_ang_feats=None,
                         hist_pano_img_feats=None, hist_pano_ang_feats=None,
-                        hist_actions=None, hist_masks=None):
+                        hist_actions=None, hist_masks=None,
+                        history_token=None, masks=None):
         """
         Evaluate actions: 根据 use_history 参数选择不同的模型调用方式
         """
@@ -654,13 +840,74 @@ class RL_Policy2(nn.Module):
         #     value, actor_features = result
         # else:
             # 非历史模型: 使用当前全景图像与角度特征
+        if self.use_action_history_token:
+            if history_token is None or masks is None:
+                raise ValueError(
+                    "history_token and masks are required for action-history PPO"
+                )
+            result = self._evaluate_action_history_sequence(
+                inputs, action, history_token, masks
+            )
+            return result[0], result[1], result[2]
+
         result = self(inputs, None, None, None, None, None, None, False)
         value, action_logits = result
-        
+
         dist = torch.distributions.Categorical(logits=action_logits)
         action_log_probs = dist.log_prob(action.squeeze(-1))
         dist_entropy = dist.entropy().mean()
         return value, action_log_probs, dist_entropy
+
+    def _evaluate_action_history_sequence(
+        self, inputs, actions, initial_history_token, masks
+    ):
+        """Replay a time-major PPO batch so gradients cross history updates."""
+        num_envs = initial_history_token.size(0)
+        if inputs.size(0) % num_envs != 0:
+            raise ValueError("Flattened recurrent batch is not divisible by env count")
+        num_steps = inputs.size(0) // num_envs
+        inputs = inputs.view(num_steps, num_envs, *inputs.shape[1:])
+        actions = actions.view(num_steps, num_envs)
+        masks = masks.view(num_steps, num_envs)
+
+        history_token = initial_history_token
+        values = []
+        action_log_probs = []
+        entropies = []
+        logits_sequence = []
+        for step in range(num_steps):
+            (
+                value,
+                logits,
+                view_tokens,
+                history_context,
+                panorama_summary,
+                angle_features,
+                history_token,
+            ) = self._forward_action_history(
+                inputs[step], history_token, masks[step]
+            )
+            dist = torch.distributions.Categorical(logits=logits)
+            step_actions = actions[step].long()
+            values.append(value)
+            action_log_probs.append(dist.log_prob(step_actions))
+            entropies.append(dist.entropy())
+            logits_sequence.append(logits)
+            history_token = self.action_history.update(
+                view_tokens,
+                panorama_summary,
+                history_context,
+                angle_features,
+                step_actions,
+                history_token,
+            )
+
+        return (
+            torch.stack(values).view(-1),
+            torch.stack(action_log_probs).view(-1),
+            torch.stack(entropies).mean(),
+            torch.stack(logits_sequence).view(-1, logits_sequence[0].size(-1)),
+        )
     
     @torch.jit.export
     def evaluate_actions_with_supervise(self, inputs:Tensor,
@@ -669,7 +916,8 @@ class RL_Policy2(nn.Module):
                                         extras=None, 
                                        curr_pano_img_feats=None, curr_pano_ang_feats=None,
                                        hist_pano_img_feats=None, hist_pano_ang_feats=None,
-                                       hist_actions=None, hist_masks=None):
+                                       hist_actions=None, hist_masks=None,
+                                       history_token=None, masks=None):
         """
         Evaluate actions with supervise: 根据 use_history 参数选择不同的模型调用方式
         """
@@ -688,6 +936,15 @@ class RL_Policy2(nn.Module):
         #     value, actor_features = result
         # else:
         # 非历史模型: 使用当前全景图像与角度特征
+        if self.use_action_history_token:
+            if history_token is None or masks is None:
+                raise ValueError(
+                    "history_token and masks are required for action-history PPO"
+                )
+            return self._evaluate_action_history_sequence(
+                inputs, action, history_token, masks
+            )
+
         result = self(inputs, None, None, None, None, None, None, False)
         value, action_logits = result
         
