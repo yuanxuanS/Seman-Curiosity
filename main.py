@@ -43,6 +43,8 @@ def main():
     print("Dumping at {}".format(log_dir))
     print(args)
     logging.info(args)
+    print("Instance detector backend: {}".format(args.detector_backend))
+    logging.info("Instance detector backend: %s", args.detector_backend)
 
     # Logging and loss variables
     num_scenes = args.num_processes
