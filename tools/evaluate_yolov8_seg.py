@@ -36,6 +36,16 @@ def parse_args():
     parser.add_argument("--weights", type=str, help="Override model.weights.")
     parser.add_argument("--device", type=str, help="Override model.device, e.g. 0 or cpu.")
     parser.add_argument("--limit", type=int, help="Evaluate only the first N images.")
+    parser.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Save an inference visualization for every evaluated image.",
+    )
+    parser.add_argument(
+        "--visualization-dir",
+        type=Path,
+        help="Visualization output directory (default: <evaluation.output>/visualizations).",
+    )
     return parser.parse_args()
 
 
@@ -47,6 +57,85 @@ def resolve_path(value: str) -> Path:
 def batched(items, batch_size):
     for index in range(0, len(items), batch_size):
         yield items[index : index + batch_size]
+
+
+def category_color(category_id: int):
+    """Return a stable, visually distinct BGR color for a dataset category."""
+    palette = (
+        (60, 20, 220),
+        (230, 0, 0),
+        (45, 108, 142),
+        (30, 170, 100),
+        (32, 11, 119),
+        (0, 165, 255),
+        (180, 105, 255),
+        (128, 128, 0),
+    )
+    return palette[int(category_id) % len(palette)]
+
+
+def save_prediction_visualization(
+    image_path,
+    output_path,
+    prediction,
+    category_mapping,
+    category_names,
+    mask_alpha=0.45,
+):
+    """Draw masks, boxes, class names and scores on one test image."""
+    import cv2
+    import numpy as np
+
+    image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if image is None:
+        raise OSError(f"Failed to read image for visualization: {image_path}")
+
+    boxes = prediction.boxes.detach().cpu().numpy()
+    classes = prediction.classes.detach().cpu().numpy()
+    scores = prediction.scores.detach().cpu().numpy()
+    masks = prediction.masks.detach().cpu().numpy().astype(bool)
+
+    overlay = image.copy()
+    visible = []
+    for box, model_class, score, mask in zip(boxes, classes, scores, masks):
+        model_class = int(model_class)
+        if model_class not in category_mapping:
+            continue
+        category_id = int(category_mapping[model_class])
+        color = category_color(category_id)
+        overlay[mask] = color
+        visible.append((box, category_id, float(score), color))
+
+    image = cv2.addWeighted(overlay, mask_alpha, image, 1.0 - mask_alpha, 0.0)
+    for box, category_id, score, color in visible:
+        x1, y1, x2, y2 = [int(round(value)) for value in box]
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
+        label = f"{category_names[category_id]} {score:.2f}"
+        (text_width, text_height), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
+        )
+        text_top = max(0, y1 - text_height - baseline - 4)
+        cv2.rectangle(
+            image,
+            (x1, text_top),
+            (x1 + text_width + 4, text_top + text_height + baseline + 4),
+            color,
+            -1,
+        )
+        cv2.putText(
+            image,
+            label,
+            (x1 + 2, text_top + text_height + 1),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(output_path), image):
+        raise OSError(f"Failed to save visualization: {output_path}")
 
 
 def main():
@@ -65,6 +154,14 @@ def main():
     image_root = resolve_path(config["dataset"]["image_root"])
     output_dir = resolve_path(config["evaluation"]["output"])
     output_dir.mkdir(parents=True, exist_ok=True)
+    visualize = args.visualize or bool(config["evaluation"].get("visualize", False))
+    visualization_dir = (
+        resolve_path(str(args.visualization_dir))
+        if args.visualization_dir is not None
+        else output_dir / config["evaluation"].get("visualization_dir", "visualizations")
+    )
+    if visualize:
+        visualization_dir.mkdir(parents=True, exist_ok=True)
 
     if not annotations_path.is_file():
         raise FileNotFoundError(f"Annotation file does not exist: {annotations_path}")
@@ -83,6 +180,10 @@ def main():
     category_mapping = build_model_to_dataset_category_map(
         backend.names, dataset["categories"]
     )
+    category_names = {
+        int(category["id"]): str(category["name"])
+        for category in dataset["categories"]
+    }
     selected_model_classes = sorted(category_mapping)
 
     bbox_results, segmentation_results = [], []
@@ -93,12 +194,20 @@ def main():
         if missing:
             raise FileNotFoundError(f"Missing dataset image(s): {missing[:3]}")
         predictions = backend.predict(paths, classes=selected_model_classes)
-        for image, prediction in zip(image_batch, predictions):
+        for image, path, prediction in zip(image_batch, paths, predictions):
             bbox_batch, segmentation_batch = detections_to_coco_results(
                 image["id"], prediction, category_mapping
             )
             bbox_results.extend(bbox_batch)
             segmentation_results.extend(segmentation_batch)
+            if visualize:
+                save_prediction_visualization(
+                    path,
+                    visualization_dir / image["file_name"],
+                    prediction,
+                    category_mapping,
+                    category_names,
+                )
 
     (output_dir / "bbox_predictions.json").write_text(
         json.dumps(bbox_results), encoding="utf-8"
@@ -114,6 +223,7 @@ def main():
     metrics = {
         "model": model_config["weights"],
         "num_images": len(images),
+        "visualization_dir": str(visualization_dir) if visualize else None,
         "categories": category_mapping,
         "bbox": {
             **bbox_metrics,
