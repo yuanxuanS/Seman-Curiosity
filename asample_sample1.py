@@ -6,6 +6,8 @@ import argparse
 import pickle
 import random
 import time
+from pathlib import Path
+import numpy as np
 from src.policy_rl.sequence_utils import stc_select_samples
 
 parser = argparse.ArgumentParser()
@@ -47,14 +49,120 @@ parser.add_argument(
     default=0,
     help="Random seed used with --random_sample_n",
 )
+parser.add_argument(
+    "--frame_detections_source",
+    choices=["saved", "realtime"],
+    default="saved",
+    help="Read saved bbspred detections or run a detector on each RGB frame",
+)
+parser.add_argument(
+    "--realtime_detector",
+    choices=["maskrcnn", "yolov8n"],
+    default="maskrcnn",
+    help="Detector used when --frame_detections_source=realtime",
+)
+parser.add_argument(
+    "--detector_device",
+    default=None,
+    help="Detector device, e.g. cuda:0 or cpu (default: follow --cpu/--gpu_id)",
+)
+parser.add_argument(
+    "--detector_confidence",
+    type=float,
+    default=0.5,
+    help="Confidence threshold for real-time detection",
+)
+parser.add_argument(
+    "--maskrcnn_config",
+    type=Path,
+    default=Path(
+        "third_parties/detectron2/configs/embodied/"
+        "mask_rcnn_R_50_FPN_1x_embodied.yaml"
+    ),
+)
+parser.add_argument(
+    "--maskrcnn_weights",
+    type=Path,
+    default=Path("third_parties/detectron2/models/model_final_a54504.pkl"),
+)
+parser.add_argument(
+    "--yolov8n_weights",
+    type=Path,
+    default=Path("yolov8n-seg.pt"),
+)
+parser.add_argument("--yolov8_iou", type=float, default=0.7)
 args = parser.parse_args()
 
 if args.random_sample_n is not None and args.random_sample_n < 0:
     parser.error("--random_sample_n must be greater than or equal to 0")
+if not 0.0 <= args.detector_confidence <= 1.0:
+    parser.error("--detector_confidence must be between 0 and 1")
+
+
+def _normalise_instances(instances):
+    """Return the common frame-detection form consumed by sequence_utils."""
+    instances = instances.to("cpu")
+    required_fields = ("pred_boxes", "pred_classes", "scores", "pred_masks")
+    missing = [name for name in required_fields if not instances.has(name)]
+    if missing:
+        raise ValueError("detections are missing fields: {}".format(missing))
+    return instances
+
+
+class RealtimeDetector:
+    """Unify Mask R-CNN and YOLOv8-seg outputs as Detectron2 Instances."""
+
+    def __init__(self, detector_name, device):
+        self.detector_name = detector_name
+        self.device = device
+        if detector_name == "maskrcnn":
+            from detectron2.config import get_cfg
+            from detectron2.engine import DefaultPredictor
+
+            config_path = args.maskrcnn_config.expanduser().resolve()
+            weights_path = args.maskrcnn_weights.expanduser().resolve()
+            if not config_path.is_file():
+                raise FileNotFoundError("Mask R-CNN config not found: {}".format(config_path))
+            if not weights_path.is_file():
+                raise FileNotFoundError("Mask R-CNN weights not found: {}".format(weights_path))
+
+            cfg = get_cfg()
+            # Custom keys required by this repository's embodied config.
+            cfg.VIS = False
+            cfg.SAVE_PTH = ""
+            cfg.DATASET_NAME = ""
+            cfg.MODEL.NUM_CLASSES = 80
+            cfg.merge_from_file(str(config_path))
+            cfg.MODEL.WEIGHTS = str(weights_path)
+            cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.detector_confidence
+            cfg.MODEL.DEVICE = device
+            cfg.freeze()
+            self.predictor = DefaultPredictor(cfg)
+        else:
+            from src.detectors.yolov8_seg import YOLOv8SegBackend
+
+            self.predictor = YOLOv8SegBackend(
+                weights=args.yolov8n_weights,
+                device=device,
+                confidence=args.detector_confidence,
+                iou=args.yolov8_iou,
+            )
+
+    def predict(self, rgb_images):
+        # Both DefaultPredictor and Ultralytics interpret numpy images as BGR.
+        bgr_images = [np.ascontiguousarray(image[:, :, ::-1]) for image in rgb_images]
+        if self.detector_name == "maskrcnn":
+            outputs = [self.predictor(image)["instances"] for image in bgr_images]
+        else:
+            outputs = [
+                detection.to_detectron2_instances()
+                for detection in self.predictor.predict(bgr_images)
+            ]
+        return [_normalise_instances(instances) for instances in outputs]
 
 # 加载数据
 stage = 2
-data_pth = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/sequencev2_wotrjR_his_eval/episodes_data"
+data_pth = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/exps/dump/sequencev2_wotrajR_eval/episodes_data"
 # "outputs_asample/imgs/test5_env1/rgb_all_data"
 sampler = SampleLoader(data_pth, glbstep=True)
 inputs = sampler.get_env_episode_and_steps_dense_list(more_mode=False)  
@@ -75,7 +183,7 @@ if stage == 1:
             glb_frames[env][episode][glbstep].append(step)
 
     print(glb_frames)
-    with open("./asample_straight_indices_sequencev2_wotrajR_his.pkl", "wb") as f:
+    with open("./asample_straight_indices_sequencev2_yolo.pkl", "wb") as f:
         pickle.dump(glb_frames, f)
     raise SystemExit
 
@@ -85,9 +193,11 @@ else:
     glb_frames_sampled = []
     sample_budget = 4
     clip_target_threshold = 0.5
-    mod = ["bbsgt" , "bbspred", "rgb",]     #  "depth", "position", "semantic", ]
+    mod = ["rgb"]
+    if args.frame_detections_source == "saved":
+        mod.append("bbspred")
 
-    with open("./asample_straight_indices_sequencev2_wotrajR_his.pkl", "rb") as f:
+    with open("./asample_straight_indices_sequencev2_yolo.pkl", "rb") as f:
         glb_frames_indices = pickle.load(f)
         
     random_sampler = random.Random(args.random_seed)
@@ -96,6 +206,17 @@ else:
         clip_model, preprocess = clip.load("ViT-L/14", device=device)
         text_str = [key for key in target_coco_categories.keys()]
         text = clip.tokenize([f"a photo contains a {i}" for i in text_str]).to(device)
+        realtime_detector = None
+        if args.frame_detections_source == "realtime":
+            detector_device = args.detector_device or device
+            realtime_detector = RealtimeDetector(
+                args.realtime_detector, detector_device
+            )
+            print(
+                "using real-time {} detections on {}".format(
+                    args.realtime_detector, detector_device
+                )
+            )
 
 
     #组合每一track并进行采样
@@ -137,10 +258,14 @@ else:
                     
                 # 对每一glbstep的数据进行分组；同一位置且统一类别为同一组
                 
-                frame_detections = [data['bbspred'].data for data in glb_datas]
-                # print(frame_detections[0].data)
-                # break
                 frame_rgbs = [data['rgb'].data for data in glb_datas]
+                if args.frame_detections_source == "saved":
+                    frame_detections = [
+                        _normalise_instances(data['bbspred'].data)
+                        for data in glb_datas
+                    ]
+                else:
+                    frame_detections = realtime_detector.predict(frame_rgbs)
                 
                 s = time.time()
                 groups, sampled_frames = stc_select_samples(
@@ -173,9 +298,11 @@ else:
     else:
         rewrite_idx = 0
         output_suffix = f"bg{sample_budget}_r{rewrite_idx}_{args.stc_algorithm}"
-    with open(f"./asample_straight_tracks_sequencev2_wotrajR_his_{output_suffix}.pkl", "wb") as f:
+    if args.frame_detections_source == "realtime":
+        output_suffix += f"_realtime_{args.realtime_detector}"
+    with open(f"./asample_straight_tracks_sequencev2_yolo_r2_{output_suffix}.pkl", "wb") as f:
         pickle.dump(glb_frames_tracks, f)
         
-    with open(f"./asample_straight_sampled_sequencev2_wotrajR_his_{output_suffix}.pkl", "wb") as f:
+    with open(f"./asample_straight_sampled_sequencev2_yolo_r2_{output_suffix}.pkl", "wb") as f:
         pickle.dump(glb_frames_sampled, f)
     print(glb_frames_sampled)
