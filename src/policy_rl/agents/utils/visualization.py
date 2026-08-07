@@ -120,8 +120,26 @@ def init_vis_image(goal_name, legend, mode=2):
         vis_image[530, 1505:1985] = color
     # vis_image[530, 15:495] = color
     # vis_image[530, 510:990] = color
-    # draw legend
-    lx, ly, _ = legend.shape
-    vis_image[537:537 + lx, 155:155 + ly, :] = legend
+    # Draw the legend inside the remaining canvas area.  Legend assets can
+    # have different dimensions (for example legend2.png), so assigning them
+    # directly can raise a broadcasting error when they are a few pixels
+    # larger than the available space.
+    legend_y, legend_x = 537, 155
+    available_h = vis_image.shape[0] - legend_y
+    available_w = vis_image.shape[1] - legend_x
+    legend_h, legend_w = legend.shape[:2]
+    scale = min(1.0, available_h / legend_h, available_w / legend_w)
+    if scale < 1.0:
+        legend = cv2.resize(
+            legend,
+            (max(1, int(legend_w * scale)),
+             max(1, int(legend_h * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+    legend_h, legend_w = legend.shape[:2]
+    vis_image[
+        legend_y:legend_y + legend_h,
+        legend_x:legend_x + legend_w,
+    ] = legend
 
     return vis_image

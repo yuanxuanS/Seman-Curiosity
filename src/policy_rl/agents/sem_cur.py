@@ -30,6 +30,8 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         self.visited_vis = None
         self.last_loc = None
         self.curr_loc = None
+        self.video_writer = None
+        self.video_path = None
         
         # initialize transform for RGB observations
         self.res = transforms.Compose(
@@ -76,7 +78,7 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         
         # visualize
         if args.visualize or args.print_images:
-            self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
+            self.vis_image = vu.init_vis_image(self.goal_name, self.legend, mode=2)
         
         return obs, info
     
@@ -435,10 +437,13 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
         sem_map_vis = cv2.resize(sem_map_vis, (480, 480),
                                 interpolation=cv2.INTER_NEAREST)
         
-        rgb_vis = cv2.resize(self.rgb_vis, (640, 480),
+        rgb_vis = cv2.resize(self.rgb_vis, (480, 480),
                                  interpolation=cv2.INTER_NEAREST)
-        self.vis_image[50:530, 15:655] = rgb_vis
-        self.vis_image[50:530, 670:1150] = sem_map_vis
+        self.vis_image[50:530, 15:495] = rgb_vis
+        self.vis_image[50:530, 510:990] = sem_map_vis
+
+        # orient_vis visualization is intentionally disabled, matching
+        # Sequence_Env_Agent._visualize.
         
         # 绘制agent位置
         if mode == "local":
@@ -460,12 +465,15 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
             
             
             
-        origin = (670, 50)  
+        origin = (510, 50)
         agent_arrow = vu.get_contour_points(pos, origin)
         color = (int(color_palette[11] * 255),
                  int(color_palette[10] * 255),
                  int(color_palette[9] * 255))
         cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
+
+        if getattr(args, "record_video", False):
+            self._write_video_frame(self.vis_image)
 
         if args.visualize:
             # Displaying the image
@@ -478,3 +486,34 @@ class Sem_Cur_Env_Agent(Seman_Curio_Env):
                 dump_dir, self.rank, self.episode_no,
                 self.rank, self.episode_no, self.timestep)
             cv2.imwrite(fn, self.vis_image)
+
+    def _write_video_frame(self, frame):
+        """Append a composed visualization frame to this environment's MP4."""
+        if self.video_writer is None:
+            dump_dir = "{}/dump/{}/".format(
+                self.args.dump_location, self.args.exp_name)
+            video_dir = os.path.join(dump_dir, "videos")
+            os.makedirs(video_dir, exist_ok=True)
+            self.video_path = os.path.join(
+                video_dir, "thread_{}_visualization.mp4".format(self.rank))
+            height, width = frame.shape[:2]
+            self.video_writer = cv2.VideoWriter(
+                self.video_path, cv2.VideoWriter_fourcc(*"mp4v"), 10.0,
+                (width, height))
+            if not self.video_writer.isOpened():
+                self.video_writer.release()
+                self.video_writer = None
+                raise RuntimeError(
+                    "Failed to create visualization video: {}".format(
+                        self.video_path))
+            print("Saving visualization video to {}".format(self.video_path))
+        self.video_writer.write(frame)
+
+    def _close_video_writer(self):
+        if self.video_writer is not None:
+            self.video_writer.release()
+            self.video_writer = None
+
+    def close(self):
+        self._close_video_writer()
+        return super().close()

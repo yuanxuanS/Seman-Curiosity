@@ -77,6 +77,8 @@ class StepProfiler:
 # @profile
 def main():
     args = get_args()
+    # Mode 3 uses all mode-2 overlays and also records the composed frames.
+    args.record_video = args.visualize == 3
     
     # seed 
     np.random.seed(args.seed)
@@ -93,6 +95,10 @@ def main():
         os.makedirs(log_dir)
     if not os.path.exists(dump_dir):
         os.makedirs(dump_dir)
+    if args.record_video:
+        video_dir = os.path.join(dump_dir, "videos")
+        os.makedirs(video_dir, exist_ok=True)
+        print("Visualization videos will be saved in {}".format(video_dir))
     
     log_name = 'eval.log' if args.eval else 'train.log' 
     logging.basicConfig(
@@ -940,6 +946,10 @@ def main():
                            os.path.join(dump_dir,
                                         "periodic_{}.pth".format(total_steps)))
         # ------------------------------------------------------------------
+    # Close worker processes explicitly so mode-3 VideoWriters flush their
+    # MP4 trailers before the program reports completion.
+    envs.close()
+
     # Print and save model performance numbers during evaluation: TODO
     # with open('{}/{}_episode_rewards.json'.format(
     #         dump_dir, args.split), 'w') as f:

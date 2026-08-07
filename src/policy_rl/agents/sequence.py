@@ -48,6 +48,8 @@ class Sequence_Env_Agent(Sequence_Env):
         self.visited_vis = None
         self.last_loc = None
         self.curr_loc = None
+        self.video_writer = None
+        self.video_path = None
         
         # initialize transform for RGB observations
         self.res = transforms.Compose(
@@ -216,7 +218,9 @@ class Sequence_Env_Agent(Sequence_Env):
         
         # visualize
         if args.visualize or args.print_images:
-            self.vis_image = vu.init_vis_image(self.goal_name, self.legend, mode=5)
+            # Only show the RGB observation and semantic map.  The previous
+            # mode-5 canvas reserved a third panel for orient_vis.
+            self.vis_image = vu.init_vis_image(self.goal_name, self.legend, mode=2)
         
         # for class entropy
         self.total_objects = 0
@@ -675,7 +679,7 @@ class Sequence_Env_Agent(Sequence_Env):
 
     def _get_sem_pred_batch(self, rgbs, return_instance=False):
         batch_size = max(1, int(getattr(self.args, "sem_pred_batch_size", 1)))
-        if batch_size <= 1 or self.args.visualize == 2:
+        if batch_size <= 1 or self.args.visualize in (2, 3):
             sem_preds, rgb_vis_frames, objs = [], [], []
             for rgb in rgbs:
                 sem_pred, rgb_vis, obj = self.sem_pred.get_prediction(
@@ -754,50 +758,6 @@ class Sequence_Env_Agent(Sequence_Env):
 
         sem_map_full[vis_mask_full] = 3       # agent位置区域赋值3
 
-        # orient map
-        orient_full = np.zeros((495, 750), dtype=np.uint8)
-        sub_size = 240
-        gap = 15
-        for i in range(6):
-            obs_key = f'orient_full_map_{i}_obsta'
-            exp_key = f'orient_full_map_{i}_exp'
-            
-            if obs_key in inputs and exp_key in inputs:
-                # 1. 提取并合成语义数据
-                o_obs = inputs[obs_key]
-                o_exp = inputs[exp_key]
-                
-                # 创建单通道数据：0背景，1障碍(obsta)，2探索(exp)
-                o_sem = np.zeros_like(o_obs, dtype=np.uint8)
-                o_sem[np.rint(o_exp) == 1] = 2
-                o_sem[np.rint(o_obs) == 1] = 1
-                
-                # 2. 转换为彩色图 (使用与主图相同的 color_palette)
-                # o_vis_img = Image.new("P", (o_sem.shape[1], o_sem.shape[0]))
-                # o_vis_img.putpalette(color_pal)
-                # o_vis_img.putdata(o_sem.flatten().astype(np.uint8))
-                # o_vis_img = o_vis_img.convert("RGB")
-                
-                # o_vis_img = np.flipud(o_vis_img)
-                # o_vis_bgr = np.array(o_vis_img)[:, :, [2, 1, 0]]
-                
-                o_vis_res = cv2.resize(o_sem, (sub_size, sub_size), 
-                                      interpolation=cv2.INTER_NEAREST)
-                
-                # 5. 计算在 orient_vis (495, 750) 上的位置
-                # 两排三列布局
-                row_idx = i // 3  # 0, 1
-                col_idx = i % 3   # 0, 1, 2
-                
-                y_start = row_idx * (sub_size + gap)
-                x_start = col_idx * (sub_size + gap)
-                
-                # 将小图贴到 orient_vis 画布上
-                orient_full[y_start:y_start + sub_size, 
-                           x_start:x_start + sub_size] = o_vis_res
-        
-        
-        
         if 'frontier_goal' in inputs:
             if inputs['frontier_goal'] is not None:
                 goal = inputs['frontier_goal']
@@ -867,35 +827,7 @@ class Sequence_Env_Agent(Sequence_Env):
         self.vis_image[50:530, 510:990] = sem_map_vis
         
         
-        # for orient map
-        orient_vis = Image.new("P", (orient_full.shape[1],
-                                        orient_full.shape[0]))
-        orient_vis.putpalette(color_pal)
-        orient_vis.putdata(orient_full.flatten().astype(np.uint8))
-        orient_vis = orient_vis.convert("RGB")
-        orient_vis = np.flipud(orient_vis)
-        
-        # for i in range(6):
-        #     row_idx = i // 3
-        #     col_idx = i % 3
-        #     y_start = row_idx * (sub_size + gap)
-        #     x_start = col_idx * (sub_size + gap)
-            
-        #     # 文本内容和位置
-        #     text = f"Orient {i}"
-        #     # 这里的坐标 (x, y) 是文字左下角
-        #     text_pos = (x_start + 100, y_start + 25) 
-            
-        #     # 绘制黑边阴影（可选，增加可读性）
-        #     # cv2.putText(orient_vis, text, (text_pos[0]+1, text_pos[1]+1),
-        #     #             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        #     # 绘制白色主文字
-        #     cv2.putText(orient_vis, text, text_pos,
-        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        
-        
-        orient_vis = orient_vis[:, :, [2, 1, 0]]
-        self.vis_image[50:545, 1005:1755] = orient_vis
+        # orient_vis visualization is intentionally disabled.
         
         # 绘制agent位置
         if mode == "local":
@@ -924,6 +856,9 @@ class Sequence_Env_Agent(Sequence_Env):
                  int(color_palette[9] * 255))
         cv2.drawContours(self.vis_image, [agent_arrow], 0, color, -1)
 
+        if getattr(args, "record_video", False):
+            self._write_video_frame(self.vis_image)
+
         if args.visualize:
             # Displaying the image
             cv2.imshow("Thread {}".format(self.rank), self.vis_image)
@@ -935,3 +870,37 @@ class Sequence_Env_Agent(Sequence_Env):
                 dump_dir, self.rank, self.episode_no,
                 self.rank, self.episode_no, self.timestep, frame_id)
             cv2.imwrite(fn, self.vis_image)
+
+    def _write_video_frame(self, frame):
+        """Append a composed visualization frame to this environment's MP4."""
+        if self.video_writer is None:
+            dump_dir = "{}/dump/{}/".format(
+                self.args.dump_location, self.args.exp_name)
+            video_dir = os.path.join(dump_dir, "videos")
+            os.makedirs(video_dir, exist_ok=True)
+            self.video_path = os.path.join(
+                video_dir, "thread_{}_visualization.mp4".format(self.rank))
+            height, width = frame.shape[:2]
+            self.video_writer = cv2.VideoWriter(
+                self.video_path, cv2.VideoWriter_fourcc(*"mp4v"), 10.0,
+                (width, height))
+            if not self.video_writer.isOpened():
+                self.video_writer.release()
+                self.video_writer = None
+                raise RuntimeError(
+                    "Failed to create visualization video: {}".format(
+                        self.video_path))
+            print("Saving visualization video to {}".format(self.video_path))
+        self.video_writer.write(frame)
+
+    def _close_video_writer(self):
+        if self.video_writer is not None:
+            self.video_writer.release()
+            self.video_writer = None
+
+    def close(self):
+        # VectorEnv calls this explicitly inside the worker's finally block.
+        # Releasing here is required for OpenCV to write the MP4 moov atom;
+        # multiprocessing workers do not reliably run Python atexit handlers.
+        self._close_video_writer()
+        return super().close()

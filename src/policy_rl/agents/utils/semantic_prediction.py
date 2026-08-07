@@ -47,13 +47,15 @@ class SemanticPredMaskRCNN():
         image_list.append(img)
         if return_features:
             seg_predictions, vis_output, features = self.segmentation_model.get_predictions(
-                image_list, visualize=args.visualize == 2, return_features=True)
+                image_list, visualize=args.visualize in (2, 3), return_features=True)
         else:
             seg_predictions, vis_output = self.segmentation_model.get_predictions(
-                image_list, visualize=args.visualize == 2, )
+                image_list, visualize=args.visualize in (2, 3), )
 
-        if args.visualize == 2:
-            img = vis_output.get_image()
+        if args.visualize in (2, 3):
+            # VisImage.get_image() is RGB; sem_cur.py/sequence.py compose the
+            # returned frame with OpenCV and therefore require BGR.
+            img = vis_output.get_image()[:, :, ::-1]
 
         semantic_input = np.zeros((img.shape[0], img.shape[1], 5 + 1))
 
@@ -195,12 +197,18 @@ class SemanticPredYOLOv8:
             semantic_input[:, :, channel] += masks[idx].float().cpu().numpy()
 
         vis_image = image_bgr
-        if self.args.visualize == 2 and len(instances):
+        if self.args.visualize in (2, 3) and len(instances):
             from detectron2.utils.visualizer import Visualizer
 
-            vis_image = Visualizer(image_bgr[:, :, ::-1]).draw_instance_predictions(
-                instances.to("cpu")
-            ).get_image()
+            # Detectron2's Visualizer consumes and returns RGB, while all
+            # visualization frames returned by this adapter are consumed by
+            # OpenCV as BGR.  Convert the rendered result back to BGR so the
+            # detected and no-detection branches have the same convention.
+            vis_image = (
+                Visualizer(image_bgr[:, :, ::-1])
+                .draw_instance_predictions(instances.to("cpu"))
+                .get_image()[:, :, ::-1]
+            )
         return semantic_input, vis_image, instances
 
     def get_predictions_batch(
@@ -374,8 +382,13 @@ class VisualizationDemo(object):
         if visualize:
             predictions = all_predictions[0]
             image = image_list[0]
+            # Detectron2's Visualizer expects RGB, whereas predictor inputs
+            # use OpenCV's BGR convention.
             visualizer = Visualizer(
-                image, self.metadata, instance_mode=self.instance_mode)
+                image[:, :, ::-1],
+                self.metadata,
+                instance_mode=self.instance_mode,
+            )
             if "panoptic_seg" in predictions:
                 panoptic_seg, segments_info = predictions["panoptic_seg"]
                 vis_output = visualizer.draw_panoptic_seg_predictions(

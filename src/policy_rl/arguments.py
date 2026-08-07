@@ -52,7 +52,9 @@ def get_args():
                         help="""1: Render the observation and
                                    the predicted semantic map,
                                 2: Render the observation with semantic
-                                   predictions and the predicted semantic map
+                                   predictions and the predicted semantic map,
+                                3: Same as 2 and save the complete
+                                   visualization as MP4 video
                                 (default: 0)""")
     parser.add_argument('--print_images', type=int, default=0,
                         help='1: save visualization as images')

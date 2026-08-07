@@ -49,12 +49,15 @@ class Frontier:
         
         # navigation
         pointnav_policy_path = "/home/wpp/Semantic-Curiosity/Semantic-Curiosity/data_scene/pointnav_w"
-        self._pointnav_policy = WrappedPointNavResNetPolicy(pointnav_policy_path)
+        self.device = args.device
+        self._pointnav_policy = WrappedPointNavResNetPolicy(
+            pointnav_policy_path,
+            device=self.device,
+        )
         self._last_goal = np.zeros(2)
         self._depth_image_shape = (224, 224)
         self._pointnav_stop_radius= 0.9
         self._called_stop = False
-        self.device = "cuda:0"
 
     def reset(self, env_nums):
         args = self.args
@@ -755,4 +758,3 @@ if __name__ == "__main__":
     l_policy.reset(num_scenes)
     actions = l_policy.get_actions(vis_inputs)
     print(f"action: {actions}")
-    

@@ -19,6 +19,8 @@ import json
 
 def main():
     args = get_args()
+    # Keep visualization mode 3 consistent with main_sequence.py.
+    args.record_video = args.visualize == 3
     
     # seed 
     np.random.seed(args.seed)
@@ -35,6 +37,10 @@ def main():
         os.makedirs(log_dir)
     if not os.path.exists(dump_dir):
         os.makedirs(dump_dir)
+    if args.record_video:
+        video_dir = os.path.join(dump_dir, "videos")
+        os.makedirs(video_dir, exist_ok=True)
+        print("Visualization videos will be saved in {}".format(video_dir))
     
     log_name = 'eval.log' if args.eval else 'train.log' 
     logging.basicConfig(
@@ -50,7 +56,7 @@ def main():
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
     
-    device = args.device = torch.device("cuda:0" if args.cuda else "cpu")   # 训练的gpu
+    device = args.device = torch.device("cuda:2" if args.cuda else "cpu")   # 训练的gpu
 
     #  l_masks, not used. episode length不同时使用
     l_masks = torch.ones(num_scenes).float().to(device)
@@ -454,6 +460,9 @@ def main():
                            os.path.join(dump_dir,
                                         "periodic_{}.pth".format(total_steps)))
         # ------------------------------------------------------------------
+    # Flush visualization videos and stop environment workers cleanly.
+    envs.close()
+
     # Print and save model performance numbers during evaluation: TODO
     # with open('{}/{}_episode_rewards.json'.format(
     #         dump_dir, args.split), 'w') as f:

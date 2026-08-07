@@ -107,29 +107,35 @@ def save_prediction_visualization(
         visible.append((box, category_id, float(score), color))
 
     image = cv2.addWeighted(overlay, mask_alpha, image, 1.0 - mask_alpha, 0.0)
+    font_scale = 0.8
+    font_thickness = 2
+    text_padding = 6
     for box, category_id, score, color in visible:
         x1, y1, x2, y2 = [int(round(value)) for value in box]
         cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
         label = f"{category_names[category_id]} {score:.2f}"
         (text_width, text_height), baseline = cv2.getTextSize(
-            label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
+            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness
         )
-        text_top = max(0, y1 - text_height - baseline - 4)
+        text_top = max(0, y1 - text_height - baseline - 2 * text_padding)
         cv2.rectangle(
             image,
             (x1, text_top),
-            (x1 + text_width + 4, text_top + text_height + baseline + 4),
-            color,
+            (
+                x1 + text_width + 2 * text_padding,
+                text_top + text_height + baseline + 2 * text_padding,
+            ),
+            (0, 0, 0),
             -1,
         )
         cv2.putText(
             image,
             label,
-            (x1 + 2, text_top + text_height + 1),
+            (x1 + text_padding, text_top + text_height + text_padding),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
+            font_scale,
             (255, 255, 255),
-            1,
+            font_thickness,
             cv2.LINE_AA,
         )
 
